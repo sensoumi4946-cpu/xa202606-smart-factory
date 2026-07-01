@@ -1,0 +1,12 @@
+[project]
+name = "smart-factory-contracts"
+version = "0.1.0"
+description = "Shared data contracts for XA-202606 Smart Factory platform"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

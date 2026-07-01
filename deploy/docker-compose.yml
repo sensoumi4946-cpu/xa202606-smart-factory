@@ -1,0 +1,50 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "${MQTT_BROKER_PORT:-1883}:1883"
+    volumes:
+      - ./mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+
+  backend:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      - DATABASE_PATH=/data/smart_factory.db
+    volumes:
+      - backend_data:/data
+    depends_on:
+      - mosquitto
+
+  connectivity:
+    build:
+      context: ..
+      dockerfile: connectivity/Dockerfile
+    environment:
+      - MQTT_BROKER_HOST=mosquitto
+      - MQTT_BROKER_PORT=1883
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - mosquitto
+      - backend
+    restart: on-failure
+
+  dashboard:
+    image: node:22-alpine
+    working_dir: /app
+    command: >
+      sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "${DASHBOARD_PORT:-5173}:5173"
+    volumes:
+      - ../dashboard:/app
+    environment:
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
+
+volumes:
+  backend_data:

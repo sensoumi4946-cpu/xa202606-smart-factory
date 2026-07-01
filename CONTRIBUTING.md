@@ -2,9 +2,9 @@
 
 ## Overview
 
-This monorepo implements the **Phase 1 scaffold** of the XA-202606 Smart Factory Safety Monitoring & Control Platform. Phase 1 establishes a **minimum viable data pipeline**: mock sensor data flows through an MQTT broker, a protocol adapter normalises it into a unified format, a backend persists it to SQLite, and a Vue dashboard displays it. No real hardware, no semantic reasoning, no control actuation — just a proven, test-covered skeleton ready for expansion.
+This monorepo implements the **initial scaffold** of the XA-202606 Smart Factory Safety Monitoring & Control Platform. It establishes a **minimum viable data pipeline**: mock sensor data flows through an MQTT broker, a protocol adapter normalises it into a unified format, a backend persists it to SQLite, and a Vue dashboard displays it. No real hardware, no semantic reasoning, no control actuation — just a proven, test-covered skeleton ready for expansion.
 
-### Architecture (Phase 1)
+### Architecture (Current)
 
 ```
 Mock Generator ──MQTT──▶ Mosquitto Broker ──MQTT──▶ Connectivity Adapter ──HTTP──▶ Backend API ──▶ SQLite
@@ -122,7 +122,7 @@ Examples:
 
 **Subscription wildcard** used by the connectivity adapter: `factory/+/sensors/#`
 
-**Control topics** are reserved for Phase 2+ and are **explicitly filtered** out of the sensor data pipeline:
+**Control topics** are reserved for future development and are **explicitly filtered** out of the sensor data pipeline:
 ```
 factory/{subsystem}/control/{device_id}/{action}
 ```
@@ -145,7 +145,7 @@ factory/{subsystem}/control/{device_id}/{action}
 ## Storage Schema (SQLite)
 
 ```sql
--- Phase 1 — designed for easy migration to InfluxDB/IoTDB later
+-- Current — designed for easy migration to InfluxDB/IoTDB later
 CREATE TABLE sensor_data (
     id TEXT PRIMARY KEY,
     device_id TEXT NOT NULL,
@@ -177,7 +177,7 @@ The Turtle file in `semantic-layer/src/semantic_layer/ontology/` defines the **s
 - **9 ObservableProperties**: measuresTemperature, measuresHumidity, measuresCO, measuresSmoke, measuresCombustibleGas, measuresDistance, measuresCount, measuresOccupancy, measuresLightState
 - **5 Subsystem groupings**: TempHumiditySubsystem, LightingSubsystem, GasMonitoringSubsystem, AGVObstacleSubsystem, CountingSubsystem
 
-Phase 1 only validates that the file is parseable by RDFlib. Semantic mapping and SPARQL querying come in Phase 2.
+Currently only validates that the file is parseable by RDFlib. Semantic mapping and SPARQL querying come later.
 
 ---
 
@@ -295,7 +295,7 @@ xa202606-smart-factory/
 
 ---
 
-## Phase 1 Completion Criteria
+## Completion Criteria
 
 - [x] Mock generator publishes to MQTT for all 5 subsystems
 - [x] MQTT adapter subscribes `factory/+/sensors/#` and parses payloads
@@ -305,8 +305,8 @@ xa202606-smart-factory/
 - [x] Docker Compose one-command startup
 - [x] 48 automated tests passing
 - [x] Turtle ontology parseable by RDFlib
-- [ ] Real hardware integration (Phase 2)
-- [ ] Full Modbus / OPC UA / REST adapters (Phase 2)
-- [ ] Frontend ECharts visualisation (Phase 2)
-- [ ] Semantic runtime with AAS + SPARQL (Phase 2)
-- [ ] Real device control actuation (Phase 2+)
+- [ ] Real hardware integration (future)
+- [ ] Full Modbus / OPC UA / REST adapters (future)
+- [ ] Frontend ECharts visualisation (future)
+- [ ] Semantic runtime with AAS + SPARQL (future)
+- [ ] Real device control actuation (future)

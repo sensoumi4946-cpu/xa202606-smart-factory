@@ -1,3 +1,6 @@
+# Unit tests for the MQTT adapter's payload parser (_parse_payload).
+# Covers all five subsystems, control-topic filtering, invalid JSON,
+# unknown measurement types, and timestamp validity.
 import json
 from datetime import datetime, timezone
 

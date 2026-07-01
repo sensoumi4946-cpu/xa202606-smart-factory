@@ -1,3 +1,6 @@
+# Integration tests for POST /api/v1/control and GET /api/v1/control/{id}.
+# Phase 1 control commands are always recorded as 'pending' — real device
+# actuation is deferred to Phase 2+.
 import pytest
 from httpx import ASGITransport, AsyncClient
 

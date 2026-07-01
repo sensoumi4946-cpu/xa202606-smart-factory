@@ -1,3 +1,6 @@
+# Abstract base class for all protocol adapters.
+# Every adapter (MQTT, Modbus, OPC UA, REST) must implement
+# start(), stop(), and receive() with this signature.
 from abc import ABC, abstractmethod
 
 from smart_factory_contracts.messages import UnifiedMessage

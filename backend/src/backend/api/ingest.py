@@ -1,3 +1,5 @@
+# POST /api/v1/data — sensor data ingestion endpoint.
+# Accepts a UnifiedMessage, validates via Pydantic, stores in SQLite.
 from fastapi import APIRouter, status
 from smart_factory_contracts.messages import UnifiedMessage
 

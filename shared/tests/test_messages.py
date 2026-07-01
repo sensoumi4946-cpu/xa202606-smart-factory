@@ -1,3 +1,7 @@
+# Unit tests for the shared data contracts (UnifiedMessage, Measurement, enums).
+# Validates Pydantic model construction, JSON serialisation round-trip,
+# and field-level validation (missing device_id, empty measurements,
+# missing schema_version).
 import json
 from datetime import datetime, timezone
 

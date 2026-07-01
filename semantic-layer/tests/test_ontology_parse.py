@@ -1,3 +1,8 @@
+# Ontology validation tests.
+# Loads smart-factory.ttl via importlib.resources (working-directory
+# independent) and checks that all sensor classes, observable properties,
+# and subsystem groupings declared in the spec are present and use the
+# SOSA/SSN standard vocabulary.
 from importlib.resources import files
 
 from rdflib import RDFS, Graph, SOSA

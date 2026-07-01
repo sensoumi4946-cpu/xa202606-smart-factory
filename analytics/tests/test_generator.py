@@ -1,3 +1,7 @@
+# Unit tests for the mock data generator.
+# Verifies all five subsystems produce valid UnifiedMessages with
+# physically-plausible values (temperature 15-40°C, humidity 20-90%,
+# distance 10-400cm, count 0-200).
 import pytest
 from smart_factory_contracts.messages import MeasurementType, Subsystem, Unit
 

@@ -1,3 +1,6 @@
+# Integration tests for GET /api/v1/data and GET /api/v1/devices.
+# Pre-seeds the database then asserts correct query behaviour:
+# filtering by device_id, row limiting, device deduplication.
 import pytest
 from httpx import ASGITransport, AsyncClient
 from smart_factory_contracts.messages import Measurement, MeasurementType, Protocol, Subsystem, UnifiedMessage, Unit

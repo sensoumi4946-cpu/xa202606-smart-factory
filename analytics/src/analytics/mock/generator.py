@@ -1,3 +1,12 @@
+# Mock sensor data generator — development tool for testing the data
+# pipeline without real hardware.
+#
+# Publishes realistic randomised readings for all five subsystems to
+# MQTT topics matching the factory/{subsystem}/sensors/{device}/{type}
+# convention. Run as: python -m analytics.mock.generator --count 5
+#
+# Data ranges match physical sensor specifications:
+#   temperature 15-40°C, humidity 20-90%, CO 0-50ppm, distance 10-400cm
 import argparse
 import json
 import os

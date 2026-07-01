@@ -1,3 +1,6 @@
+# POST /api/v1/control and GET /api/v1/control/{id} — remote control endpoints.
+# Phase 1 writes commands as 'pending' records; real device actuation
+# comes in Phase 2+. The status endpoint lets the dashboard poll progress.
 from fastapi import APIRouter, HTTPException, status
 
 from backend.models import ControlRequest, ControlResponse, ControlStatusResponse

@@ -1,3 +1,12 @@
+# Message router — receives UnifiedMessage objects from any adapter
+# and forwards them to the backend API with retry logic.
+#
+# Retry policy: 3 attempts, 1s interval between each. If all fail
+# the message is dropped and an error is logged. This is fire-and-forget
+# for sensor data; control commands will get stronger guarantees later.
+#
+# Using connectivity_models.BACKEND_URL (module attribute, not a local
+# binding) so tests can monkeypatch the URL at runtime.
 import json
 import logging
 import sys

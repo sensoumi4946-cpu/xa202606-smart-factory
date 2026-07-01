@@ -1,3 +1,6 @@
+# Backend configuration — all values sourced from environment variables
+# with sensible defaults for local development. See .env.example for
+# the full list.
 import os
 
 BACKEND_HOST: str = os.getenv("BACKEND_HOST", "0.0.0.0")

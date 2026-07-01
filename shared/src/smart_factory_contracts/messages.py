@@ -1,9 +1,20 @@
+# Core data contract for the XA-202606 Smart Factory platform.
+#
+# UnifiedMessage is the ONLY wire format between connectivity adapters
+# and the backend API. Every sensor reading, regardless of origin
+# protocol (MQTT, Modbus, OPC UA, REST), must be normalised into this
+# structure before ingestion.
+#
+# Protocol versioning: schema_version is required (no default) so
+# clients must explicitly declare which version they speak.
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
+
+# ── Enumeration tables for the five sensor subsystems ──
 
 class Subsystem(str, Enum):
     TEMP_HUMIDITY = "temp_humidity"

@@ -1,3 +1,9 @@
+# SQLite-based storage layer.
+#
+# This is the Phase 1 persistence backend. It uses a single-file SQLite
+# database with WAL journaling for concurrent read/write safety.
+# The schema is designed so that replacing SQLite with InfluxDB / IoTDB
+# in later phases only requires rewriting this module — no API change.
 import json
 import os
 import sqlite3

@@ -1,3 +1,5 @@
+# Integration tests for POST /api/v1/data — the sensor data ingestion endpoint.
+# Uses httpx ASGI transport against the FastAPI app with a temporary SQLite DB.
 import pytest
 from httpx import ASGITransport, AsyncClient
 from smart_factory_contracts.messages import Measurement, MeasurementType, Protocol, Subsystem, UnifiedMessage, Unit

@@ -1,3 +1,7 @@
+# Integration tests for the router's forward_to_backend() function.
+# Test-forward-to-backend-success starts a real uvicorn subprocess on a
+# random port to verify end-to-end forwarding. The failure test points
+# at an unused port to exercise the 3-retry-then-drop logic.
 import pytest
 from smart_factory_contracts.messages import Measurement, MeasurementType, Protocol, Subsystem, UnifiedMessage, Unit
 

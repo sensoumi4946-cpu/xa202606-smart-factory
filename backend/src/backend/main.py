@@ -1,3 +1,11 @@
+# FastAPI application entry point.
+#
+# Composes the three API routers (ingest, query, control) into a single
+# ASGI application. Uses the modern lifespan context manager for startup
+# (DB init) rather than the deprecated on_event hook.
+#
+# Error logging: all unhandled exceptions are caught by the global handler
+# and printed as JSON Lines to stderr for container log aggregation.
 import json
 import sys
 import traceback

@@ -1,3 +1,5 @@
+# OPC UA adapter skeleton — to be implemented in Phase 2+.
+# Will use Eclipse Milo or asyncua to subscribe to OPC UA nodes.
 from connectivity.adapters.base import BaseAdapter
 
 

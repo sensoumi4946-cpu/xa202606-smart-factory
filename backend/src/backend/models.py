@@ -2,8 +2,6 @@
 # Note: the wire-format UnifiedMessage lives in shared/, not here.
 from pydantic import BaseModel, Field
 
-from smart_factory_contracts.messages import UnifiedMessage
-
 
 class IngestResponse(BaseModel):
     id: str

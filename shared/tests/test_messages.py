@@ -2,7 +2,6 @@
 # Validates Pydantic model construction, JSON serialisation round-trip,
 # and field-level validation (missing device_id, empty measurements,
 # missing schema_version).
-import json
 from datetime import datetime, timezone
 
 from smart_factory_contracts.messages import (
@@ -29,7 +28,9 @@ def test_unified_message_minimal():
         subsystem=Subsystem.TEMP_HUMIDITY,
         protocol=Protocol.MQTT,
         measurements=[
-            Measurement(type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS),
+            Measurement(
+                type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS
+            ),
             Measurement(type=MeasurementType.HUMIDITY, value=60.0, unit=Unit.PERCENT),
         ],
     )
@@ -64,7 +65,9 @@ def test_json_serialization():
         subsystem=Subsystem.TEMP_HUMIDITY,
         protocol=Protocol.MQTT,
         measurements=[
-            Measurement(type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS),
+            Measurement(
+                type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS
+            ),
         ],
     )
     data = msg.model_dump(mode="json")
@@ -80,7 +83,9 @@ def test_missing_device_id_rejected():
             subsystem=Subsystem.TEMP_HUMIDITY,
             protocol=Protocol.MQTT,
             measurements=[
-                Measurement(type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS),
+                Measurement(
+                    type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS
+                ),
             ],
         )
         assert False, "expected validation error"
@@ -104,13 +109,16 @@ def test_empty_measurements_rejected():
 
 def test_missing_schema_version_rejected():
     from pydantic import ValidationError
+
     try:
         UnifiedMessage(
             device_id="sensor_dht22_01",
             subsystem=Subsystem.TEMP_HUMIDITY,
             protocol=Protocol.MQTT,
             measurements=[
-                Measurement(type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS),
+                Measurement(
+                    type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS
+                ),
             ],
         )
         assert False, "expected ValidationError"

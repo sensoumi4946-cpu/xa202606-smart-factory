@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 # ── Enumeration tables for the five sensor subsystems ──
 
+
 class Subsystem(str, Enum):
     TEMP_HUMIDITY = "temp_humidity"
     LIGHTING = "lighting"

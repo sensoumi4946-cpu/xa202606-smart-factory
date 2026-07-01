@@ -27,7 +27,9 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="XA-202606 Smart Factory Backend", version="0.1.0", lifespan=lifespan)
+app = FastAPI(
+    title="XA-202606 Smart Factory Backend", version="0.1.0", lifespan=lifespan
+)
 
 app.include_router(ingest_router)
 app.include_router(query_router)

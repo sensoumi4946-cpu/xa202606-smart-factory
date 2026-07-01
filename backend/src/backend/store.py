@@ -120,7 +120,9 @@ def query_sensor_data(
 
 def get_devices() -> list[str]:
     conn = _get_connection()
-    rows = conn.execute("SELECT DISTINCT device_id FROM sensor_data ORDER BY device_id").fetchall()
+    rows = conn.execute(
+        "SELECT DISTINCT device_id FROM sensor_data ORDER BY device_id"
+    ).fetchall()
     conn.close()
     return [row["device_id"] for row in rows]
 

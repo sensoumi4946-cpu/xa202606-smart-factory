@@ -3,7 +3,14 @@
 # random port to verify end-to-end forwarding. The failure test points
 # at an unused port to exercise the 3-retry-then-drop logic.
 import pytest
-from smart_factory_contracts.messages import Measurement, MeasurementType, Protocol, Subsystem, UnifiedMessage, Unit
+from smart_factory_contracts.messages import (
+    Measurement,
+    MeasurementType,
+    Protocol,
+    Subsystem,
+    UnifiedMessage,
+    Unit,
+)
 
 from connectivity.router import forward_to_backend
 
@@ -14,6 +21,7 @@ async def test_forward_to_backend_success_starts_backend(tmp_path, monkeypatch):
     monkeypatch.setattr("backend.store.DATABASE_PATH", str(db_path))
     monkeypatch.setattr("backend.config.DATABASE_PATH", str(db_path))
     from backend.store import init_db
+
     init_db()
 
     import uvicorn
@@ -21,7 +29,9 @@ async def test_forward_to_backend_success_starts_backend(tmp_path, monkeypatch):
     import time
 
     port = 19998
-    config = uvicorn.Config("backend.main:app", host="127.0.0.1", port=port, log_level="error")
+    config = uvicorn.Config(
+        "backend.main:app", host="127.0.0.1", port=port, log_level="error"
+    )
     server = uvicorn.Server(config)
 
     thread = threading.Thread(target=server.run, daemon=True)
@@ -37,7 +47,9 @@ async def test_forward_to_backend_success_starts_backend(tmp_path, monkeypatch):
             subsystem=Subsystem.TEMP_HUMIDITY,
             protocol=Protocol.MQTT,
             measurements=[
-                Measurement(type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS),
+                Measurement(
+                    type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS
+                ),
             ],
         )
         result = await forward_to_backend(msg)
@@ -57,7 +69,9 @@ async def test_forward_to_backend_failure(monkeypatch):
         subsystem=Subsystem.TEMP_HUMIDITY,
         protocol=Protocol.MQTT,
         measurements=[
-            Measurement(type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS),
+            Measurement(
+                type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS
+            ),
         ],
     )
     result = await forward_to_backend(msg)

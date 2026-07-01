@@ -5,7 +5,6 @@ import json
 from datetime import datetime, timezone
 
 import pytest
-from smart_factory_contracts.messages import UnifiedMessage
 
 from connectivity.adapters.mqtt_adapter import MQTTAdapter
 

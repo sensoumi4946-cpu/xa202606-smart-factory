@@ -3,7 +3,14 @@
 # filtering by device_id, row limiting, device deduplication.
 import pytest
 from httpx import ASGITransport, AsyncClient
-from smart_factory_contracts.messages import Measurement, MeasurementType, Protocol, Subsystem, UnifiedMessage, Unit
+from smart_factory_contracts.messages import (
+    Measurement,
+    MeasurementType,
+    Protocol,
+    Subsystem,
+    UnifiedMessage,
+    Unit,
+)
 
 from backend.main import app
 from backend.store import init_db
@@ -24,7 +31,9 @@ async def _ingest(client, device_id, temp=25.0):
         subsystem=Subsystem.TEMP_HUMIDITY,
         protocol=Protocol.MQTT,
         measurements=[
-            Measurement(type=MeasurementType.TEMPERATURE, value=temp, unit=Unit.CELSIUS),
+            Measurement(
+                type=MeasurementType.TEMPERATURE, value=temp, unit=Unit.CELSIUS
+            ),
         ],
     )
     await client.post("/api/v1/data", json=msg.model_dump(mode="json"))
@@ -47,7 +56,9 @@ async def test_query_by_device():
         await _ingest(client, "sensor_dht22_01", 26.0)
         await _ingest(client, "sensor_dht22_01", 27.0)
 
-        resp = await client.get("/api/v1/data", params={"device_id": "sensor_dht22_01", "limit": 3})
+        resp = await client.get(
+            "/api/v1/data", params={"device_id": "sensor_dht22_01", "limit": 3}
+        )
     assert resp.status_code == 200
     data = resp.json()
     assert len(data) == 3

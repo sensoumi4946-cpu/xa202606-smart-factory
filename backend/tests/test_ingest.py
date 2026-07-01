@@ -2,7 +2,14 @@
 # Uses httpx ASGI transport against the FastAPI app with a temporary SQLite DB.
 import pytest
 from httpx import ASGITransport, AsyncClient
-from smart_factory_contracts.messages import Measurement, MeasurementType, Protocol, Subsystem, UnifiedMessage, Unit
+from smart_factory_contracts.messages import (
+    Measurement,
+    MeasurementType,
+    Protocol,
+    Subsystem,
+    UnifiedMessage,
+    Unit,
+)
 
 from backend.main import app
 from backend.store import init_db
@@ -24,7 +31,9 @@ async def test_ingest_valid_single_measurement():
         subsystem=Subsystem.TEMP_HUMIDITY,
         protocol=Protocol.MQTT,
         measurements=[
-            Measurement(type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS),
+            Measurement(
+                type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS
+            ),
         ],
     )
     transport = ASGITransport(app=app)
@@ -43,7 +52,9 @@ async def test_ingest_valid_multi_measurement():
         subsystem=Subsystem.TEMP_HUMIDITY,
         protocol=Protocol.MQTT,
         measurements=[
-            Measurement(type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS),
+            Measurement(
+                type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS
+            ),
             Measurement(type=MeasurementType.HUMIDITY, value=60.0, unit=Unit.PERCENT),
         ],
     )
@@ -57,13 +68,18 @@ async def test_ingest_valid_multi_measurement():
 async def test_ingest_missing_device_id():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.post("/api/v1/data", json={
-            "schema_version": "v1",
-            "device_id": "",
-            "subsystem": "temp_humidity",
-            "protocol": "mqtt",
-            "measurements": [{"type": "temperature", "value": 25.5, "unit": "celsius"}],
-        })
+        resp = await client.post(
+            "/api/v1/data",
+            json={
+                "schema_version": "v1",
+                "device_id": "",
+                "subsystem": "temp_humidity",
+                "protocol": "mqtt",
+                "measurements": [
+                    {"type": "temperature", "value": 25.5, "unit": "celsius"}
+                ],
+            },
+        )
     assert resp.status_code == 422
 
 
@@ -71,13 +87,16 @@ async def test_ingest_missing_device_id():
 async def test_ingest_missing_measurements():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.post("/api/v1/data", json={
-            "schema_version": "v1",
-            "device_id": "sensor_dht22_01",
-            "subsystem": "temp_humidity",
-            "protocol": "mqtt",
-            "measurements": [],
-        })
+        resp = await client.post(
+            "/api/v1/data",
+            json={
+                "schema_version": "v1",
+                "device_id": "sensor_dht22_01",
+                "subsystem": "temp_humidity",
+                "protocol": "mqtt",
+                "measurements": [],
+            },
+        )
     assert resp.status_code == 422
 
 
@@ -85,12 +104,17 @@ async def test_ingest_missing_measurements():
 async def test_ingest_missing_schema_version():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.post("/api/v1/data", json={
-            "device_id": "sensor_dht22_01",
-            "subsystem": "temp_humidity",
-            "protocol": "mqtt",
-            "measurements": [{"type": "temperature", "value": 25.5, "unit": "celsius"}],
-        })
+        resp = await client.post(
+            "/api/v1/data",
+            json={
+                "device_id": "sensor_dht22_01",
+                "subsystem": "temp_humidity",
+                "protocol": "mqtt",
+                "measurements": [
+                    {"type": "temperature", "value": 25.5, "unit": "celsius"}
+                ],
+            },
+        )
     assert resp.status_code == 422
 
 
@@ -102,9 +126,13 @@ async def test_ingest_with_raw_payload():
         subsystem=Subsystem.TEMP_HUMIDITY,
         protocol=Protocol.MQTT,
         measurements=[
-            Measurement(type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS),
+            Measurement(
+                type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS
+            ),
         ],
-        raw_payload={"topic": "factory/temp_humidity/sensors/sensor_dht22_01/temperature"},
+        raw_payload={
+            "topic": "factory/temp_humidity/sensors/sensor_dht22_01/temperature"
+        },
     )
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

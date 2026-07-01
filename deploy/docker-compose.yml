@@ -33,14 +33,11 @@ services:
     restart: on-failure
 
   dashboard:
-    image: node:22-alpine
-    working_dir: /app
-    command: >
-      sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    build:
+      context: ..
+      dockerfile: dashboard/Dockerfile
     ports:
       - "${DASHBOARD_PORT:-5173}:5173"
-    volumes:
-      - ../dashboard:/app
     environment:
       - BACKEND_URL=http://backend:8000
     depends_on:

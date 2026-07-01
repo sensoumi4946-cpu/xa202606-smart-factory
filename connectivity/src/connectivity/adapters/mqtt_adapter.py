@@ -9,10 +9,9 @@
 # so they never enter the sensor data pipeline.
 import asyncio
 import json
-import logging
 import sys
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Optional
 
 import paho.mqtt.client as mqtt
 from pydantic import ValidationError
@@ -28,8 +27,6 @@ from smart_factory_contracts.messages import (
 from connectivity.adapters.base import BaseAdapter
 from connectivity.models import MQTT_BROKER_HOST, MQTT_BROKER_PORT
 from connectivity.router import forward_to_backend
-
-logger = logging.getLogger(__name__)
 
 SENSOR_TOPIC = "factory/+/sensors/#"
 
@@ -92,9 +89,19 @@ class MQTTAdapter(BaseAdapter):
             if parsed is not None:
                 self._queue.put_nowait(parsed)
         except ValidationError:
-            log_json("payload_validation_failed", level="warning", device_id=device_id, topic=msg.topic)
+            log_json(
+                "payload_validation_failed",
+                level="warning",
+                device_id=device_id,
+                topic=msg.topic,
+            )
         except Exception:
-            log_json("payload_parse_error", level="warning", device_id=device_id, topic=msg.topic)
+            log_json(
+                "payload_parse_error",
+                level="warning",
+                device_id=device_id,
+                topic=msg.topic,
+            )
 
     def _parse_payload(self, topic: str, payload_str: str) -> Optional[UnifiedMessage]:
         raw = json.loads(payload_str)
@@ -117,7 +124,12 @@ class MQTTAdapter(BaseAdapter):
             mtype = MeasurementType(mtype_val)
             unit = Unit(munit)
         except ValueError:
-            log_json("unknown_measurement_type", level="warning", device_id=device_id, raw_type=mtype_val)
+            log_json(
+                "unknown_measurement_type",
+                level="warning",
+                device_id=device_id,
+                raw_type=mtype_val,
+            )
             return None
 
         measurements.append(Measurement(type=mtype, value=mvalue, unit=unit))
@@ -130,5 +142,10 @@ class MQTTAdapter(BaseAdapter):
             measurements=measurements,
             raw_payload={"topic": topic, "payload": raw},
         )
-        log_json("message_parsed", device_id=device_id, subsystem=subsystem, measurement_type=mtype_val)
+        log_json(
+            "message_parsed",
+            device_id=device_id,
+            subsystem=subsystem,
+            measurement_type=mtype_val,
+        )
         return msg

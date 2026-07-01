@@ -67,6 +67,7 @@ async def forward_to_backend(msg: UnifiedMessage) -> bool:
             )
         if attempt < MAX_RETRIES:
             import asyncio
+
             await asyncio.sleep(RETRY_INTERVAL)
 
     log_event(

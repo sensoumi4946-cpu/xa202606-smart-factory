@@ -6,9 +6,8 @@ from typing import Optional
 
 import httpx
 
+import connectivity.models as connectivity_models
 from smart_factory_contracts.messages import UnifiedMessage
-
-from connectivity.models import BACKEND_URL
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +34,7 @@ async def forward_to_backend(msg: UnifiedMessage) -> bool:
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.post(
-                    f"{BACKEND_URL}/api/v1/data",
+                    f"{connectivity_models.BACKEND_URL}/api/v1/data",
                     json=payload,
                 )
             if resp.status_code in (200, 201):

@@ -3,19 +3,23 @@ from pathlib import Path
 from rdflib import RDFS, Graph, OWL, SOSA
 from rdflib.term import URIRef
 
-ONTOLOGY_PATH = Path(__file__).parent.parent / "ontology" / "smart-factory.ttl"
+ONTOLOGY_PATH = Path(__file__).parent.parent / "src" / "semantic_layer" / "ontology" / "smart-factory.ttl"
 SF = "http://example.org/smart-factory#"
 
 
-def test_ontology_parseable():
+def _load_graph() -> Graph:
     g = Graph()
-    g.parse(str(ONTOLOGY_PATH), format="turtle")
+    g.parse(ONTOLOGY_PATH.as_uri(), format="turtle")
+    return g
+
+
+def test_ontology_parseable():
+    g = _load_graph()
     assert len(g) > 0
 
 
 def test_sensor_classes_present():
-    g = Graph()
-    g.parse(str(ONTOLOGY_PATH), format="turtle")
+    g = _load_graph()
     sensor_classes = [
         URIRef(f"{SF}TemperatureSensor"),
         URIRef(f"{SF}HumiditySensor"),
@@ -29,8 +33,7 @@ def test_sensor_classes_present():
 
 
 def test_observable_properties_present():
-    g = Graph()
-    g.parse(str(ONTOLOGY_PATH), format="turtle")
+    g = _load_graph()
     props = [
         URIRef(f"{SF}measuresTemperature"),
         URIRef(f"{SF}measuresHumidity"),
@@ -47,16 +50,14 @@ def test_observable_properties_present():
 
 
 def test_sensor_uses_sosa_sensor():
-    g = Graph()
-    g.parse(str(ONTOLOGY_PATH), format="turtle")
+    g = _load_graph()
     temp_sensor = URIRef(f"{SF}TemperatureSensor")
     results = list(g.triples((temp_sensor, RDFS.subClassOf, SOSA.Sensor)))
     assert len(results) > 0
 
 
 def test_subsystems_present():
-    g = Graph()
-    g.parse(str(ONTOLOGY_PATH), format="turtle")
+    g = _load_graph()
     subsystems = [
         URIRef(f"{SF}TempHumiditySubsystem"),
         URIRef(f"{SF}LightingSubsystem"),

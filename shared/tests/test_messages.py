@@ -20,6 +20,7 @@ def test_measurement_valid():
 
 def test_unified_message_minimal():
     msg = UnifiedMessage(
+        schema_version="v1",
         device_id="sensor_dht22_01",
         subsystem=Subsystem.TEMP_HUMIDITY,
         protocol=Protocol.MQTT,
@@ -37,6 +38,7 @@ def test_unified_message_minimal():
 
 def test_unified_message_full():
     msg = UnifiedMessage(
+        schema_version="v1",
         device_id="sensor_mq2_01",
         subsystem=Subsystem.GAS,
         protocol=Protocol.MQTT,
@@ -53,6 +55,7 @@ def test_unified_message_full():
 
 def test_json_serialization():
     msg = UnifiedMessage(
+        schema_version="v1",
         device_id="sensor_dht22_01",
         subsystem=Subsystem.TEMP_HUMIDITY,
         protocol=Protocol.MQTT,
@@ -68,6 +71,7 @@ def test_json_serialization():
 def test_missing_device_id_rejected():
     try:
         UnifiedMessage(
+            schema_version="v1",
             device_id="",
             subsystem=Subsystem.TEMP_HUMIDITY,
             protocol=Protocol.MQTT,
@@ -83,6 +87,7 @@ def test_missing_device_id_rejected():
 def test_empty_measurements_rejected():
     try:
         UnifiedMessage(
+            schema_version="v1",
             device_id="sensor_dht22_01",
             subsystem=Subsystem.TEMP_HUMIDITY,
             protocol=Protocol.MQTT,
@@ -90,6 +95,22 @@ def test_empty_measurements_rejected():
         )
         assert False, "expected validation error"
     except Exception:
+        pass
+
+
+def test_missing_schema_version_rejected():
+    from pydantic import ValidationError
+    try:
+        UnifiedMessage(
+            device_id="sensor_dht22_01",
+            subsystem=Subsystem.TEMP_HUMIDITY,
+            protocol=Protocol.MQTT,
+            measurements=[
+                Measurement(type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS),
+            ],
+        )
+        assert False, "expected ValidationError"
+    except ValidationError:
         pass
 
 

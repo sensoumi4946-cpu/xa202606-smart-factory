@@ -1,7 +1,7 @@
 import json
-import logging
 import sys
 import traceback
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, Request
@@ -12,16 +12,18 @@ from backend.api.ingest import router as ingest_router
 from backend.api.query import router as query_router
 from backend.store import init_db
 
-app = FastAPI(title="XA-202606 Smart Factory Backend", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+
+app = FastAPI(title="XA-202606 Smart Factory Backend", version="0.1.0", lifespan=lifespan)
 
 app.include_router(ingest_router)
 app.include_router(query_router)
 app.include_router(control_router)
-
-
-@app.on_event("startup")
-def _startup():
-    init_db()
 
 
 @app.get("/health")

@@ -17,6 +17,7 @@ def _init_db(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_ingest_valid_single_measurement():
     msg = UnifiedMessage(
+        schema_version="v1",
         device_id="sensor_dht22_01",
         subsystem=Subsystem.TEMP_HUMIDITY,
         protocol=Protocol.MQTT,
@@ -35,6 +36,7 @@ async def test_ingest_valid_single_measurement():
 @pytest.mark.asyncio
 async def test_ingest_valid_multi_measurement():
     msg = UnifiedMessage(
+        schema_version="v1",
         device_id="sensor_dht22_01",
         subsystem=Subsystem.TEMP_HUMIDITY,
         protocol=Protocol.MQTT,
@@ -78,8 +80,22 @@ async def test_ingest_missing_measurements():
 
 
 @pytest.mark.asyncio
+async def test_ingest_missing_schema_version():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/api/v1/data", json={
+            "device_id": "sensor_dht22_01",
+            "subsystem": "temp_humidity",
+            "protocol": "mqtt",
+            "measurements": [{"type": "temperature", "value": 25.5, "unit": "celsius"}],
+        })
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_ingest_with_raw_payload():
     msg = UnifiedMessage(
+        schema_version="v1",
         device_id="sensor_dht22_01",
         subsystem=Subsystem.TEMP_HUMIDITY,
         protocol=Protocol.MQTT,

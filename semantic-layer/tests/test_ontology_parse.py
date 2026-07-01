@@ -1,15 +1,16 @@
-from pathlib import Path
+from importlib.resources import files
 
-from rdflib import RDFS, Graph, OWL, SOSA
+from rdflib import RDFS, Graph, SOSA
 from rdflib.term import URIRef
 
-ONTOLOGY_PATH = Path(__file__).parent.parent / "src" / "semantic_layer" / "ontology" / "smart-factory.ttl"
+ONTOLOGY_PATH = files("semantic_layer") / "ontology" / "smart-factory.ttl"
 SF = "http://example.org/smart-factory#"
 
 
 def _load_graph() -> Graph:
     g = Graph()
-    g.parse(ONTOLOGY_PATH.as_uri(), format="turtle")
+    with open(ONTOLOGY_PATH, "rb") as f:
+        g.parse(f, format="turtle")
     return g
 
 

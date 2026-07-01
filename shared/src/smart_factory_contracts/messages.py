@@ -49,7 +49,7 @@ class Measurement(BaseModel):
 
 
 class UnifiedMessage(BaseModel):
-    schema_version: Literal["v1"] = "v1"
+    schema_version: Literal["v1"]
     device_id: str = Field(..., min_length=1)
     subsystem: Subsystem
     protocol: Protocol

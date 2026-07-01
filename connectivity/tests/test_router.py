@@ -28,6 +28,7 @@ async def test_forward_to_backend_success_starts_backend(tmp_path, monkeypatch):
 
     try:
         msg = UnifiedMessage(
+            schema_version="v1",
             device_id="sensor_dht22_01",
             subsystem=Subsystem.TEMP_HUMIDITY,
             protocol=Protocol.MQTT,
@@ -47,6 +48,7 @@ async def test_forward_to_backend_failure(monkeypatch):
     monkeypatch.setattr("connectivity.models.BACKEND_URL", "http://127.0.0.1:19999")
 
     msg = UnifiedMessage(
+        schema_version="v1",
         device_id="sensor_dht22_01",
         subsystem=Subsystem.TEMP_HUMIDITY,
         protocol=Protocol.MQTT,

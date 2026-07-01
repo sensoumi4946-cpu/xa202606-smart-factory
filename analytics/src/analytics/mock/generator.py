@@ -52,6 +52,7 @@ def generate_message(device_id: str, subsystem: Subsystem) -> UnifiedMessage:
         ]
 
     return UnifiedMessage(
+        schema_version="v1",
         device_id=device_id,
         subsystem=subsystem,
         protocol=Protocol.MOCK,

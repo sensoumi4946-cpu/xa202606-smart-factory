@@ -16,6 +16,7 @@ def _init_db(tmp_path, monkeypatch):
 
 async def _ingest(client, device_id, temp=25.0):
     msg = UnifiedMessage(
+        schema_version="v1",
         device_id=device_id,
         subsystem=Subsystem.TEMP_HUMIDITY,
         protocol=Protocol.MQTT,

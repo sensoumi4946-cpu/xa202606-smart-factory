@@ -112,6 +112,7 @@ class MQTTAdapter(BaseAdapter):
         measurements.append(Measurement(type=mtype, value=mvalue, unit=unit))
 
         msg = UnifiedMessage(
+            schema_version="v1",
             device_id=device_id,
             subsystem=Subsystem(subsystem),
             protocol=Protocol.MQTT,

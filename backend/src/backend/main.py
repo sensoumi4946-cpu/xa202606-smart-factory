@@ -1,0 +1,44 @@
+import json
+import logging
+import sys
+import traceback
+from datetime import datetime, timezone
+
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+
+from backend.api.control import router as control_router
+from backend.api.ingest import router as ingest_router
+from backend.api.query import router as query_router
+from backend.store import init_db
+
+app = FastAPI(title="XA-202606 Smart Factory Backend", version="0.1.0")
+
+app.include_router(ingest_router)
+app.include_router(query_router)
+app.include_router(control_router)
+
+
+@app.on_event("startup")
+def _startup():
+    init_db()
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    log_entry = {
+        "service": "backend",
+        "event": "unhandled_error",
+        "level": "error",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "path": str(request.url.path),
+        "error": str(exc),
+        "traceback": traceback.format_exc(),
+    }
+    print(json.dumps(log_entry), file=sys.stderr)
+    return JSONResponse(status_code=500, content={"detail": "internal server error"})

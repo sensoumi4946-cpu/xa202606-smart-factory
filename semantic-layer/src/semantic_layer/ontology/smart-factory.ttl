@@ -1,0 +1,97 @@
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix sosa: <http://www.w3.org/ns/sosa/> .
+@prefix ssn:  <http://www.w3.org/ns/ssn/> .
+@prefix sf:   <http://example.org/smart-factory#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+
+@base <http://example.org/smart-factory> .
+
+# ── Sensor classes (5 subsystems) ──
+
+sf:TemperatureSensor  a  owl:Class ;
+    rdfs:subClassOf  sosa:Sensor ;
+    rdfs:label        "Temperature Sensor"@en ;
+    rdfs:comment      "Measures ambient temperature in the factory environment"@en .
+
+sf:HumiditySensor  a  owl:Class ;
+    rdfs:subClassOf  sosa:Sensor ;
+    rdfs:label        "Humidity Sensor"@en ;
+    rdfs:comment      "Measures relative humidity in the factory environment"@en .
+
+sf:GasSensor  a  owl:Class ;
+    rdfs:subClassOf  sosa:Sensor ;
+    rdfs:label        "Gas Sensor"@en ;
+    rdfs:comment      "Detects hazardous gases (smoke, CO, combustible gas)"@en .
+
+sf:ProximitySensor  a  owl:Class ;
+    rdfs:subClassOf  sosa:Sensor ;
+    rdfs:label        "Proximity / Distance Sensor"@en ;
+    rdfs:comment      "Measures distance for AGV obstacle avoidance"@en .
+
+sf:CountSensor  a  owl:Class ;
+    rdfs:subClassOf  sosa:Sensor ;
+    rdfs:label        "Counting Sensor"@en ;
+    rdfs:comment      "Counts goods passing on the production line"@en .
+
+sf:OccupancySensor  a  owl:Class ;
+    rdfs:subClassOf  sosa:Sensor ;
+    rdfs:label        "Occupancy Sensor"@en ;
+    rdfs:comment      "Detects human presence for smart lighting control"@en .
+
+# ── ObservableProperty classes (the quantities each sensor can observe) ──
+
+sf:measuresTemperature  a  sosa:ObservableProperty ;
+    rdfs:label  "Temperature"@en ;
+    rdfs:comment  "Ambient air temperature in degrees Celsius"@en .
+
+sf:measuresHumidity  a  sosa:ObservableProperty ;
+    rdfs:label  "Humidity"@en ;
+    rdfs:comment  "Relative humidity as a percentage"@en .
+
+sf:measuresCO  a  sosa:ObservableProperty ;
+    rdfs:label  "Carbon Monoxide Concentration"@en ;
+    rdfs:comment  "CO concentration in parts per million (ppm)"@en .
+
+sf:measuresSmoke  a  sosa:ObservableProperty ;
+    rdfs:label  "Smoke Concentration"@en ;
+    rdfs:comment  "Smoke particle concentration in ppm"@en .
+
+sf:measuresCombustibleGas  a  sosa:ObservableProperty ;
+    rdfs:label  "Combustible Gas Concentration"@en ;
+    rdfs:comment  "Combustible gas concentration in ppm"@en .
+
+sf:measuresDistance  a  sosa:ObservableProperty ;
+    rdfs:label  "Distance"@en ;
+    rdfs:comment  "Distance to nearest obstacle in centimeters"@en .
+
+sf:measuresCount  a  sosa:ObservableProperty ;
+    rdfs:label  "Count"@en ;
+    rdfs:comment  "Cumulative or per-interval count of items"@en .
+
+sf:measuresOccupancy  a  sosa:ObservableProperty ;
+    rdfs:label  "Occupancy"@en ;
+    rdfs:comment  "Binary occupancy state (0 = vacant, 1 = occupied)"@en .
+
+sf:measuresLightState  a  sosa:ObservableProperty ;
+    rdfs:label  "Light State"@en ;
+    rdfs:comment  "Binary light state (0 = off, 1 = on)"@en .
+
+# ── Subsystem grouping (not part of SOSA, organisational convenience) ──
+
+sf:Subsystem  a  rdfs:Class .
+
+sf:TempHumiditySubsystem  a  sf:Subsystem ;
+    rdfs:label  "Temperature & Humidity Monitoring Subsystem"@en .
+
+sf:LightingSubsystem  a  sf:Subsystem ;
+    rdfs:label  "Infrared-Sensing Lighting Subsystem"@en .
+
+sf:GasMonitoringSubsystem  a  sf:Subsystem ;
+    rdfs:label  "Hazardous-Gas Monitoring Subsystem"@en .
+
+sf:AGVObstacleSubsystem  a  sf:Subsystem ;
+    rdfs:label  "AGV Obstacle Avoidance Subsystem"@en .
+
+sf:CountingSubsystem  a  sf:Subsystem ;
+    rdfs:label  "Goods Sensing & Counting Subsystem"@en .

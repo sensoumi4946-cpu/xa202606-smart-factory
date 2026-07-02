@@ -34,7 +34,11 @@ async def test_history_time_range():
             protocol=Protocol.MQTT,
             timestamp=datetime(2026, 7, 1, 10, i, 0, tzinfo=timezone.utc),
             measurements=[
-                Measurement(type=MeasurementType.TEMPERATURE, value=float(20 + i), unit=Unit.CELSIUS),
+                Measurement(
+                    type=MeasurementType.TEMPERATURE,
+                    value=float(20 + i),
+                    unit=Unit.CELSIUS,
+                ),
             ],
         )
         insert_sensor_data(msg)
@@ -58,7 +62,11 @@ async def test_history_pagination():
             protocol=Protocol.MQTT,
             timestamp=datetime(2026, 7, 1, 10, i, 0, tzinfo=timezone.utc),
             measurements=[
-                Measurement(type=MeasurementType.TEMPERATURE, value=float(20 + i), unit=Unit.CELSIUS),
+                Measurement(
+                    type=MeasurementType.TEMPERATURE,
+                    value=float(20 + i),
+                    unit=Unit.CELSIUS,
+                ),
             ],
         )
         insert_sensor_data(msg)

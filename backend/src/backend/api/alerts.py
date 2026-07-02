@@ -25,6 +25,4 @@ async def alerts(
             status_code=422,
             detail=f"level must be one of {sorted(VALID_LEVELS)}",
         )
-    return query_alerts(
-        device_id=device_id, level=level, limit=limit, offset=offset
-    )
+    return query_alerts(device_id=device_id, level=level, limit=limit, offset=offset)

@@ -1,9 +1,8 @@
 # SQLite-based storage layer.
 #
-# This is the Phase 1 persistence backend. It uses a single-file SQLite
-# database with WAL journaling for concurrent read/write safety.
-# The schema is designed so that replacing SQLite with InfluxDB / IoTDB
-# in later phases only requires rewriting this module — no API change.
+# Uses a single-file SQLite database with WAL journaling for concurrent
+# read/write safety. The schema is designed so that replacing SQLite with
+# InfluxDB / IoTDB only requires rewriting this module — no API change.
 import json
 import os
 import sqlite3
@@ -77,9 +76,7 @@ def init_db() -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_alerts_triggered_at ON alerts(triggered_at DESC)"
     )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_alerts_device ON alerts(device_id)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_alerts_device ON alerts(device_id)")
     conn.execute(
         """CREATE INDEX IF NOT EXISTS idx_alerts_rule_device_time
         ON alerts(rule_name, device_id, triggered_at DESC)"""
@@ -269,9 +266,7 @@ def get_latest(device_id: Optional[str] = None) -> list[dict[str, Any]]:
                 latest_map[key] = (m["value"], m["unit"], row_ts.isoformat())
             else:
                 _, _, exist_ts_str = latest_map[key]
-                exist_ts = datetime.fromisoformat(
-                    exist_ts_str.replace("Z", "+00:00")
-                )
+                exist_ts = datetime.fromisoformat(exist_ts_str.replace("Z", "+00:00"))
                 if row_ts > exist_ts:
                     latest_map[key] = (m["value"], m["unit"], row_ts.isoformat())
 
@@ -279,7 +274,9 @@ def get_latest(device_id: Optional[str] = None) -> list[dict[str, Any]]:
     for (dev, mtype), (val, unit, ts) in sorted(latest_map.items()):
         if dev not in device_data:
             device_data[dev] = []
-        device_data[dev].append({"type": mtype, "value": val, "unit": unit, "timestamp": ts})
+        device_data[dev].append(
+            {"type": mtype, "value": val, "unit": unit, "timestamp": ts}
+        )
 
     result: list[dict[str, Any]] = []
     for dev, measurements in device_data.items():
@@ -315,7 +312,9 @@ def query_history(
         params.append(until)
 
     where = " WHERE " + " AND ".join(conditions) if conditions else ""
-    total = conn.execute(f"SELECT COUNT(*) FROM sensor_data{where}", params).fetchone()[0]
+    total = conn.execute(f"SELECT COUNT(*) FROM sensor_data{where}", params).fetchone()[
+        0
+    ]
 
     query = f"SELECT * FROM sensor_data{where} ORDER BY timestamp DESC LIMIT ? OFFSET ?"
     rows = conn.execute(query, params + [limit, offset]).fetchall()

@@ -33,7 +33,9 @@ async def test_latest_aggregates():
         protocol=Protocol.MQTT,
         timestamp=datetime(2026, 7, 1, 10, 0, 0, tzinfo=timezone.utc),
         measurements=[
-            Measurement(type=MeasurementType.TEMPERATURE, value=22.0, unit=Unit.CELSIUS),
+            Measurement(
+                type=MeasurementType.TEMPERATURE, value=22.0, unit=Unit.CELSIUS
+            ),
         ],
     )
     msg2 = UnifiedMessage(
@@ -43,7 +45,9 @@ async def test_latest_aggregates():
         protocol=Protocol.MQTT,
         timestamp=datetime(2026, 7, 1, 10, 1, 0, tzinfo=timezone.utc),
         measurements=[
-            Measurement(type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS),
+            Measurement(
+                type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS
+            ),
         ],
     )
     msg3 = UnifiedMessage(
@@ -58,6 +62,7 @@ async def test_latest_aggregates():
     )
 
     from backend.store import insert_sensor_data
+
     insert_sensor_data(msg1)
     insert_sensor_data(msg2)
     insert_sensor_data(msg3)
@@ -95,7 +100,9 @@ async def test_latest_device_filter():
         protocol=Protocol.MQTT,
         timestamp=datetime(2026, 7, 1, 10, 0, 0, tzinfo=timezone.utc),
         measurements=[
-            Measurement(type=MeasurementType.TEMPERATURE, value=22.0, unit=Unit.CELSIUS),
+            Measurement(
+                type=MeasurementType.TEMPERATURE, value=22.0, unit=Unit.CELSIUS
+            ),
         ],
     )
     msg2 = UnifiedMessage(
@@ -110,6 +117,7 @@ async def test_latest_device_filter():
     )
 
     from backend.store import insert_sensor_data
+
     insert_sensor_data(msg1)
     insert_sensor_data(msg2)
 

@@ -1,0 +1,21 @@
+{
+  "name": "XA-202606 Smart Factory",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "22"
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "charliermarsh.ruff",
+        "Vue.volar",
+        "tamasfe.even-better-toml"
+      ]
+    }
+  },
+  "postCreateCommand": "make install-dev"
+}

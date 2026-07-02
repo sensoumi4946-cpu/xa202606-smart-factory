@@ -1,0 +1,23 @@
+[project]
+name = "smart-factory-semantic-layer"
+version = "0.1.0"
+description = "Semantic interoperability layer for XA-202606 Smart Factory platform"
+requires-python = ">=3.11"
+dependencies = [
+    "rdflib>=7.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/semantic_layer"]

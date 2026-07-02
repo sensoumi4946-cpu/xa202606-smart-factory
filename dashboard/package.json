@@ -10,10 +10,13 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "echarts": "^5.5",
     "vue": "^3.5"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2",
+    "@vue/test-utils": "^2.4",
+    "jsdom": "^25.0",
     "typescript": "~5.7",
     "vite": "^6.1",
     "vitest": "^3.0",

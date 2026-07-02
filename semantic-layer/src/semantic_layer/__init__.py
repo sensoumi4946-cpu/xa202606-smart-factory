@@ -1,3 +1,3 @@
 # Semantic interoperability layer.
-# Phase 1 defines the minimum shared vocabulary (smart-factory.ttl) using
-# SOSA/SSN standards. No runtime AAS or SPARQL querying yet — Phase 2.
+# Defines the shared vocabulary (smart-factory.ttl) using SOSA/SSN
+# standards, plus runtime mapping via RDFlib. No external Fuseki/AAS needed.

@@ -1,64 +1,34 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { fetchDevices, fetchDeviceData, type SensorRecord } from './api'
+import { ref } from 'vue'
+import TempGauge from './components/TempGauge.vue'
+import GasMonitor from './components/GasMonitor.vue'
+import AgvTrack from './components/AgvTrack.vue'
+import CountBar from './components/CountBar.vue'
+import LightingPanel from './components/LightingPanel.vue'
+import AlertsPanel from './components/AlertsPanel.vue'
+import HistoryTable from './components/HistoryTable.vue'
 
-const title = 'XA-202606 Smart Factory Safety Monitoring & Control Platform'
-const devices = ref<string[]>([])
-const selectedDevice = ref('')
-const records = ref<SensorRecord[]>([])
-const rawJson = ref('')
+const title = 'XA-202606 智慧工厂安全监控平台'
 const error = ref('')
-
-async function loadDevices() {
-  try {
-    devices.value = await fetchDevices()
-  } catch (e: any) {
-    error.value = e.message
-  }
-}
-
-async function loadData(deviceId: string) {
-  try {
-    records.value = await fetchDeviceData(deviceId)
-    rawJson.value = JSON.stringify(records.value, null, 2)
-  } catch (e: any) {
-    error.value = e.message
-  }
-}
-
-function onSelect(deviceId: string) {
-  selectedDevice.value = deviceId
-  if (deviceId) {
-    loadData(deviceId)
-  }
-}
-
-onMounted(loadDevices)
 </script>
 
 <template>
   <div class="app">
-    <h1>{{ title }}</h1>
+    <h1 class="title">{{ title }}</h1>
 
     <div v-if="error" class="error">{{ error }}</div>
 
-    <div class="toolbar">
-      <label>
-        Device:
-        <select v-model="selectedDevice" @change="onSelect(selectedDevice)">
-          <option value="">-- select --</option>
-          <option v-for="d in devices" :key="d" :value="d">{{ d }}</option>
-        </select>
-      </label>
-      <button @click="loadDevices">Refresh Devices</button>
+    <div class="grid">
+      <TempGauge />
+      <GasMonitor />
+      <AgvTrack />
+      <LightingPanel />
+      <CountBar />
+      <HistoryTable />
     </div>
 
-    <div v-if="records.length" class="data-section">
-      <h3>Latest Records ({{ records.length }})</h3>
-      <pre>{{ rawJson }}</pre>
-    </div>
-    <div v-else class="empty">
-      No data available. Start the mock generator and backend to see sensor readings.
+    <div class="alerts-section">
+      <AlertsPanel />
     </div>
   </div>
 </template>
@@ -71,56 +41,39 @@ body {
   color: #e2e8f0;
 }
 .app {
-  max-width: 960px;
+  max-width: 1440px;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 16px 24px;
 }
-h1 {
-  font-size: 1.4rem;
+.title {
+  font-size: 1.3rem;
   color: #38bdf8;
+  text-align: center;
+  margin-bottom: 16px;
 }
-.toolbar {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  margin: 1rem 0;
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 12px;
 }
-.toolbar select {
-  padding: 0.3rem 0.6rem;
-  background: #1e293b;
-  color: #e2e8f0;
-  border: 1px solid #334155;
-  border-radius: 4px;
-}
-.toolbar button {
-  padding: 0.3rem 0.8rem;
-  background: #1e293b;
-  color: #e2e8f0;
-  border: 1px solid #334155;
-  border-radius: 4px;
-  cursor: pointer;
-}
-.toolbar button:hover {
-  background: #334155;
-}
-.data-section {
-  margin-top: 1rem;
-}
-.data-section pre {
-  background: #1e293b;
-  padding: 1rem;
-  border-radius: 6px;
-  overflow-x: auto;
-  font-size: 0.85rem;
+.alerts-section {
+  max-width: 600px;
 }
 .error {
   background: #7f1d1d;
   color: #fca5a5;
   padding: 0.5rem 1rem;
   border-radius: 4px;
+  margin-bottom: 12px;
 }
-.empty {
-  color: #64748b;
-  margin-top: 2rem;
+
+@media (max-width: 960px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+  .alerts-section {
+    max-width: 100%;
+  }
 }
 </style>

@@ -5,7 +5,7 @@
 # SOSA/SSN standard vocabulary.
 from importlib.resources import files
 
-from rdflib import RDFS, Graph, SOSA
+from rdflib import RDF, RDFS, Graph, SOSA
 from rdflib.term import URIRef
 
 ONTOLOGY_PATH = files("semantic_layer") / "ontology" / "smart-factory.ttl"
@@ -73,3 +73,10 @@ def test_subsystems_present():
     ]
     for sub in subsystems:
         assert (sub, None, None) in g, f"{sub} not found in ontology"
+
+
+def test_custom_properties_exist():
+    g = _load_graph()
+    assert (URIRef(f"{SF}belongsToSubsystem"), RDF.type, RDF.Property) in g
+    assert (URIRef(f"{SF}hasUnit"), RDF.type, RDF.Property) in g
+    assert (URIRef(f"{SF}transportedVia"), RDF.type, RDF.Property) in g

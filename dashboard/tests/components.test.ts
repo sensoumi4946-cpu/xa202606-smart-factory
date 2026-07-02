@@ -1,0 +1,80 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { mount } from '@vue/test-utils'
+
+const mockChart = {
+  setOption: vi.fn(),
+  dispose: vi.fn(),
+  on: vi.fn(),
+  resize: vi.fn(),
+  getDom: vi.fn(),
+}
+vi.mock('echarts', () => ({ init: vi.fn(() => mockChart) }))
+
+vi.mock('../src/api', () => ({
+  fetchLatest: vi.fn().mockResolvedValue([]),
+  fetchHistory: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+  fetchAlerts: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+  fetchDevices: vi.fn().mockResolvedValue([]),
+  fetchDeviceData: vi.fn().mockResolvedValue([]),
+  fetchAllData: vi.fn().mockResolvedValue([]),
+}))
+
+beforeEach(() => {
+  vi.useFakeTimers()
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.useRealTimers()
+})
+
+import TempGauge from '../src/components/TempGauge.vue'
+import GasMonitor from '../src/components/GasMonitor.vue'
+import AgvTrack from '../src/components/AgvTrack.vue'
+import CountBar from '../src/components/CountBar.vue'
+import LightingPanel from '../src/components/LightingPanel.vue'
+import AlertsPanel from '../src/components/AlertsPanel.vue'
+import HistoryTable from '../src/components/HistoryTable.vue'
+
+describe('component smoke tests', () => {
+  it('TempGauge renders title and chart container', () => {
+    const wrapper = mount(TempGauge, { global: { stubs: { } } })
+    expect(wrapper.text()).toContain('温湿度监测')
+    expect(wrapper.find('.chart').exists()).toBe(true)
+  })
+
+  it('GasMonitor renders title and chart container', () => {
+    const wrapper = mount(GasMonitor, { global: { stubs: { } } })
+    expect(wrapper.text()).toContain('气体浓度监测')
+    expect(wrapper.find('.chart').exists()).toBe(true)
+  })
+
+  it('AgvTrack renders title and chart container', () => {
+    const wrapper = mount(AgvTrack, { global: { stubs: { } } })
+    expect(wrapper.text()).toContain('AGV 避障距离')
+    expect(wrapper.find('.chart').exists()).toBe(true)
+  })
+
+  it('CountBar renders title and chart container', () => {
+    const wrapper = mount(CountBar, { global: { stubs: { } } })
+    expect(wrapper.text()).toContain('货物感应计数')
+    expect(wrapper.find('.chart').exists()).toBe(true)
+  })
+
+  it('LightingPanel renders title and status grid', () => {
+    const wrapper = mount(LightingPanel, { global: { stubs: { } } })
+    expect(wrapper.text()).toContain('照明状态')
+    expect(wrapper.find('.status-grid').exists()).toBe(true)
+  })
+
+  it('AlertsPanel renders title and empty placeholder', () => {
+    const wrapper = mount(AlertsPanel, { global: { stubs: { } } })
+    expect(wrapper.text()).toContain('告警面板')
+  })
+
+  it('HistoryTable renders title and controls', () => {
+    const wrapper = mount(HistoryTable, { global: { stubs: { } } })
+    expect(wrapper.text()).toContain('历史查询')
+    expect(wrapper.find('.controls').exists()).toBe(true)
+  })
+})

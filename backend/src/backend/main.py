@@ -15,8 +15,11 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from backend.api.alerts import router as alerts_router
 from backend.api.control import router as control_router
+from backend.api.history import router as history_router
 from backend.api.ingest import router as ingest_router
+from backend.api.latest import router as latest_router
 from backend.api.query import router as query_router
 from backend.store import init_db
 
@@ -34,6 +37,9 @@ app = FastAPI(
 app.include_router(ingest_router)
 app.include_router(query_router)
 app.include_router(control_router)
+app.include_router(latest_router)
+app.include_router(history_router)
+app.include_router(alerts_router)
 
 
 @app.get("/health")

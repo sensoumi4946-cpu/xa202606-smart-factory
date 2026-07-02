@@ -1,10 +1,10 @@
-# UnifiedMessage → RDF triples mapping (Phase 2A).
+# UnifiedMessage → RDF triples mapping.
 #
 # Converts a UnifiedMessage into an rdflib.Graph containing SOSA
 # Observation instances. Not wired into the backend runtime — this
 # module is verified exclusively through pytest + local SPARQL queries.
 import uuid as _uuid
-from datetime import datetime, timezone
+from datetime import timezone
 
 from rdflib import RDF, XSD, Graph, Literal, SOSA, URIRef
 from smart_factory_contracts.messages import MeasurementType, Subsystem, UnifiedMessage
@@ -73,7 +73,13 @@ def to_rdf_graph(msg: UnifiedMessage) -> Graph:
         g.add((obs_uri, SOSA.hasSimpleResult, Literal(m.value, datatype=XSD.double)))
         g.add((obs_uri, has_unit, Literal(m.unit.value)))
 
-        ts = msg.timestamp if msg.timestamp.tzinfo is not None else msg.timestamp.replace(tzinfo=timezone.utc)
-        g.add((obs_uri, SOSA.resultTime, Literal(ts.isoformat(), datatype=XSD.dateTime)))
+        ts = (
+            msg.timestamp
+            if msg.timestamp.tzinfo is not None
+            else msg.timestamp.replace(tzinfo=timezone.utc)
+        )
+        g.add(
+            (obs_uri, SOSA.resultTime, Literal(ts.isoformat(), datatype=XSD.dateTime))
+        )
 
     return g

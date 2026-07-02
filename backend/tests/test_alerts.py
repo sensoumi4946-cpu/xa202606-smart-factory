@@ -1,6 +1,5 @@
 # Integration tests for GET /api/v1/alerts.
 import pytest
-from datetime import datetime, timezone
 
 from httpx import ASGITransport, AsyncClient
 from smart_factory_contracts.messages import (
@@ -32,7 +31,9 @@ async def test_alerts_query():
         subsystem=Subsystem.TEMP_HUMIDITY,
         protocol=Protocol.MQTT,
         measurements=[
-            Measurement(type=MeasurementType.TEMPERATURE, value=39.0, unit=Unit.CELSIUS),
+            Measurement(
+                type=MeasurementType.TEMPERATURE, value=39.0, unit=Unit.CELSIUS
+            ),
         ],
     )
     insert_sensor_data(msg)

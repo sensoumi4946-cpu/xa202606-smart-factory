@@ -9,8 +9,6 @@ from smart_factory_contracts.messages import (
     Unit,
 )
 
-from backend.main import app
-from backend.rules import evaluate
 from backend.store import init_db, insert_sensor_data, query_alerts
 
 
@@ -30,7 +28,9 @@ async def test_high_temp_triggers_alert():
         subsystem=Subsystem.TEMP_HUMIDITY,
         protocol=Protocol.MQTT,
         measurements=[
-            Measurement(type=MeasurementType.TEMPERATURE, value=39.0, unit=Unit.CELSIUS),
+            Measurement(
+                type=MeasurementType.TEMPERATURE, value=39.0, unit=Unit.CELSIUS
+            ),
         ],
     )
     insert_sensor_data(msg)
@@ -51,7 +51,9 @@ async def test_normal_temp_no_alert():
         subsystem=Subsystem.TEMP_HUMIDITY,
         protocol=Protocol.MQTT,
         measurements=[
-            Measurement(type=MeasurementType.TEMPERATURE, value=25.0, unit=Unit.CELSIUS),
+            Measurement(
+                type=MeasurementType.TEMPERATURE, value=25.0, unit=Unit.CELSIUS
+            ),
         ],
     )
     insert_sensor_data(msg)
@@ -67,7 +69,9 @@ async def test_multiple_measurements_multi_alerts():
         subsystem=Subsystem.GAS,
         protocol=Protocol.MQTT,
         measurements=[
-            Measurement(type=MeasurementType.TEMPERATURE, value=39.0, unit=Unit.CELSIUS),
+            Measurement(
+                type=MeasurementType.TEMPERATURE, value=39.0, unit=Unit.CELSIUS
+            ),
             Measurement(type=MeasurementType.CO, value=40.0, unit=Unit.PPM),
         ],
     )

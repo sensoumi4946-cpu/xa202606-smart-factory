@@ -5,9 +5,7 @@
 # SPARQL queries are executed locally — no external Fuseki/AAS runtime.
 from datetime import datetime, timezone
 
-import pytest
 from rdflib import RDF, Graph, SOSA
-from rdflib.query import Result
 from rdflib.term import URIRef
 from smart_factory_contracts.messages import (
     Measurement,
@@ -35,7 +33,9 @@ def _make_msg(**kwargs):
         "protocol": Protocol.MQTT,
         "timestamp": datetime(2026, 7, 15, 10, 30, 0, tzinfo=timezone.utc),
         "measurements": [
-            Measurement(type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS),
+            Measurement(
+                type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS
+            ),
         ],
     }
     defaults.update(kwargs)
@@ -65,7 +65,9 @@ def test_observation_has_result_time():
 def test_unit_subsystem_protocol_preserved():
     msg = _make_msg(
         measurements=[
-            Measurement(type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS),
+            Measurement(
+                type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS
+            ),
         ],
     )
     g = to_rdf_graph(msg)
@@ -105,7 +107,9 @@ def test_all_measurement_types_mapped():
 def test_multiple_measurements_produce_multiple_observations():
     msg = _make_msg(
         measurements=[
-            Measurement(type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS),
+            Measurement(
+                type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS
+            ),
             Measurement(type=MeasurementType.HUMIDITY, value=62.1, unit=Unit.PERCENT),
         ],
     )
@@ -117,15 +121,29 @@ def test_multiple_measurements_produce_multiple_observations():
 def test_sparql_find_co_and_temp_sensors():
     g = Graph()
     for dev_id, subsys, mlist in [
-        ("sensor_dht22_01", Subsystem.TEMP_HUMIDITY, [
-            Measurement(type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS),
-        ]),
-        ("sensor_mq2_01", Subsystem.GAS, [
-            Measurement(type=MeasurementType.CO, value=5.0, unit=Unit.PPM),
-        ]),
-        ("sensor_ir_01", Subsystem.COUNTING, [
-            Measurement(type=MeasurementType.COUNT, value=10.0, unit=Unit.COUNT),
-        ]),
+        (
+            "sensor_dht22_01",
+            Subsystem.TEMP_HUMIDITY,
+            [
+                Measurement(
+                    type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS
+                ),
+            ],
+        ),
+        (
+            "sensor_mq2_01",
+            Subsystem.GAS,
+            [
+                Measurement(type=MeasurementType.CO, value=5.0, unit=Unit.PPM),
+            ],
+        ),
+        (
+            "sensor_ir_01",
+            Subsystem.COUNTING,
+            [
+                Measurement(type=MeasurementType.COUNT, value=10.0, unit=Unit.COUNT),
+            ],
+        ),
     ]:
         msg = _make_msg(device_id=dev_id, subsystem=subsys, measurements=mlist)
         g += to_rdf_graph(msg)

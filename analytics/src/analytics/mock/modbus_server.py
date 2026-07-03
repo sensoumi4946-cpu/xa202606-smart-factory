@@ -33,6 +33,9 @@ def write_registers(device, registers: list[int]) -> None:
         set_values(3, 0, registers)
         return
     block = get_holding_block(device)
+    if isinstance(block, list):
+        block[: len(registers)] = registers
+        return
     block.setValues(1, registers)
 
 
@@ -48,6 +51,11 @@ def get_holding_block(device):
                 return store[key]
             except (KeyError, TypeError):
                 continue
+    simdevice = getattr(device, "simdevice", None)
+    if simdevice is not None:
+        simdata = getattr(simdevice, "simdata", None) or ()
+        if len(simdata) > 3:
+            return simdata[3]
     raise AttributeError("holding register data block not found")
 
 

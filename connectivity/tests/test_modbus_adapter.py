@@ -19,7 +19,7 @@ def test_modbus_registers_parsed():
     assert by_type(msg, "smoke").value == 3.0
     assert by_type(msg, "co").value == 12.0
     assert by_type(msg, "combustible_gas").value == 0.0
-    assert msg.raw_payload == {"registers": [3, 12, 0], "base_address": 0}
+    assert msg.raw_payload == {"registers": [3, 12, 0], "base_address": 1}
 
 
 def test_modbus_short_registers_rejected():
@@ -45,7 +45,7 @@ def test_modbus_forward_to_backend(monkeypatch):
 
     class FakeClient:
         async def read_holding_registers(self, address, count):
-            assert address == 0
+            assert address == 1
             assert count == 3
             return FakeResult()
 

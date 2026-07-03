@@ -17,7 +17,7 @@ import connectivity.models as connectivity_models
 from connectivity.adapters.base import BaseAdapter
 from connectivity.router import forward_to_backend
 
-REGISTER_BASE = 0
+REGISTER_BASE = 1
 REGISTER_COUNT = 3
 RECONNECT_INTERVAL = 5.0
 

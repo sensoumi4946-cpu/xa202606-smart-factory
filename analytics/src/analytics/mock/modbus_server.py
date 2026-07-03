@@ -19,7 +19,7 @@ async def update_loop(context, interval: float = MODBUS_UPDATE_INTERVAL) -> None
 
 def create_context():
     datastore = importlib.import_module("pymodbus.datastore")
-    block = datastore.ModbusSequentialDataBlock(0, [0] * 10)
+    block = datastore.ModbusSequentialDataBlock(1, [0] * 10)
     device_cls = getattr(datastore, "ModbusDeviceContext", None) or getattr(
         datastore, "ModbusSlaveContext"
     )

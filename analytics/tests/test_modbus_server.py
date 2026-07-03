@@ -36,6 +36,7 @@ def test_create_context_uses_pymodbus_4_names(monkeypatch):
     context = create_context()
     assert context.single is True
     assert isinstance(context.devices, FakeDevice)
+    assert context.devices.hr.address == 1
 
 
 def test_create_context_falls_back_to_pymodbus_3_names(monkeypatch):
@@ -60,3 +61,4 @@ def test_create_context_falls_back_to_pymodbus_3_names(monkeypatch):
     context = create_context()
     assert context.single is True
     assert isinstance(context.slaves, FakeSlave)
+    assert context.slaves.hr.address == 1

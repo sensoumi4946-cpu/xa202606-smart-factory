@@ -330,7 +330,7 @@ xa202606-smart-factory/
 │   ├── src/analytics/mock/
 │   │   ├── generator.py           CLI mock data generator (--subsystem filter)
 │   │   └── modbus_server.py       Modbus TCP simulator, updates holding registers
-│   └── tests/                     9 tests (generator 8 + modbus_server 1)
+│   └── tests/                     11 tests (generator 8 + modbus_server 3)
 │
 ├── semantic-layer/                Shared vocabulary + RDF mapping
 │   ├── pyproject.toml

@@ -60,7 +60,9 @@ async def push_once(client: httpx.AsyncClient, url: str = REST_ADAPTER_URL) -> N
             log_json("push_error", level="warning", device_id=device_id, error=str(exc))
 
 
-async def run(interval: float = REST_PUSH_INTERVAL, url: str = REST_ADAPTER_URL) -> None:
+async def run(
+    interval: float = REST_PUSH_INTERVAL, url: str = REST_ADAPTER_URL
+) -> None:
     async with httpx.AsyncClient(timeout=10.0) as client:
         while True:
             await push_once(client, url)

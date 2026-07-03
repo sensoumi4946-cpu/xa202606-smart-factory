@@ -13,8 +13,7 @@ import os
 import random
 import time
 from datetime import datetime, timezone
-
-import paho.mqtt.client as mqtt
+from typing import Any, Optional
 
 from smart_factory_contracts.messages import (
     Measurement,
@@ -98,7 +97,7 @@ SUBSYSTEM_DEVICES = {
 }
 
 
-def publish_single(client: mqtt.Client, subsystem: Subsystem, device_id: str):
+def publish_single(client: Any, subsystem: Subsystem, device_id: str):
     msg = generate_message(device_id, subsystem)
     for m in msg.measurements:
         topic = f"factory/{subsystem.value}/sensors/{device_id}/{m.type.value}"
@@ -109,15 +108,24 @@ def publish_single(client: mqtt.Client, subsystem: Subsystem, device_id: str):
     return msg
 
 
-def run_mock(count: int = 0, interval: float = DEFAULT_INTERVAL):
+def run_mock(
+    count: int = 0,
+    interval: float = DEFAULT_INTERVAL,
+    subsystem: Optional[Subsystem] = None,
+):
+    import paho.mqtt.client as mqtt
+
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     client.connect(MQTT_BROKER_HOST, MQTT_BROKER_PORT, keepalive=60)
     client.loop_start()
+    devices_by_subsystem = (
+        {subsystem: SUBSYSTEM_DEVICES[subsystem]} if subsystem else SUBSYSTEM_DEVICES
+    )
 
     published = 0
     try:
         while True:
-            for subsystem, devices in SUBSYSTEM_DEVICES.items():
+            for subsystem, devices in devices_by_subsystem.items():
                 for device_id in devices:
                     publish_single(client, subsystem, device_id)
                     published += 1
@@ -142,8 +150,14 @@ def main():
         default=DEFAULT_INTERVAL,
         help="Interval between batches (seconds)",
     )
+    parser.add_argument(
+        "--subsystem",
+        choices=[subsystem.value for subsystem in Subsystem],
+        help="Only publish one subsystem",
+    )
     args = parser.parse_args()
-    run_mock(count=args.count, interval=args.interval)
+    subsystem = Subsystem(args.subsystem) if args.subsystem else None
+    run_mock(count=args.count, interval=args.interval, subsystem=subsystem)
 
 
 if __name__ == "__main__":

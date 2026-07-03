@@ -11,9 +11,8 @@ import asyncio
 import json
 import sys
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
-import paho.mqtt.client as mqtt
 from pydantic import ValidationError
 from smart_factory_contracts.messages import (
     Measurement,
@@ -44,11 +43,13 @@ def log_json(event: str, level: str = "info", **kwargs):
 
 class MQTTAdapter(BaseAdapter):
     def __init__(self):
-        self._client: Optional[mqtt.Client] = None
+        self._client: Optional[Any] = None
         self._queue: asyncio.Queue[UnifiedMessage] = asyncio.Queue()
         self._running = False
 
     async def start(self) -> None:
+        import paho.mqtt.client as mqtt
+
         self._running = True
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self._client.on_connect = self._on_connect

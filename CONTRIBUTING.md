@@ -2,25 +2,28 @@
 
 ## Overview
 
-This monorepo implements the **initial scaffold** of the XA-202606 Smart Factory Safety Monitoring & Control Platform. It establishes a **minimum viable data pipeline**: mock sensor data flows through an MQTT broker, a protocol adapter normalises it into a unified format, a backend persists it to SQLite, and a Vue dashboard displays it. No real hardware, no semantic reasoning, no control actuation — just a proven, test-covered skeleton ready for expansion.
+This monorepo implements the XA-202606 Smart Factory Safety Monitoring & Control Platform. It features a **live ECharts dashboard** with 5 subsystem panels, a **rule-based alert engine**, and **semantic mapping to SOSA/SSN** for cross-device interoperability — all running on a Docker Compose stack. Mock sensor data flows through MQTT, a protocol adapter normalises it into a unified format, the backend persists to SQLite with inline alert evaluation, and a Vue 3 dashboard renders real-time charts. No real hardware yet — just a proven, test-covered platform ready for integration.
 
-### Architecture (Current)
+### Architecture
 
 ```
-Mock Generator ──MQTT──▶ Mosquitto Broker ──MQTT──▶ Connectivity Adapter ──HTTP──▶ Backend API ──▶ SQLite
-                                                      │                                      │
-                                                      └── UnifiedMessage contract            ├── Dashboard (Vue 3)
-                                                                                             └── Semantic Layer (Turtle ontology)
+Mock Generator ──MQTT──▶ Mosquitto ──MQTT──▶ MQTT Adapter ──HTTP──▶ Backend API
+                                                                       │
+                                                                       ├── Ingest ──▶ Rules Eval ──▶ sensor_data + alerts (SQLite)
+                                                                       ├── Query  ──▶ /latest, /history, /alerts
+                                                                       └── Dashboard (Vue 3 + ECharts, 7 components)
+
+Semantic Mapping ──▶ RDFlib Graph ──▶ local SPARQL tests (not wired to runtime)
 ```
 
 | Layer | Directory | Runtime | Port |
-|---|---|---|---|
+|---|---|---|---|---|
 | Data contract (shared) | `shared/` | Import-only | — |
-| Backend API | `backend/` | FastAPI + SQLite | 8000 |
+| Backend API | `backend/` | FastAPI + SQLite, 6 endpoints + rules engine | 8000 |
 | Connectivity | `connectivity/` | MQTT adapter → HTTP forward | — |
 | Mock generator | `analytics/mock/` | CLI tool | — |
-| Semantic vocabulary | `semantic-layer/` | Turtle file (static) | — |
-| Dashboard | `dashboard/` | Vue 3 + Vite | 5173 |
+| Semantic layer | `semantic-layer/` | Turtle ontology + RDF mapping (test-only) | — |
+| Dashboard | `dashboard/` | Vue 3 + Vite + ECharts, 7 components | 5173 |
 | Infrastructure | `deploy/` | Docker Compose (4 services) | — |
 
 ---
@@ -41,10 +44,11 @@ pip install -e shared/ -e backend/[dev] -e connectivity/[dev] -e analytics/[dev]
 cd dashboard && npm install && cd ..
 ```
 
-### 2. Run tests (48 tests, ~12 seconds)
+### 2. Run tests (69 Python + 9 dashboard = 78 tests, ~15 seconds)
 
 ```bash
 pytest shared/tests/ backend/tests/ connectivity/tests/ analytics/tests/ semantic-layer/tests/ -v
+cd dashboard && npx vitest run && cd ..
 ```
 
 ### 3. Start the full stack (Docker)
@@ -66,7 +70,9 @@ python -m analytics.mock.generator --count 5
 ```bash
 curl http://localhost:8000/health                    # → {"status":"ok"}
 curl http://localhost:8000/api/v1/devices            # → ["sensor_dht22_01", ...]
-curl "http://localhost:8000/api/v1/data?device_id=sensor_dht22_01&limit=3"
+curl "http://localhost:8000/api/v1/latest"           # → 5 devices with aggregated measurements
+curl "http://localhost:8000/api/v1/history?limit=5"  # → {"items":[...], "total":...}
+curl "http://localhost:8000/api/v1/alerts?limit=10"  # → {"items":[...], "total":...}
 ```
 
 Open `http://localhost:5173` to see the dashboard.
@@ -132,11 +138,14 @@ factory/{subsystem}/control/{device_id}/{action}
 ## Backend API Reference
 
 | Method | Path | Purpose | Request Body | Response |
-|---|---|---|---|---|
+|---|---|---|---|---|---|
 | `GET` | `/health` | Health check | — | `200 {"status":"ok"}` |
 | `POST` | `/api/v1/data` | Ingest sensor data | `UnifiedMessage` | `201 {"id":"uuid"}` |
 | `GET` | `/api/v1/data` | Query sensor data | Query: `device_id`, `limit` (1-1000), `since` (ISO 8601) | `200 [rows...]` |
 | `GET` | `/api/v1/devices` | List known device IDs | — | `200 ["id1","id2"]` |
+| `GET` | `/api/v1/latest` | Latest values per device per type | Query: `device_id` (optional) | `200 [{device_id, subsystem, measurements}]` |
+| `GET` | `/api/v1/history` | Time-range query with pagination | Query: `device_id`, `since`, `until`, `limit`, `offset` | `200 {"items":[...], "total":N}` |
+| `GET` | `/api/v1/alerts` | Recent alerts with filtering | Query: `device_id`, `level` (warning\|critical), `limit`, `offset` | `200 {"items":[...], "total":N}` |
 | `POST` | `/api/v1/control` | Issue control command | `{"device_id":str,"action":str,"params":{}}` | `202 {"command_id":"uuid"}` |
 | `GET` | `/api/v1/control/{id}` | Check command status | — | `200 {"status":"pending"}` |
 
@@ -165,19 +174,53 @@ CREATE TABLE control_commands (
     status TEXT NOT NULL DEFAULT 'pending',
     created_at TEXT NOT NULL
 );
+
+-- Alerts — populated by rules engine within the same transaction as sensor_data insert
+CREATE TABLE alerts (
+    id TEXT PRIMARY KEY,
+    rule_name TEXT NOT NULL,           -- matches rules.py RULES
+    level TEXT NOT NULL,               -- "warning" | "critical"
+    device_id TEXT NOT NULL,
+    subsystem TEXT NOT NULL,
+    measurement_type TEXT NOT NULL,
+    value REAL NOT NULL,               -- trigger value
+    threshold REAL NOT NULL,           -- rule threshold
+    message TEXT NOT NULL,
+    source_record_id TEXT NOT NULL,    -- FK-like, links to sensor_data.id
+    triggered_at TEXT NOT NULL
+);
 ```
 
 ---
 
-## Semantic Ontology (smart-factory.ttl)
+## Semantic Layer
 
-The Turtle file in `semantic-layer/src/semantic_layer/ontology/` defines the **shared vocabulary** using SOSA/SSN standards:
+The ontology in `semantic-layer/src/semantic_layer/ontology/` defines the **shared vocabulary** using SOSA/SSN standards:
 
 - **6 Sensor classes**: TemperatureSensor, HumiditySensor, GasSensor, ProximitySensor, CountSensor, OccupancySensor
 - **9 ObservableProperties**: measuresTemperature, measuresHumidity, measuresCO, measuresSmoke, measuresCombustibleGas, measuresDistance, measuresCount, measuresOccupancy, measuresLightState
 - **5 Subsystem groupings**: TempHumiditySubsystem, LightingSubsystem, GasMonitoringSubsystem, AGVObstacleSubsystem, CountingSubsystem
+- **3 Custom properties**: `belongsToSubsystem`, `hasUnit`, `transportedVia`
 
-Currently only validates that the file is parseable by RDFlib. Semantic mapping and SPARQL querying come later.
+### Semantic Mapping (`mapping.py`)
+
+`to_rdf_graph()` converts a `UnifiedMessage` into an `rdflib.Graph` with SOSA Observation triples. Three lookup tables map measurement types to observable properties, sensor classes, and subsystem resources. Only verified in pytest via local SPARQL queries — not wired to backend runtime.
+
+---
+
+## Alert Rules Engine
+
+`backend/src/backend/rules.py` defines 5 declarative alert rules as a list of dicts. `evaluate()` is a **pure function** that takes a single `Measurement` and returns triggered alerts — it does not access the database.
+
+Rule evaluation is invoked inside `store.insert_sensor_data()` so that sensor insertion and alert insertion happen in the same SQLite transaction. Alerts are deduplicated: the same `(rule_name, device_id)` pair will not re-fire within a 30-second window.
+
+| Rule | Measurement | Op | Threshold | Level |
+|---|---|---|---|---|
+| `high_temp` | temperature | > | 38 | warning |
+| `smoke_warning` | smoke | > | 8 | warning |
+| `co_warning` | co | > | 35 | critical |
+| `gas_leak` | combustible_gas | > | 3 | critical |
+| `agv_close` | distance | < | 30 | warning |
 
 ---
 
@@ -235,16 +278,17 @@ xa202606-smart-factory/
 │   │   └── py.typed               PEP 561 marker
 │   └── tests/test_messages.py     9 tests
 │
-├── backend/                       FastAPI + SQLite
+├── backend/                       FastAPI + SQLite + rules
 │   ├── pyproject.toml
 │   ├── Dockerfile
 │   ├── src/backend/
-│   │   ├── main.py                App factory + lifespan + error handler
+│   │   ├── main.py                App factory + lifespan + 6 routers
 │   │   ├── config.py              Env-var config
 │   │   ├── models.py              API request/response Pydantic models
-│   │   ├── store.py               SQLite CRUD (monkeypatch-friendly)
-│   │   └── api/                   ingest.py / query.py / control.py
-│   └── tests/                     13 tests
+│   │   ├── rules.py               Alert rule definitions + evaluate()
+│   │   ├── store.py               SQLite CRUD + alerts table + rule evaluation
+│   │   └── api/                   ingest / query / control / latest / history / alerts
+│   └── tests/                     21 tests
 │
 ├── connectivity/                  Protocol adapters
 │   ├── pyproject.toml
@@ -267,21 +311,30 @@ xa202606-smart-factory/
 │   │   └── generator.py           CLI mock data generator
 │   └── tests/test_generator.py    8 tests
 │
-├── semantic-layer/                Shared vocabulary
+├── semantic-layer/                Shared vocabulary + RDF mapping
 │   ├── pyproject.toml
 │   ├── src/semantic_layer/
+│   │   ├── mapping.py             UnifiedMessage → SOSA Observation triples
 │   │   └── ontology/
-│   │       └── smart-factory.ttl  Turtle file (SOSA/SSN)
-│   └── tests/test_ontology_parse.py  5 tests
+│   │       └── smart-factory.ttl  Turtle file (SOSA/SSN + custom properties)
+│   └── tests/                     11 tests (ontology 6 + mapping 5)
 │
-├── dashboard/                     Vue 3 frontend
+├── dashboard/                     Vue 3 + ECharts frontend
 │   ├── package.json
-│   ├── vite.config.ts             Proxy /api → backend:8000
+│   ├── vite.config.ts             Proxy /api,/health → backend:8000
 │   ├── index.html
 │   └── src/
 │       ├── main.ts                Vue app bootstrap
-│       ├── App.vue                Device selector + JSON display
-│       └── api.ts                 Typed fetch wrappers
+│       ├── App.vue                3-column ECharts grid layout
+│       ├── api.ts                 Typed fetch wrappers (7 endpoints)
+│       └── components/
+│           ├── TempGauge.vue      Gauge chart (temperature)
+│           ├── GasMonitor.vue     Line chart (smoke, CO, gas)
+│           ├── AgvTrack.vue       Bar chart (distance, red if <30cm)
+│           ├── CountBar.vue       Bar chart (goods count)
+│           ├── LightingPanel.vue  Status display (occupancy + light)
+│           ├── AlertsPanel.vue    Alert list (critical blinks red)
+│           └── HistoryTable.vue   Search + paginated results
 │
 ├── deploy/                        Infrastructure
 │   ├── docker-compose.yml         4 services (mosquitto, backend, connectivity, dashboard)
@@ -300,13 +353,17 @@ xa202606-smart-factory/
 - [x] Mock generator publishes to MQTT for all 5 subsystems
 - [x] MQTT adapter subscribes `factory/+/sensors/#` and parses payloads
 - [x] Backend ingests, stores (SQLite), and queries sensor data
+- [x] Alert rules engine evaluates inline, 5 rules with 30s dedup
+- [x] `/latest` aggregates per-device per-type newest values
+- [x] `/history` supports time-range query with pagination
+- [x] `/alerts` supports filtering by device_id and level
 - [x] Control API records commands as pending
-- [x] Dashboard connects to backend and displays JSON
+- [x] ECharts dashboard with 7 components, 2s auto-refresh
+- [x] Semantic mapping to SOSA Observation triples (pytest-verified)
+- [x] Turtle ontology with custom properties (belongsToSubsystem, hasUnit, transportedVia)
 - [x] Docker Compose one-command startup
-- [x] 48 automated tests passing
-- [x] Turtle ontology parseable by RDFlib
+- [x] 78 automated tests passing (69 Python + 9 dashboard)
 - [ ] Real hardware integration (future)
 - [ ] Full Modbus / OPC UA / REST adapters (future)
-- [ ] Frontend ECharts visualisation (future)
 - [ ] Semantic runtime with AAS + SPARQL (future)
 - [ ] Real device control actuation (future)

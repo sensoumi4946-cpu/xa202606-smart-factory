@@ -95,3 +95,14 @@ sf:AGVObstacleSubsystem  a  sf:Subsystem ;
 
 sf:CountingSubsystem  a  sf:Subsystem ;
     rdfs:label  "Goods Sensing & Counting Subsystem"@en .
+
+# ── Custom properties for mapping layer ──
+
+sf:belongsToSubsystem  a  rdf:Property ;
+    rdfs:label  "belongs to subsystem"@en .
+
+sf:hasUnit  a  rdf:Property ;
+    rdfs:label  "has unit"@en .
+
+sf:transportedVia  a  rdf:Property ;
+    rdfs:label  "transported via"@en .

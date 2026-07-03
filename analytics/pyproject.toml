@@ -5,6 +5,7 @@ description = "Analytics and mock data tools for XA-202606 Smart Factory platfor
 requires-python = ">=3.11"
 dependencies = [
     "paho-mqtt>=2.0",
+    "pymodbus>=3.6,<3.13",
     "smart-factory-contracts",
 ]
 

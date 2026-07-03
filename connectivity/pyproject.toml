@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "paho-mqtt>=2.0",
     "httpx>=0.28",
+    "pymodbus>=3.6,<3.13",
     "smart-factory-contracts",
     "pydantic>=2.0",
 ]

@@ -1,14 +1,36 @@
-# MQTT adapter entry point.
-# Run as: python -m connectivity.runner
-# This process subscribes to factory/+/sensors/#, normalises incoming
-# payloads into UnifiedMessage, and forwards them to the backend.
 import asyncio
+import argparse
+from typing import Optional
 
-from connectivity.adapters.mqtt_adapter import MQTTAdapter
+from connectivity.adapters.base import BaseAdapter
 
 
-async def main():
-    adapter = MQTTAdapter()
+def build_adapter(name: str) -> BaseAdapter:
+    if name == "mqtt":
+        from connectivity.adapters.mqtt_adapter import MQTTAdapter
+
+        return MQTTAdapter()
+    if name == "rest":
+        from connectivity.adapters.rest_adapter import RESTAdapter
+
+        return RESTAdapter()
+    raise ValueError(f"unsupported adapter: {name}")
+
+
+def parse_args(argv: Optional[list[str]] = None):
+    parser = argparse.ArgumentParser(description="Run a connectivity adapter")
+    parser.add_argument(
+        "--adapter",
+        choices=["mqtt", "rest"],
+        default="mqtt",
+        help="Adapter to run",
+    )
+    return parser.parse_args(argv)
+
+
+async def main(argv: Optional[list[str]] = None):
+    args = parse_args(argv)
+    adapter = build_adapter(args.adapter)
     try:
         await adapter.start()
     except KeyboardInterrupt:

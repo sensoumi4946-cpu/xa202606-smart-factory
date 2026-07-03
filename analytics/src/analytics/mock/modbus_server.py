@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import importlib
 import os
 import random
@@ -13,8 +14,24 @@ def next_registers() -> list[int]:
 
 async def update_loop(context, interval: float = MODBUS_UPDATE_INTERVAL) -> None:
     while True:
-        context[0].setValues(3, 0, next_registers())
+        update_once(context)
         await asyncio.sleep(interval)
+
+
+def update_once(context) -> None:
+    set_registers(context, next_registers())
+
+
+def set_registers(context, registers: list[int]) -> None:
+    devices = getattr(context, "devices", None)
+    if devices is not None:
+        try:
+            device = devices[0]
+        except (KeyError, TypeError, IndexError):
+            device = devices
+    else:
+        device = context[0]
+    device.setValues(3, 0, registers)
 
 
 def create_context():
@@ -30,12 +47,22 @@ def create_context():
         return datastore.ModbusServerContext(slaves=store, single=True)
 
 
-async def run() -> None:
-    from pymodbus.server import StartAsyncTcpServer
+async def start_server(context) -> None:
+    server_module = importlib.import_module("pymodbus.server")
+    address = ("0.0.0.0", MODBUS_SIM_PORT)
+    if hasattr(server_module, "ModbusTcpServer"):
+        server = server_module.ModbusTcpServer(context, address=address)
+        result = server.serve_forever()
+        if inspect.isawaitable(result):
+            await result
+        return
+    await server_module.StartAsyncTcpServer(context=context, address=address)
 
+
+async def run() -> None:
     context = create_context()
     asyncio.create_task(update_loop(context))
-    await StartAsyncTcpServer(context=context, address=("0.0.0.0", MODBUS_SIM_PORT))
+    await start_server(context)
 
 
 def main() -> None:

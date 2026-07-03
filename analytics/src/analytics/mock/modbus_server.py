@@ -23,15 +23,19 @@ def update_once(context) -> None:
 
 
 def set_registers(context, registers: list[int]) -> None:
-    devices = getattr(context, "devices", None)
-    if devices is not None:
-        try:
-            device = devices[0]
-        except (KeyError, TypeError, IndexError):
-            device = devices
-    else:
-        device = context[0]
+    device = get_device(context)
     device.setValues(3, 0, registers)
+
+
+def get_device(context):
+    try:
+        devices = context.devices
+        try:
+            return devices[0]
+        except (KeyError, TypeError, IndexError):
+            return devices
+    except AttributeError:
+        return context[0]
 
 
 def create_context():

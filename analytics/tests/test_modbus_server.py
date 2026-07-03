@@ -4,6 +4,7 @@ from types import ModuleType
 
 from analytics.mock.modbus_server import (
     create_context,
+    get_device,
     next_registers,
     set_registers,
     start_server,
@@ -84,6 +85,20 @@ def test_set_registers_uses_pymodbus_4_devices():
     class FakeContext:
         devices = {0: device}
 
+    set_registers(FakeContext(), [3, 12, 0])
+    assert device.calls == [(3, 0, [3, 12, 0])]
+
+
+def test_set_registers_prefers_devices_when_indexing_fails():
+    device = FakeDevice()
+
+    class FakeContext:
+        devices = {0: device}
+
+        def __getitem__(self, key):
+            raise TypeError("context index disabled")
+
+    assert get_device(FakeContext()) is device
     set_registers(FakeContext(), [3, 12, 0])
     assert device.calls == [(3, 0, [3, 12, 0])]
 

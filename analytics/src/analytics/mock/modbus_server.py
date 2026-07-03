@@ -1,4 +1,5 @@
 import asyncio
+import importlib
 import os
 import random
 
@@ -16,16 +17,23 @@ async def update_loop(context, interval: float = MODBUS_UPDATE_INTERVAL) -> None
         await asyncio.sleep(interval)
 
 
-async def run() -> None:
-    from pymodbus.datastore import (
-        ModbusSequentialDataBlock,
-        ModbusServerContext,
-        ModbusSlaveContext,
+def create_context():
+    datastore = importlib.import_module("pymodbus.datastore")
+    block = datastore.ModbusSequentialDataBlock(0, [0] * 10)
+    device_cls = getattr(datastore, "ModbusDeviceContext", None) or getattr(
+        datastore, "ModbusSlaveContext"
     )
+    store = device_cls(hr=block)
+    try:
+        return datastore.ModbusServerContext(devices=store, single=True)
+    except TypeError:
+        return datastore.ModbusServerContext(slaves=store, single=True)
+
+
+async def run() -> None:
     from pymodbus.server import StartAsyncTcpServer
 
-    store = ModbusSlaveContext(hr=ModbusSequentialDataBlock(0, [0] * 10))
-    context = ModbusServerContext(slaves=store, single=True)
+    context = create_context()
     asyncio.create_task(update_loop(context))
     await StartAsyncTcpServer(context=context, address=("0.0.0.0", MODBUS_SIM_PORT))
 

@@ -135,6 +135,41 @@ factory/{subsystem}/control/{device_id}/{action}
 
 ---
 
+## REST Adapter API
+
+The REST adapter runs an independent HTTP server on `REST_ADAPTER_PORT` (default `8100`). It accepts vendor-style JSON payloads and normalises them to `UnifiedMessage` before forwarding to the backend.
+
+```
+POST /adapter/rest/ingest
+Content-Type: application/json
+```
+
+**Lighting payload** (maps to `Subsystem.LIGHTING`):
+
+```json
+{"device":"sensor_pir_01","metrics":{"occupancy":"active","light":"on"}}
+```
+Enums: `occupancy` → `active`/`inactive`, `light` → `on`/`off`.
+
+**Counting payload** (maps to `Subsystem.COUNTING`):
+
+```json
+{"d":"sensor_ir_01","v":42}
+```
+
+**Response codes**:
+
+| Code | Condition |
+|---|---|
+| `202 Accepted` | Payload parsed, forwarded to backend successfully |
+| `400 Bad Request` | Unknown payload format, ambiguous payload, or invalid values |
+| `502 Bad Gateway` | Payload valid but backend forward failed |
+
+**REST simulator** (`analytics/src/analytics/mock/rest_pusher.py`):
+Periodically `POST`s lighting + counting payloads to the REST adapter. Configurable via `REST_ADAPTER_URL` and `REST_PUSH_INTERVAL`.
+
+---
+
 ## Backend API Reference
 
 | Method | Path | Purpose | Request Body | Response |
@@ -294,22 +329,23 @@ xa202606-smart-factory/
 │   ├── pyproject.toml
 │   ├── Dockerfile
 │   ├── src/connectivity/
-│   │   ├── runner.py              MQTT adapter entry point
-│   │   ├── models.py              Config
+│   │   ├── runner.py              Adapter entry point (--adapter mqtt|rest)
+│   │   ├── models.py              Config (MQTT host, backend URL, REST port)
 │   │   ├── router.py              HTTP forwarder with retry
 │   │   └── adapters/
 │   │       ├── base.py            Abstract adapter ABC
 │   │       ├── mqtt_adapter.py    Full MQTT implementation
+│   │       ├── rest_adapter.py    Full REST implementation
 │   │       ├── modbus_adapter.py  Skeleton
-│   │       ├── opcua_adapter.py   Skeleton
-│   │       └── rest_adapter.py    Skeleton
-│   └── tests/                     11 tests
+│   │       └── opcua_adapter.py   Skeleton
+│   └── tests/                     17 tests (mqtt 9 + router 2 + rest 6)
 │
 ├── analytics/                     Mock data & future analysis
 │   ├── pyproject.toml
 │   ├── src/analytics/mock/
-│   │   └── generator.py           CLI mock data generator
-│   └── tests/test_generator.py    8 tests
+│   │   ├── generator.py           CLI mock data generator (--subsystem filter)
+│   │   └── rest_pusher.py         REST simulator, pushes lighting + counting payloads
+│   └── tests/                     10 tests (generator 8 + rest_pusher 2)
 │
 ├── semantic-layer/                Shared vocabulary + RDF mapping
 │   ├── pyproject.toml
@@ -362,8 +398,9 @@ xa202606-smart-factory/
 - [x] Semantic mapping to SOSA Observation triples (pytest-verified)
 - [x] Turtle ontology with custom properties (belongsToSubsystem, hasUnit, transportedVia)
 - [x] Docker Compose one-command startup
-- [x] 78 automated tests passing (69 Python + 9 dashboard)
+- [x] 89 automated tests passing (69 Python + 9 dashboard + 11 connectivity/analytics)
+- [x] REST adapter: FastAPI server on port 8100, parsing lighting + counting vendor payloads
 - [ ] Real hardware integration (future)
-- [ ] Full Modbus / OPC UA / REST adapters (future)
+- [ ] Modbus / OPC UA adapters (future)
 - [ ] Semantic runtime with AAS + SPARQL (future)
 - [ ] Real device control actuation (future)

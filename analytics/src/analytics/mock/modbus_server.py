@@ -24,7 +24,31 @@ def update_once(context) -> None:
 
 def set_registers(context, registers: list[int]) -> None:
     device = get_device(context)
-    device.setValues(3, 0, registers)
+    write_registers(device, registers)
+
+
+def write_registers(device, registers: list[int]) -> None:
+    set_values = getattr(device, "setValues", None)
+    if set_values:
+        set_values(3, 0, registers)
+        return
+    block = get_holding_block(device)
+    block.setValues(1, registers)
+
+
+def get_holding_block(device):
+    for attr in ("hr", "_hr"):
+        block = getattr(device, attr, None)
+        if block is not None:
+            return block
+    store = getattr(device, "store", None) or getattr(device, "_store", None)
+    if store is not None:
+        for key in ("h", "hr", 3):
+            try:
+                return store[key]
+            except (KeyError, TypeError):
+                continue
+    raise AttributeError("holding register data block not found")
 
 
 def get_device(context):

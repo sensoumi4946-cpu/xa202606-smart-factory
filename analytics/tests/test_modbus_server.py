@@ -5,9 +5,11 @@ from types import ModuleType
 from analytics.mock.modbus_server import (
     create_context,
     get_device,
+    get_holding_block,
     next_registers,
     set_registers,
     start_server,
+    write_registers,
 )
 
 
@@ -21,6 +23,10 @@ class FakeBlock:
     def __init__(self, address, values):
         self.address = address
         self.values = values
+        self.calls = []
+
+    def setValues(self, address, values):
+        self.calls.append((address, values))
 
 
 class FakeDevice:
@@ -87,6 +93,28 @@ def test_set_registers_uses_pymodbus_4_devices():
 
     set_registers(FakeContext(), [3, 12, 0])
     assert device.calls == [(3, 0, [3, 12, 0])]
+
+
+def test_set_registers_uses_pymodbus_4_data_block():
+    block = FakeBlock(1, [0] * 10)
+
+    class FakeDevice4:
+        store = {"h": block}
+
+    class FakeContext:
+        _devices = {0: FakeDevice4()}
+
+    set_registers(FakeContext(), [3, 12, 0])
+    assert block.calls == [(1, [3, 12, 0])]
+
+
+def test_write_registers_uses_hr_data_block():
+    block = FakeBlock(1, [0] * 10)
+
+    device = type("FakeDevice4", (), {"hr": block})()
+    assert get_holding_block(device) is block
+    write_registers(device, [3, 12, 0])
+    assert block.calls == [(1, [3, 12, 0])]
 
 
 def test_set_registers_prefers_devices_when_indexing_fails():

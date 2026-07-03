@@ -330,7 +330,7 @@ xa202606-smart-factory/
 │   ├── src/analytics/mock/
 │   │   ├── generator.py           CLI mock data generator (--subsystem filter)
 │   │   └── modbus_server.py       Modbus TCP simulator, updates holding registers
-│   └── tests/                     11 tests (generator 8 + modbus_server 3)
+│   └── tests/                     19 tests (generator 8 + modbus_server 11)
 │
 ├── semantic-layer/                Shared vocabulary + RDF mapping
 │   ├── pyproject.toml
@@ -383,7 +383,7 @@ xa202606-smart-factory/
 - [x] Semantic mapping to SOSA Observation triples (pytest-verified)
 - [x] Turtle ontology with custom properties (belongsToSubsystem, hasUnit, transportedVia)
 - [x] Docker Compose one-command startup
-- [x] 86 automated tests passing (77 Python + 9 dashboard)
+- [x] 94 automated tests passing (85 Python + 9 dashboard)
 - [x] Modbus TCP adapter: polling registers, parse to UnifiedMessage, forward to backend
 - [ ] Real hardware integration (future)
 - [ ] REST / OPC UA adapters (future)

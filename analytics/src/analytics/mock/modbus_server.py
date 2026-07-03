@@ -29,13 +29,17 @@ def set_registers(context, registers: list[int]) -> None:
 
 def get_device(context):
     try:
-        devices = context.devices
-        try:
-            return devices[0]
-        except (KeyError, TypeError, IndexError):
-            return devices
+        devices = context._devices
     except AttributeError:
-        return context[0]
+        try:
+            devices = context.devices
+        except AttributeError:
+            return context[0]
+
+    try:
+        return devices[0]
+    except (KeyError, TypeError, IndexError):
+        return devices
 
 
 def create_context():

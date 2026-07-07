@@ -135,23 +135,23 @@ factory/{subsystem}/control/{device_id}/{action}
 
 ---
 
-## OPC UA Adapter
+## Modbus TCP Adapter
 
-The OPC UA adapter connects to an OPC UA server at `OPCUA_ENDPOINT` (default `opc.tcp://localhost:4840/`). It subscribes to the node at `OPCUA_DISTANCE_NODE_ID` (default `ns=2;s=distance`), and on each value change produces a `UnifiedMessage` with the distance measurement.
+The Modbus adapter connects to a Modbus TCP server via `MODBUS_HOST` (default `localhost`) and `MODBUS_PORT` (default `1502`). It polls holding registers at `MODBUS_POLL_INTERVAL` (default `2s`) and maps raw register values to `UnifiedMessage`.
 
-| Config | Default | Purpose |
+| Register (zero-based) | Measurement.type | Unit |
 |---|---|---|
-| `OPCUA_ENDPOINT` | `opc.tcp://localhost:4840/` | OPC UA server address |
-| `OPCUA_DEVICE_ID` | `sensor_hcsr04_01` | Device identifier (nodes carry no device ID) |
-| `OPCUA_DISTANCE_NODE_ID` | `ns=2;s=distance` | Node ID to subscribe |
+| `holding[0]` | `smoke` | `ppm` |
+| `holding[1]` | `co` | `ppm` |
+| `holding[2]` | `combustible_gas` | `ppm` |
 
-Subscription callbacks push raw values into an internal `asyncio.Queue`; the main loop drains the queue and forwards each `UnifiedMessage` to the backend.
+One poll cycle produces a single `UnifiedMessage` with all three measurements. `MODBUS_DEVICE_ID` (default `sensor_mq2_01`) is set via environment variable since registers carry no device identifier.
 
 ```
-python -m connectivity.runner --adapter opcua
+python -m connectivity.runner --adapter modbus
 ```
 
-OPC UA simulator (`analytics/src/analytics/mock/opcua_server.py`): serves an OPC UA server with a `distance` variable node on `OPCUA_SIM_PORT` (default `4840`), auto-updating the value periodically.
+Modbus simulator (`analytics/src/analytics/mock/modbus_server.py`): serves holding registers on `MODBUS_PORT`, auto-updating values periodically.
 
 ---
 
@@ -311,26 +311,26 @@ xa202606-smart-factory/
 │   └── tests/                     21 tests
 │
 ├── connectivity/                  Protocol adapters
-│   ├── pyproject.toml             + asyncua
+│   ├── pyproject.toml             + pymodbus
 │   ├── Dockerfile
 │   ├── src/connectivity/
-│   │   ├── runner.py              Adapter entry point (--adapter mqtt|opcua)
-│   │   ├── models.py              Config (MQTT, backend URL, OPC UA params)
+│   │   ├── runner.py              Adapter entry point (--adapter mqtt|modbus)
+│   │   ├── models.py              Config (MQTT, backend URL, Modbus params)
 │   │   ├── router.py              HTTP forwarder with retry
 │   │   └── adapters/
 │   │       ├── base.py            Abstract adapter ABC
 │   │       ├── mqtt_adapter.py    Full MQTT implementation
-│   │       ├── opcua_adapter.py   Full OPC UA implementation (subscription)
-│   │       ├── modbus_adapter.py  Skeleton
+│   │       ├── modbus_adapter.py  Full Modbus implementation (polling)
+│   │       ├── opcua_adapter.py   Skeleton
 │   │       └── rest_adapter.py    Skeleton
-│   └── tests/                     15 tests (mqtt 9 + router 2 + opcua 4)
+│   └── tests/                     15 tests (mqtt 9 + router 2 + modbus 4)
 │
 ├── analytics/                     Mock data & future analysis
-│   ├── pyproject.toml             + asyncua
+│   ├── pyproject.toml             + pymodbus
 │   ├── src/analytics/mock/
 │   │   ├── generator.py           CLI mock data generator (--subsystem filter)
-│   │   └── opcua_server.py        OPC UA simulator, updates distance node value
-│   └── tests/                     9 tests (generator 8 + opcua_server 1)
+│   │   └── modbus_server.py       Modbus TCP simulator, updates holding registers
+│   └── tests/                     19 tests (generator 8 + modbus_server 11)
 │
 ├── semantic-layer/                Shared vocabulary + RDF mapping
 │   ├── pyproject.toml
@@ -383,9 +383,9 @@ xa202606-smart-factory/
 - [x] Semantic mapping to SOSA Observation triples (pytest-verified)
 - [x] Turtle ontology with custom properties (belongsToSubsystem, hasUnit, transportedVia)
 - [x] Docker Compose one-command startup
-- [x] 86 automated tests passing (77 Python + 9 dashboard)
-- [x] OPC UA adapter: subscription to distance node, forward to backend
+- [x] 94 automated tests passing (85 Python + 9 dashboard)
+- [x] Modbus TCP adapter: polling registers, parse to UnifiedMessage, forward to backend
 - [ ] Real hardware integration (future)
-- [ ] REST / Modbus adapters (future)
+- [ ] REST / OPC UA adapters (future)
 - [ ] Semantic runtime with AAS + SPARQL (future)
 - [ ] Real device control actuation (future)

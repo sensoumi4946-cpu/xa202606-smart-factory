@@ -2,18 +2,23 @@
 
 ## Overview
 
-This monorepo implements the XA-202606 Smart Factory Safety Monitoring & Control Platform. It features a **live ECharts dashboard** with 5 subsystem panels, a **rule-based alert engine**, and **semantic mapping to SOSA/SSN** for cross-device interoperability — all running on a Docker Compose stack. Mock sensor data flows through MQTT, a protocol adapter normalises it into a unified format, the backend persists to SQLite with inline alert evaluation, and a Vue 3 dashboard renders real-time charts. No real hardware yet — just a proven, test-covered platform ready for integration.
+This monorepo implements the XA-202606 Smart Factory Safety Monitoring & Control Platform. It features a **live ECharts dashboard** with 5 subsystem panels, a **rule-based alert engine**, **multi-protocol adapters** (MQTT / REST / Modbus / OPC UA) for heterogeneous device normalisation, and **semantic mapping to SOSA/SSN** for cross-device interoperability — all running on a 10-service Docker Compose stack.
 
 ### Architecture
 
 ```
-Mock Generator ──MQTT──▶ Mosquitto ──MQTT──▶ MQTT Adapter ──HTTP──▶ Backend API
-                                                                       │
-                                                                       ├── Ingest ──▶ Rules Eval ──▶ sensor_data + alerts (SQLite)
-                                                                       ├── Query  ──▶ /latest, /history, /alerts
-                                                                       └── Dashboard (Vue 3 + ECharts, 7 components)
-
-Semantic Mapping ──▶ RDFlib Graph ──▶ local SPARQL tests (not wired to runtime)
+                      ┌──▶ MQTT Adapter ──────┐
+MQTT Sim ──▶ Mosquitto┤                        │
+                      ┌──▶ REST Adapter ───────┤
+REST Pusher ──────────┤                        ├──▶ Backend API ──▶ SQLite
+Modbus Sim ──────────▶ Modbus Adapter ────────┤         │
+OPC UA Sim ──────────▶ OPC UA Adapter ────────┘   ┌────┴─────┐
+                                                   │ Dashboard│
+                                          ┌─────── ▶ alerts   │
+                                          │         │ latest   │
+                                          │         │ history  │
+                                          │         └──────────┘
+                                   Semantic RDF (test only)
 ```
 
 | Layer | Directory | Runtime | Port |
@@ -57,7 +62,7 @@ cd dashboard && npx vitest run && cd ..
 docker compose -f deploy/docker-compose.yml up -d
 ```
 
-This starts Mosquitto (1883), Backend (8000), Connectivity, and Dashboard (5173).
+This starts 10 services: Mosquitto (1883), Backend (8000), Dashboard (5173), 4 protocol adapters (MQTT/REST/Modbus/OPC UA), and 3 simulators (REST/Modbus/OPC UA). All simulators auto-push data; no manual mock needed.
 
 ### 4. Push mock data
 
@@ -152,6 +157,23 @@ python -m connectivity.runner --adapter modbus
 ```
 
 Modbus simulator (`analytics/src/analytics/mock/modbus_server.py`): serves holding registers on `MODBUS_PORT`, auto-updating values periodically.
+
+---
+
+## Multi-Protocol Adapters
+
+All 5 subsystems enter through different protocols. Backend only sees `UnifiedMessage`, never protocol details. The Docker Compose stack runs all 4 adapters simultaneously:
+
+| Subsystem | Protocol | Adapter Port | Simulator |
+|---|---|---|---|
+| Temp/Humidity | MQTT | — | `analytics.mock.generator --subsystem temp_humidity` |
+| Lighting | REST | 8100 | `analytics.mock.rest_pusher` |
+| Gas | Modbus TCP | — | `analytics.mock.modbus_server` (port 1502) |
+| AGV | OPC UA | — | `analytics.mock.opcua_server` (port 4840) |
+| Counting | REST | 8100 | `analytics.mock.rest_pusher` |
+
+All adapters output `UnifiedMessage` with `schema_version="v1"` and their respective `Protocol` enum.
+For protocol-specific payload formats and response codes, see each adapter's module docstring.
 
 ---
 
@@ -311,26 +333,28 @@ xa202606-smart-factory/
 │   └── tests/                     21 tests
 │
 ├── connectivity/                  Protocol adapters
-│   ├── pyproject.toml             + pymodbus
+│   ├── pyproject.toml             + pymodbus, asyncua, fastapi, uvicorn
 │   ├── Dockerfile
 │   ├── src/connectivity/
-│   │   ├── runner.py              Adapter entry point (--adapter mqtt|modbus)
-│   │   ├── models.py              Config (MQTT, backend URL, Modbus params)
+│   │   ├── runner.py              Adapter entry point (--adapter mqtt|rest|modbus|opcua|all)
+│   │   ├── models.py              Config (all 4 protocol params)
 │   │   ├── router.py              HTTP forwarder with retry
 │   │   └── adapters/
 │   │       ├── base.py            Abstract adapter ABC
 │   │       ├── mqtt_adapter.py    Full MQTT implementation
+│   │       ├── rest_adapter.py    Full REST implementation (FastAPI server, port 8100)
 │   │       ├── modbus_adapter.py  Full Modbus implementation (polling)
-│   │       ├── opcua_adapter.py   Skeleton
-│   │       └── rest_adapter.py    Skeleton
-│   └── tests/                     15 tests (mqtt 9 + router 2 + modbus 4)
+│   │       └── opcua_adapter.py   Full OPC UA implementation (subscription)
+│   └── tests/                     27 tests (mqtt 9 + router 6 + rest 6 + modbus 4 + opcua 2)
 │
 ├── analytics/                     Mock data & future analysis
-│   ├── pyproject.toml             + pymodbus
+│   ├── pyproject.toml             + pymodbus, asyncua, httpx
 │   ├── src/analytics/mock/
-│   │   ├── generator.py           CLI mock data generator (--subsystem filter)
-│   │   └── modbus_server.py       Modbus TCP simulator, updates holding registers
-│   └── tests/                     19 tests (generator 8 + modbus_server 11)
+│   │   ├── generator.py           CLI MQTT mock (--subsystem filter)
+│   │   ├── rest_pusher.py         REST pusher, POSTs lighting + counting payloads
+│   │   ├── modbus_server.py       Modbus TCP simulator, periodic register updates
+│   │   └── opcua_server.py        OPC UA simulator, periodic node value updates
+│   └── tests/                     23 tests (generator 8 + rest_pusher 2 + modbus_server 11 + opcua_server 2)
 │
 ├── semantic-layer/                Shared vocabulary + RDF mapping
 │   ├── pyproject.toml
@@ -358,7 +382,7 @@ xa202606-smart-factory/
 │           └── HistoryTable.vue   Search + paginated results
 │
 ├── deploy/                        Infrastructure
-│   ├── docker-compose.yml         4 services (mosquitto, backend, connectivity, dashboard)
+│   ├── docker-compose.yml         10 services: mosquitto + backend + dashboard + 4 adapters + 3 simulators
 │   ├── mqtt/mosquitto.conf        Anonymous access, stdout logging
 │   └── .env.example
 │
@@ -378,14 +402,15 @@ xa202606-smart-factory/
 - [x] `/latest` aggregates per-device per-type newest values
 - [x] `/history` supports time-range query with pagination
 - [x] `/alerts` supports filtering by device_id and level
-- [x] Control API records commands as pending
-- [x] ECharts dashboard with 7 components, 2s auto-refresh
-- [x] Semantic mapping to SOSA Observation triples (pytest-verified)
-- [x] Turtle ontology with custom properties (belongsToSubsystem, hasUnit, transportedVia)
-- [x] Docker Compose one-command startup
-- [x] 94 automated tests passing (85 Python + 9 dashboard)
-- [x] Modbus TCP adapter: polling registers, parse to UnifiedMessage, forward to backend
+- [x] REST adapter: FastAPI server (port 8100), lighting + counting payload parsing, 202/400/502 semantics
+- [x] Modbus TCP adapter: polling registers, parse_registers() pure function, pymodbus 3.6–3.12
+- [x] OPC UA adapter: subscription to distance node, async queue → forward pattern
+- [x] REST pusher: periodic lighting + counting POSTs, retry on connection refused
+- [x] Modbus simulator: periodic register updates, 3.x/4.x compatibility
+- [x] OPC UA simulator: periodic node value updates
+- [x] Runner: --adapter mqtt|rest|modbus|opcua|all
+- [x] Docker Compose: 10 services, 4 protocols running simultaneously
+- [x] Port registry: 1502 (Modbus), 4840 (OPC UA), 8100 (REST)
 - [ ] Real hardware integration (future)
-- [ ] REST / OPC UA adapters (future)
 - [ ] Semantic runtime with AAS + SPARQL (future)
 - [ ] Real device control actuation (future)

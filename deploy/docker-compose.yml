@@ -46,6 +46,21 @@ services:
       - backend
     restart: on-failure
 
+  connectivity-modbus:
+    build:
+      context: ..
+      dockerfile: connectivity/Dockerfile
+    command: ["python", "-m", "connectivity.runner", "--adapter", "modbus"]
+    environment:
+      - MODBUS_HOST=modbus-sim
+      - MODBUS_PORT=1502
+      - MODBUS_DEVICE_ID=sensor_mq2_01
+      - MODBUS_POLL_INTERVAL=2
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
+    restart: on-failure
+
   dashboard:
     build:
       context: ..

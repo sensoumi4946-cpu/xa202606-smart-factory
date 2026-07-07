@@ -26,3 +26,8 @@ def test_runner_opcua_adapter():
 def test_runner_invalid_adapter():
     with pytest.raises(SystemExit):
         parse_args(["--adapter", "invalid"])
+
+
+def test_runner_all_adapter():
+    args = parse_args(["--adapter", "all"])
+    assert args.adapter == "all"

@@ -7,6 +7,7 @@ import CountBar from './components/CountBar.vue'
 import LightingPanel from './components/LightingPanel.vue'
 import AlertsPanel from './components/AlertsPanel.vue'
 import HistoryTable from './components/HistoryTable.vue'
+import SemanticPanel from './components/SemanticPanel.vue'
 
 const title = 'XA-202606 智慧工厂安全监控平台'
 const error = ref('')
@@ -29,6 +30,10 @@ const error = ref('')
 
     <div class="alerts-section">
       <AlertsPanel />
+    </div>
+
+    <div class="semantic-section">
+      <SemanticPanel />
     </div>
   </div>
 </template>
@@ -59,6 +64,9 @@ body {
 }
 .alerts-section {
   max-width: 600px;
+}
+.semantic-section {
+  margin-top: 12px;
 }
 .error {
   background: #7f1d1d;

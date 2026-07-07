@@ -32,6 +32,20 @@ services:
       - backend
     restart: on-failure
 
+  connectivity-rest:
+    build:
+      context: ..
+      dockerfile: connectivity/Dockerfile
+    ports:
+      - "${REST_ADAPTER_PORT:-8100}:8100"
+    command: ["python", "-m", "connectivity.runner", "--adapter", "rest"]
+    environment:
+      - REST_ADAPTER_PORT=8100
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
+    restart: on-failure
+
   dashboard:
     build:
       context: ..

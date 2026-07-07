@@ -6,6 +6,17 @@ services:
     volumes:
       - ./mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
 
+  fuseki:
+    image: stain/jena-fuseki:5.0.0
+    ports:
+      - "${FUSEKI_PORT:-3030}:3030"
+    environment:
+      - FUSEKI_DATASET_1=factory
+    volumes:
+      - fuseki_data:/fuseki
+      - ./fuseki/shiro.ini:/fuseki/shiro.ini
+    restart: on-failure
+
   backend:
     build:
       context: ..
@@ -14,10 +25,13 @@ services:
       - "${BACKEND_PORT:-8000}:8000"
     environment:
       - DATABASE_PATH=/data/smart_factory.db
+      - FUSEKI_ENDPOINT=http://fuseki:3030/factory/data
+      - FUSEKI_QUERY_URL=http://fuseki:3030/factory/sparql
     volumes:
       - backend_data:/data
     depends_on:
       - mosquitto
+      - fuseki
 
   connectivity-mqtt:
     build:
@@ -124,3 +138,4 @@ services:
 
 volumes:
   backend_data:
+  fuseki_data:

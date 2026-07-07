@@ -44,6 +44,19 @@ export interface Paginated<T> {
   total: number
 }
 
+export interface SemanticSensor {
+  sensor: string
+  subsystem: string
+  observes: string[]
+  protocol: string
+}
+
+export interface SemanticView {
+  view: string
+  description: string
+  results: SemanticSensor[]
+}
+
 export async function fetchDevices(): Promise<string[]> {
   const resp = await fetch(`${BASE_URL}api/v1/devices`)
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
@@ -110,6 +123,15 @@ export async function fetchAlerts(params: {
   if (params.offset !== undefined) sp.set('offset', String(params.offset))
   const qs = sp.toString()
   const resp = await fetch(`${BASE_URL}api/v1/alerts${qs ? '?' + qs : ''}`)
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  return resp.json()
+}
+
+export async function fetchSemanticView(
+  view = 'sensor-observations',
+): Promise<SemanticView> {
+  const params = new URLSearchParams({ view })
+  const resp = await fetch(`${BASE_URL}api/v1/semantic?${params}`)
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
   return resp.json()
 }

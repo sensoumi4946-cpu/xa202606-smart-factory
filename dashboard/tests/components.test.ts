@@ -17,6 +17,13 @@ vi.mock('../src/api', () => ({
   fetchDevices: vi.fn().mockResolvedValue([]),
   fetchDeviceData: vi.fn().mockResolvedValue([]),
   fetchAllData: vi.fn().mockResolvedValue([]),
+  fetchSemanticView: vi.fn().mockResolvedValue({
+    view: 'sensor-observations',
+    description: 'All sensors',
+    results: [
+      { sensor: 'sensor_dht22_01', subsystem: 'temp_humidity', observes: ['temperature'], protocol: 'mqtt' },
+    ],
+  }),
 }))
 
 beforeEach(() => {
@@ -35,6 +42,7 @@ import CountBar from '../src/components/CountBar.vue'
 import LightingPanel from '../src/components/LightingPanel.vue'
 import AlertsPanel from '../src/components/AlertsPanel.vue'
 import HistoryTable from '../src/components/HistoryTable.vue'
+import SemanticPanel from '../src/components/SemanticPanel.vue'
 
 describe('component smoke tests', () => {
   it('TempGauge renders title and chart container', () => {
@@ -76,5 +84,10 @@ describe('component smoke tests', () => {
     const wrapper = mount(HistoryTable, { global: { stubs: { } } })
     expect(wrapper.text()).toContain('历史查询')
     expect(wrapper.find('.controls').exists()).toBe(true)
+  })
+
+  it('SemanticPanel renders title', () => {
+    const wrapper = mount(SemanticPanel, { global: { stubs: { } } })
+    expect(wrapper.text()).toContain('语义关联')
   })
 })

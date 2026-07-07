@@ -87,6 +87,18 @@ services:
       - connectivity-rest
     restart: on-failure
 
+  modbus-sim:
+    build:
+      context: ..
+      dockerfile: analytics/Dockerfile
+    ports:
+      - "${MODBUS_SIM_PORT:-1502}:1502"
+    command: ["python", "-m", "analytics.mock.modbus_server"]
+    environment:
+      - MODBUS_SIM_PORT=1502
+      - MODBUS_UPDATE_INTERVAL=2
+    restart: on-failure
+
   dashboard:
     build:
       context: ..

@@ -75,6 +75,18 @@ services:
       - backend
     restart: on-failure
 
+  rest-pusher:
+    build:
+      context: ..
+      dockerfile: analytics/Dockerfile
+    command: ["python", "-m", "analytics.mock.rest_pusher"]
+    environment:
+      - REST_ADAPTER_URL=http://connectivity-rest:8100/adapter/rest/ingest
+      - REST_PUSH_INTERVAL=2
+    depends_on:
+      - connectivity-rest
+    restart: on-failure
+
   dashboard:
     build:
       context: ..

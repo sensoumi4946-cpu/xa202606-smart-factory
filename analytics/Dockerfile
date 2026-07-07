@@ -10,4 +10,4 @@ RUN pip install /app/shared/
 COPY analytics/ /app/analytics/
 RUN pip install /app/analytics/
 
-ENTRYPOINT ["python", "-m", "analytics.mock.generator"]
+CMD ["python", "-m", "analytics.mock.generator"]

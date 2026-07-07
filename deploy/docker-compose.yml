@@ -19,7 +19,7 @@ services:
     depends_on:
       - mosquitto
 
-  connectivity:
+  connectivity-mqtt:
     build:
       context: ..
       dockerfile: connectivity/Dockerfile
@@ -30,6 +30,85 @@ services:
     depends_on:
       - mosquitto
       - backend
+    restart: on-failure
+
+  connectivity-rest:
+    build:
+      context: ..
+      dockerfile: connectivity/Dockerfile
+    ports:
+      - "${REST_ADAPTER_PORT:-8100}:8100"
+    command: ["python", "-m", "connectivity.runner", "--adapter", "rest"]
+    environment:
+      - REST_ADAPTER_PORT=8100
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
+    restart: on-failure
+
+  connectivity-modbus:
+    build:
+      context: ..
+      dockerfile: connectivity/Dockerfile
+    command: ["python", "-m", "connectivity.runner", "--adapter", "modbus"]
+    environment:
+      - MODBUS_HOST=modbus-sim
+      - MODBUS_PORT=1502
+      - MODBUS_DEVICE_ID=sensor_mq2_01
+      - MODBUS_POLL_INTERVAL=2
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
+    restart: on-failure
+
+  connectivity-opcua:
+    build:
+      context: ..
+      dockerfile: connectivity/Dockerfile
+    command: ["python", "-m", "connectivity.runner", "--adapter", "opcua"]
+    environment:
+      - OPCUA_ENDPOINT=opc.tcp://opcua-sim:4840/
+      - OPCUA_DEVICE_ID=sensor_hcsr04_01
+      - OPCUA_DISTANCE_NODE_ID=ns=2;s=distance
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
+    restart: on-failure
+
+  rest-pusher:
+    build:
+      context: ..
+      dockerfile: analytics/Dockerfile
+    command: ["python", "-m", "analytics.mock.rest_pusher"]
+    environment:
+      - REST_ADAPTER_URL=http://connectivity-rest:8100/adapter/rest/ingest
+      - REST_PUSH_INTERVAL=2
+    depends_on:
+      - connectivity-rest
+    restart: on-failure
+
+  modbus-sim:
+    build:
+      context: ..
+      dockerfile: analytics/Dockerfile
+    ports:
+      - "${MODBUS_SIM_PORT:-1502}:1502"
+    command: ["python", "-m", "analytics.mock.modbus_server"]
+    environment:
+      - MODBUS_SIM_PORT=1502
+      - MODBUS_UPDATE_INTERVAL=2
+    restart: on-failure
+
+  opcua-sim:
+    build:
+      context: ..
+      dockerfile: analytics/Dockerfile
+    ports:
+      - "${OPCUA_SIM_PORT:-4840}:4840"
+    command: ["python", "-m", "analytics.mock.opcua_server"]
+    environment:
+      - OPCUA_SIM_PORT=4840
+      - OPCUA_UPDATE_INTERVAL=2
     restart: on-failure
 
   dashboard:

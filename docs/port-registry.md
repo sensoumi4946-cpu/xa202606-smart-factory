@@ -12,13 +12,13 @@ This file is the single registry for local development and Docker Compose ports.
 | 5173 | Dashboard dev server | `dashboard/` | HTTP | Active | Vite dev server |
 | 8000 | Backend API | `backend/` | HTTP | Active | FastAPI, `/health`, `/api/v1/*` |
 | 8100 | REST adapter | `connectivity/` | HTTP | Active | FastAPI server; rest-pusher POSTs vendor payloads here |
+| 3030 | Apache Jena Fuseki | `deploy/` | HTTP/SPARQL | Active | Knowledge graph; backend writes triples and runs SPARQL views |
 
 ## Reserved Future Ports
 
 | Port | Service | Directory | Protocol | Status | Notes |
 |---:|---|---|---|---|---|
 | 8086 | InfluxDB | `deploy/` | HTTP | Reserved | Candidate time-series database for future migration |
-| 3030 | Apache Jena Fuseki | `semantic-layer/` | HTTP/SPARQL | Reserved | Candidate knowledge graph endpoint |
 | 8081 | Eclipse BaSyx | `semantic-layer/` | HTTP | Reserved | Candidate AAS runtime endpoint |
 
 ## Rules

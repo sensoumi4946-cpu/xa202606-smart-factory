@@ -19,7 +19,7 @@ services:
     depends_on:
       - mosquitto
 
-  connectivity:
+  connectivity-mqtt:
     build:
       context: ..
       dockerfile: connectivity/Dockerfile

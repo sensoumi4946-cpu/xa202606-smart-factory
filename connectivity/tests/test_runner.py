@@ -8,9 +8,9 @@ def test_runner_default_adapter():
     assert args.adapter == "mqtt"
 
 
-def test_runner_rest_adapter():
-    args = parse_args(["--adapter", "rest"])
-    assert args.adapter == "rest"
+def test_runner_opcua_adapter():
+    args = parse_args(["--adapter", "opcua"])
+    assert args.adapter == "opcua"
 
 
 def test_runner_invalid_adapter():

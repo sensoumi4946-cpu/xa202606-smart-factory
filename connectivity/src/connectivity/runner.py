@@ -10,10 +10,10 @@ def build_adapter(name: str) -> BaseAdapter:
         from connectivity.adapters.mqtt_adapter import MQTTAdapter
 
         return MQTTAdapter()
-    if name == "rest":
-        from connectivity.adapters.rest_adapter import RESTAdapter
+    if name == "opcua":
+        from connectivity.adapters.opcua_adapter import OPCUAAdapter
 
-        return RESTAdapter()
+        return OPCUAAdapter()
     raise ValueError(f"unsupported adapter: {name}")
 
 
@@ -21,7 +21,7 @@ def parse_args(argv: Optional[list[str]] = None):
     parser = argparse.ArgumentParser(description="Run a connectivity adapter")
     parser.add_argument(
         "--adapter",
-        choices=["mqtt", "rest"],
+        choices=["mqtt", "opcua"],
         default="mqtt",
         help="Adapter to run",
     )

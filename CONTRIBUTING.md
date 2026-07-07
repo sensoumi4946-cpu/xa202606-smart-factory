@@ -135,38 +135,23 @@ factory/{subsystem}/control/{device_id}/{action}
 
 ---
 
-## REST Adapter API
+## OPC UA Adapter
 
-The REST adapter runs an independent HTTP server on `REST_ADAPTER_PORT` (default `8100`). It accepts vendor-style JSON payloads and normalises them to `UnifiedMessage` before forwarding to the backend.
+The OPC UA adapter connects to an OPC UA server at `OPCUA_ENDPOINT` (default `opc.tcp://localhost:4840/`). It subscribes to the node at `OPCUA_DISTANCE_NODE_ID` (default `ns=2;s=distance`), and on each value change produces a `UnifiedMessage` with the distance measurement.
+
+| Config | Default | Purpose |
+|---|---|---|
+| `OPCUA_ENDPOINT` | `opc.tcp://localhost:4840/` | OPC UA server address |
+| `OPCUA_DEVICE_ID` | `sensor_hcsr04_01` | Device identifier (nodes carry no device ID) |
+| `OPCUA_DISTANCE_NODE_ID` | `ns=2;s=distance` | Node ID to subscribe |
+
+Subscription callbacks push raw values into an internal `asyncio.Queue`; the main loop drains the queue and forwards each `UnifiedMessage` to the backend.
 
 ```
-POST /adapter/rest/ingest
-Content-Type: application/json
+python -m connectivity.runner --adapter opcua
 ```
 
-**Lighting payload** (maps to `Subsystem.LIGHTING`):
-
-```json
-{"device":"sensor_pir_01","metrics":{"occupancy":"active","light":"on"}}
-```
-Enums: `occupancy` → `active`/`inactive`, `light` → `on`/`off`.
-
-**Counting payload** (maps to `Subsystem.COUNTING`):
-
-```json
-{"d":"sensor_ir_01","v":42}
-```
-
-**Response codes**:
-
-| Code | Condition |
-|---|---|
-| `202 Accepted` | Payload parsed, forwarded to backend successfully |
-| `400 Bad Request` | Unknown payload format, ambiguous payload, or invalid values |
-| `502 Bad Gateway` | Payload valid but backend forward failed |
-
-**REST simulator** (`analytics/src/analytics/mock/rest_pusher.py`):
-Periodically `POST`s lighting + counting payloads to the REST adapter. Configurable via `REST_ADAPTER_URL` and `REST_PUSH_INTERVAL`.
+OPC UA simulator (`analytics/src/analytics/mock/opcua_server.py`): serves an OPC UA server with a `distance` variable node on `OPCUA_SIM_PORT` (default `4840`), auto-updating the value periodically.
 
 ---
 
@@ -326,26 +311,26 @@ xa202606-smart-factory/
 │   └── tests/                     21 tests
 │
 ├── connectivity/                  Protocol adapters
-│   ├── pyproject.toml
+│   ├── pyproject.toml             + asyncua
 │   ├── Dockerfile
 │   ├── src/connectivity/
-│   │   ├── runner.py              Adapter entry point (--adapter mqtt|rest)
-│   │   ├── models.py              Config (MQTT host, backend URL, REST port)
+│   │   ├── runner.py              Adapter entry point (--adapter mqtt|opcua)
+│   │   ├── models.py              Config (MQTT, backend URL, OPC UA params)
 │   │   ├── router.py              HTTP forwarder with retry
 │   │   └── adapters/
 │   │       ├── base.py            Abstract adapter ABC
 │   │       ├── mqtt_adapter.py    Full MQTT implementation
-│   │       ├── rest_adapter.py    Full REST implementation
+│   │       ├── opcua_adapter.py   Full OPC UA implementation (subscription)
 │   │       ├── modbus_adapter.py  Skeleton
-│   │       └── opcua_adapter.py   Skeleton
-│   └── tests/                     17 tests (mqtt 9 + router 2 + rest 6)
+│   │       └── rest_adapter.py    Skeleton
+│   └── tests/                     15 tests (mqtt 9 + router 2 + opcua 4)
 │
 ├── analytics/                     Mock data & future analysis
-│   ├── pyproject.toml
+│   ├── pyproject.toml             + asyncua
 │   ├── src/analytics/mock/
 │   │   ├── generator.py           CLI mock data generator (--subsystem filter)
-│   │   └── rest_pusher.py         REST simulator, pushes lighting + counting payloads
-│   └── tests/                     10 tests (generator 8 + rest_pusher 2)
+│   │   └── opcua_server.py        OPC UA simulator, updates distance node value
+│   └── tests/                     9 tests (generator 8 + opcua_server 1)
 │
 ├── semantic-layer/                Shared vocabulary + RDF mapping
 │   ├── pyproject.toml
@@ -398,9 +383,9 @@ xa202606-smart-factory/
 - [x] Semantic mapping to SOSA Observation triples (pytest-verified)
 - [x] Turtle ontology with custom properties (belongsToSubsystem, hasUnit, transportedVia)
 - [x] Docker Compose one-command startup
-- [x] 89 automated tests passing (69 Python + 9 dashboard + 11 connectivity/analytics)
-- [x] REST adapter: FastAPI server on port 8100, parsing lighting + counting vendor payloads
+- [x] 86 automated tests passing (77 Python + 9 dashboard)
+- [x] OPC UA adapter: subscription to distance node, forward to backend
 - [ ] Real hardware integration (future)
-- [ ] Modbus / OPC UA adapters (future)
+- [ ] REST / Modbus adapters (future)
 - [ ] Semantic runtime with AAS + SPARQL (future)
 - [ ] Real device control actuation (future)

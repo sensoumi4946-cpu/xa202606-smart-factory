@@ -21,6 +21,7 @@ from backend.api.history import router as history_router
 from backend.api.ingest import router as ingest_router
 from backend.api.latest import router as latest_router
 from backend.api.query import router as query_router
+from backend.api.semantic import router as semantic_router
 from backend.store import init_db
 
 
@@ -40,6 +41,7 @@ app.include_router(control_router)
 app.include_router(latest_router)
 app.include_router(history_router)
 app.include_router(alerts_router)
+app.include_router(semantic_router)
 
 
 @app.get("/health")

@@ -99,6 +99,18 @@ services:
       - MODBUS_UPDATE_INTERVAL=2
     restart: on-failure
 
+  opcua-sim:
+    build:
+      context: ..
+      dockerfile: analytics/Dockerfile
+    ports:
+      - "${OPCUA_SIM_PORT:-4840}:4840"
+    command: ["python", "-m", "analytics.mock.opcua_server"]
+    environment:
+      - OPCUA_SIM_PORT=4840
+      - OPCUA_UPDATE_INTERVAL=2
+    restart: on-failure
+
   dashboard:
     build:
       context: ..

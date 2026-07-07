@@ -2,7 +2,7 @@
 
 ## Overview
 
-This monorepo implements the XA-202606 Smart Factory Safety Monitoring & Control Platform. It features a **live ECharts dashboard** with 5 subsystem panels, a **rule-based alert engine**, **multi-protocol adapters** (MQTT / REST / Modbus / OPC UA) for heterogeneous device normalisation, and **semantic mapping to SOSA/SSN** for cross-device interoperability — all running on a 10-service Docker Compose stack.
+This monorepo implements the XA-202606 Smart Factory Safety Monitoring & Control Platform. It features a **live ECharts dashboard** with 5 subsystem panels + semantic catalogue, a **rule-based alert engine**, **multi-protocol adapters** (MQTT / REST / Modbus / OPC UA) for heterogeneous device normalisation, and a **Fuseki-powered semantic runtime** with SOSA/SSN for cross-device SPARQL queries — all running on a 12-service Docker Compose stack.
 
 ### Architecture
 
@@ -16,9 +16,12 @@ OPC UA Sim ──────────▶ OPC UA Adapter ──────�
                                                    │ Dashboard│
                                           ┌─────── ▶ alerts   │
                                           │         │ latest   │
-                                          │         │ history  │
-                                          │         └──────────┘
-                                   Semantic RDF (test only)
+                                           │         │ semantic
+                                           │         │ history  │
+                                           │         └────┬─────┘
+                                    ┌───── ▶ Fuseki (SPARQL)
+                                    │
+                              Semantic Write (best-effort)
 ```
 
 | Layer | Directory | Runtime | Port |
@@ -27,8 +30,9 @@ OPC UA Sim ──────────▶ OPC UA Adapter ──────�
 | Backend API | `backend/` | FastAPI + SQLite, 6 endpoints + rules engine | 8000 |
 | Connectivity | `connectivity/` | MQTT adapter → HTTP forward | — |
 | Mock generator | `analytics/mock/` | CLI tool | — |
-| Semantic layer | `semantic-layer/` | Turtle ontology + RDF mapping (test-only) | — |
-| Dashboard | `dashboard/` | Vue 3 + Vite + ECharts, 7 components | 5173 |
+| Semantic layer | `semantic-layer/` | RDF mapping + Fuseki write path | — |
+| Knowledge graph | `deploy/fuseki/` | Apache Jena Fuseki, SPARQL endpoint | 3030 |
+| Dashboard | `dashboard/` | Vue 3 + Vite + ECharts, 8 components | 5173 |
 | Infrastructure | `deploy/` | Docker Compose (4 services) | — |
 
 ---
@@ -62,7 +66,7 @@ cd dashboard && npx vitest run && cd ..
 docker compose -f deploy/docker-compose.yml up -d
 ```
 
-This starts 10 services: Mosquitto (1883), Backend (8000), Dashboard (5173), 4 protocol adapters (MQTT/REST/Modbus/OPC UA), and 3 simulators (REST/Modbus/OPC UA). All simulators auto-push data; no manual mock needed.
+This starts Mosquitto (1883), Backend (8000), Dashboard (5173), Fuseki (3030), 4 protocol adapters, and 3 simulators. All simulators auto-push data; no manual mock needed.
 
 ### 4. Push mock data
 
@@ -190,6 +194,7 @@ For protocol-specific payload formats and response codes, see each adapter's mod
 | `GET` | `/api/v1/alerts` | Recent alerts with filtering | Query: `device_id`, `level` (warning\|critical), `limit`, `offset` | `200 {"items":[...], "total":N}` |
 | `POST` | `/api/v1/control` | Issue control command | `{"device_id":str,"action":str,"params":{}}` | `202 {"command_id":"uuid"}` |
 | `GET` | `/api/v1/control/{id}` | Check command status | — | `200 {"status":"pending"}` |
+| `GET` | `/api/v1/semantic` | SPARQL-backed semantic views | Query: `view` (sensor-observations\|co-temp-sensors) | `200 {"results":[...]}` |
 
 ---
 
@@ -327,10 +332,11 @@ xa202606-smart-factory/
 │   │   ├── main.py                App factory + lifespan + 6 routers
 │   │   ├── config.py              Env-var config
 │   │   ├── models.py              API request/response Pydantic models
+│   │   ├── logs.py                 Structured JSON log utility
 │   │   ├── rules.py               Alert rule definitions + evaluate()
 │   │   ├── store.py               SQLite CRUD + alerts table + rule evaluation
-│   │   └── api/                   ingest / query / control / latest / history / alerts
-│   └── tests/                     21 tests
+│   │   └── api/                   ingest / query / control / latest / history / alerts / semantic
+│   └── tests/                     34 tests
 │
 ├── connectivity/                  Protocol adapters
 │   ├── pyproject.toml             + pymodbus, asyncua, fastapi, uvicorn
@@ -356,13 +362,14 @@ xa202606-smart-factory/
 │   │   └── opcua_server.py        OPC UA simulator, periodic node value updates
 │   └── tests/                     23 tests (generator 8 + rest_pusher 2 + modbus_server 11 + opcua_server 2)
 │
-├── semantic-layer/                Shared vocabulary + RDF mapping
-│   ├── pyproject.toml
+├── semantic-layer/                Shared vocabulary + RDF mapping + Fuseki write
+│   ├── pyproject.toml             + httpx
 │   ├── src/semantic_layer/
 │   │   ├── mapping.py             UnifiedMessage → SOSA Observation triples
+│   │   ├── fuseki.py              to_turtle() + write_to_fuseki()
 │   │   └── ontology/
 │   │       └── smart-factory.ttl  Turtle file (SOSA/SSN + custom properties)
-│   └── tests/                     11 tests (ontology 6 + mapping 5)
+│   └── tests/                     16 tests (ontology 6 + mapping 5 + fuseki 5)
 │
 ├── dashboard/                     Vue 3 + ECharts frontend
 │   ├── package.json
@@ -371,7 +378,7 @@ xa202606-smart-factory/
 │   └── src/
 │       ├── main.ts                Vue app bootstrap
 │       ├── App.vue                3-column ECharts grid layout
-│       ├── api.ts                 Typed fetch wrappers (7 endpoints)
+│       ├── api.ts                 Typed fetch wrappers (8 endpoints)
 │       └── components/
 │           ├── TempGauge.vue      Gauge chart (temperature)
 │           ├── GasMonitor.vue     Line chart (smoke, CO, gas)
@@ -379,11 +386,14 @@ xa202606-smart-factory/
 │           ├── CountBar.vue       Bar chart (goods count)
 │           ├── LightingPanel.vue  Status display (occupancy + light)
 │           ├── AlertsPanel.vue    Alert list (critical blinks red)
+│           ├── HistoryTable.vue   Search + paginated results
+│           └── SemanticPanel.vue  Semantic sensor catalogue
 │           └── HistoryTable.vue   Search + paginated results
 │
 ├── deploy/                        Infrastructure
-│   ├── docker-compose.yml         10 services: mosquitto + backend + dashboard + 4 adapters + 3 simulators
+│   ├── docker-compose.yml         mosquitto + backend + dashboard + fuseki + 4 adapters + 3 simulators
 │   ├── mqtt/mosquitto.conf        Anonymous access, stdout logging
+│   ├── fuseki/shiro.ini           Dev auth config, anon read/write
 │   └── .env.example
 │
 ├── Makefile                       up / down / test / lint / clean
@@ -409,8 +419,11 @@ xa202606-smart-factory/
 - [x] Modbus simulator: periodic register updates, 3.x/4.x compatibility
 - [x] OPC UA simulator: periodic node value updates
 - [x] Runner: --adapter mqtt|rest|modbus|opcua|all
-- [x] Docker Compose: 10 services, 4 protocols running simultaneously
-- [x] Port registry: 1502 (Modbus), 4840 (OPC UA), 8100 (REST)
+- [x] Docker Compose: 4 protocols + 3 simulators + Fuseki running simultaneously
+- [x] Port registry: 1502 (Modbus), 4840 (OPC UA), 8100 (REST), 3030 (Fuseki)
+- [x] Semantic runtime: Fuseki SPARQL endpoint, best-effort write via BackgroundTasks
+- [x] `/api/v1/semantic`: sensor-observations + co-temp-sensors whitelist views
+- [x] Dashboard semantic panel: sensor catalogue table
 - [ ] Real hardware integration (future)
 - [ ] Semantic runtime with AAS + SPARQL (future)
 - [ ] Real device control actuation (future)

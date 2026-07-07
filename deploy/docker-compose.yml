@@ -61,6 +61,20 @@ services:
       - backend
     restart: on-failure
 
+  connectivity-opcua:
+    build:
+      context: ..
+      dockerfile: connectivity/Dockerfile
+    command: ["python", "-m", "connectivity.runner", "--adapter", "opcua"]
+    environment:
+      - OPCUA_ENDPOINT=opc.tcp://opcua-sim:4840/
+      - OPCUA_DEVICE_ID=sensor_hcsr04_01
+      - OPCUA_DISTANCE_NODE_ID=ns=2;s=distance
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
+    restart: on-failure
+
   dashboard:
     build:
       context: ..

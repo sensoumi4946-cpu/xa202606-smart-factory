@@ -1,0 +1,29 @@
+{
+  "id": "urn:smart-factory:aas:counting",
+  "idShort": "CountingAAS",
+  "assetInformation": {
+    "assetKind": "Instance",
+    "globalAssetId": "urn:smart-factory:subsystem:counting"
+  },
+  "submodels": [
+    {
+      "idShort": "OperationalData",
+      "semanticId": "http://example.org/smart-factory#CountingSubsystem",
+      "subsystem": "counting",
+      "protocol": "rest",
+      "deviceIds": ["sensor_ir_01"],
+      "observedProperties": [
+        {
+          "type": "count",
+          "unit": "count",
+          "semanticUri": "http://example.org/smart-factory#measuresCount"
+        }
+      ],
+      "controlCapabilities": {
+        "supported": false,
+        "note": "read-only monitoring in current demo"
+      },
+      "demoRole": "货物感应计数，展示 REST 紧凑格式归一化"
+    }
+  ]
+}

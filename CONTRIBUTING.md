@@ -2,7 +2,7 @@
 
 ## Overview
 
-This monorepo implements the XA-202606 Smart Factory Safety Monitoring & Control Platform. It features a **live responsive ECharts dashboard** with 5 subsystem panels + semantic catalogue, a **rule-based alert engine**, **multi-protocol adapters** (MQTT / REST / Modbus / OPC UA) for heterogeneous device normalisation, a **Fuseki-powered semantic runtime** with SOSA/SSN for cross-device SPARQL queries, and **AAS digital-twin descriptors** — all running on a Docker Compose stack.
+This monorepo implements the XA-202606 Smart Factory Safety Monitoring & Control Platform. It features a **tab-based console dashboard** (monitoring / API debugging / device management / system status), a **rule-based alert engine**, **multi-protocol adapters** (MQTT / REST / Modbus / OPC UA) for heterogeneous device normalisation, a **Fuseki-powered semantic runtime** with SOSA/SSN for cross-device SPARQL queries, and **AAS digital-twin descriptors** — all running on a Docker Compose stack.
 
 ### Architecture
 
@@ -198,6 +198,25 @@ For protocol-specific payload formats and response codes, see each adapter's mod
 
 ---
 
+## Console Shell
+
+The dashboard is organised as a 4-tab console:
+
+| Tab | View | Purpose |
+|---|---|---|
+| 监控 | `DashboardView` | Real-time monitoring (5 subsystem panels + alerts + semantics) |
+| 调试 | `ApiConsoleView` | Manual API debugging — 8 endpoints with parameter editors and POST templates |
+| 设备 | `DeviceManagerView` | Device inventory table, online inference, detail drawer with control placeholders |
+| 系统 | `SystemStatusView` | Health probes, throughput rate (differential `/history` polling), event timeline |
+
+**Refresh strategy**: monitoring data every 3s; semantic/Fuseki probes every 10s; device list every 10s. API Console is manual-only.
+
+**StatusBar protocol lights** use `DEVICE_META` (`dashboard/deviceMeta.ts`) to map protocols to device IDs. A protocol light shows green when the device's latest timestamp is within 30s of now. Fuseki is probed via `/api/v1/semantic?view=sensor-observations`.
+
+**`DEVICE_META`** is the single source of truth for device–protocol–subsystem–connectVia mapping on the frontend. When adding a new device or changing protocol allocation, update this file.
+
+---
+
 ## Storage Schema (SQLite)
 
 ```sql
@@ -372,24 +391,29 @@ xa202606-smart-factory/
 │   │       └── smart-factory.ttl  Turtle file (SOSA/SSN + custom properties)
 │   └── tests/                     21 tests (ontology 6 + mapping 5 + fuseki 5 + aas 5)
 │
-├── dashboard/                     Vue 3 + ECharts frontend
+├── dashboard/                     Vue 3 + ECharts console
 │   ├── package.json
 │   ├── vite.config.ts             Proxy /api,/health → backend:8000
 │   ├── index.html
+│   ├── deviceMeta.ts              Device protocol/subsystem/connectVia map
 │   └── src/
 │       ├── main.ts                Vue app bootstrap
-│       ├── App.vue                3-column ECharts grid layout
-│       ├── api.ts                 Typed fetch wrappers (8 endpoints)
+│       ├── App.vue                Tab shell: 监控 | 调试 | 设备 | 系统
+│       ├── api.ts                 Typed fetch wrappers + rawRequest
+│       ├── layouts/
+│       │   └── ConsoleLayout.vue  Header tabs + footer StatusBar + slot
+│       ├── views/
+│       │   ├── DashboardView.vue  Monitor: 5 charts + alerts + semantics
+│       │   ├── ApiConsoleView.vue Debug: 8-endpoint manual HTTP panel
+│       │   ├── DeviceManagerView.vue  Devices: table + detail drawer
+│       │   └── SystemStatusView.vue   System: health, throughput, events
 │       └── components/
-│           ├── TempGauge.vue      Gauge chart (temperature)
-│           ├── GasMonitor.vue     Line chart (smoke, CO, gas)
-│           ├── AgvTrack.vue       Bar chart (distance, red if <30cm)
-│           ├── CountBar.vue       Bar chart (goods count)
-│           ├── LightingPanel.vue  Status display (occupancy + light)
-│           ├── AlertsPanel.vue    Alert list (critical blinks red)
-│           ├── HistoryTable.vue   Search + paginated results
-│           └── SemanticPanel.vue  Semantic sensor catalogue
-│   └── tests/                      12 tests (vitest)
+│           ├── StatusBar.vue      5 protocol lights + counters (3s/10s)
+│           ├── DeviceDrawer.vue   Reusable right-slide detail panel
+│           ├── JsonViewer.vue     Formatted JSON display
+│           ├── TempGauge.vue ...  (5 chart components)
+│           ├── AlertsPanel.vue | HistoryTable.vue | SemanticPanel.vue
+│   └── tests/                     18 tests (vitest)
 │
 ├── deploy/                        Infrastructure
 │   ├── docker-compose.yml         mosquitto + backend + dashboard + fuseki + 4 adapters + 3 simulators
@@ -430,6 +454,11 @@ xa202606-smart-factory/
 - [x] AAS descriptors: 5 v3-aligned JSON files + index, semantic URIs align with TTL
 - [x] Dashboard: responsive 3/2/1-column grid, skeleton loaders, error fallback
 - [x] Demo docs: demo-script.md, port-diagram.md, poster-copy.md
+- [x] Console shell: 4-tab navigation (monitor/debug/devices/system), 3s/10s differential refresh
+- [x] API Console: 8-endpoint manual HTTP panel, POST templates, status/time/response
+- [x] StatusBar: 5 protocol lights (30s freshness), device/alert counters
+- [x] Device Manager: table + detail drawer with control placeholder
+- [x] System Status: health probes, throughput rate, event timeline
 - [ ] Real hardware integration (future)
 - [ ] InfluxDB / IoTDB migration (future)
 - [ ] BaSyx AAS runtime (future)

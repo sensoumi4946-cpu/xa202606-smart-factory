@@ -135,3 +135,87 @@ export async function fetchSemanticView(
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
   return resp.json()
 }
+
+export interface RawResult {
+  status: number
+  ok: boolean
+  ms: number
+  body: unknown
+}
+
+// Generic request used by the API Console. Returns status, elapsed time
+// and parsed body without throwing on non-2xx so the UI can render errors.
+export async function rawRequest(
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<RawResult> {
+  const start = performance.now()
+  const init: RequestInit = { method }
+  if (body !== undefined) {
+    init.headers = { 'Content-Type': 'application/json' }
+    init.body = typeof body === 'string' ? body : JSON.stringify(body)
+  }
+  const resp = await fetch(`${BASE_URL}${path.replace(/^\//, '')}`, init)
+  const ms = Math.round(performance.now() - start)
+  let parsed: unknown
+  const text = await resp.text()
+  try {
+    parsed = text ? JSON.parse(text) : null
+  } catch {
+    parsed = text
+  }
+  return { status: resp.status, ok: resp.ok, ms, body: parsed }
+}
+
+export async function fetchHealth(): Promise<{ ok: boolean; body: unknown }> {
+  const resp = await fetch(`${BASE_URL}health`)
+  const body = await resp.json().catch(() => null)
+  return { ok: resp.ok, body }
+}
+
+// Probes Fuseki reachability via the semantic endpoint: 200 = online,
+// 503 (or any error) = offline.
+export async function probeFuseki(): Promise<boolean> {
+  try {
+    const resp = await fetch(
+      `${BASE_URL}api/v1/semantic?view=sensor-observations`,
+    )
+    return resp.ok
+  } catch {
+    return false
+  }
+}
+
+export interface SystemStatus {
+  healthOk: boolean
+  fusekiOk: boolean
+  deviceCount: number
+  alertTotal: number
+  todayCount: number
+}
+
+// Aggregates several read-only endpoints into one system snapshot used by
+// SystemStatusView. Each probe is resilient: a failing call yields a safe
+// default instead of rejecting the whole snapshot.
+export async function fetchSystemStatus(): Promise<SystemStatus> {
+  const midnight = new Date()
+  midnight.setUTCHours(0, 0, 0, 0)
+  const [health, fusekiOk, devices, alerts, today] = await Promise.all([
+    fetchHealth().catch(() => ({ ok: false, body: null })),
+    probeFuseki(),
+    fetchDevices().catch(() => [] as string[]),
+    fetchAlerts({ limit: 1 }).catch(() => ({ items: [], total: 0 })),
+    fetchHistory({ since: midnight.toISOString(), limit: 1 }).catch(() => ({
+      items: [],
+      total: 0,
+    })),
+  ])
+  return {
+    healthOk: health.ok,
+    fusekiOk,
+    deviceCount: devices.length,
+    alertTotal: alerts.total,
+    todayCount: today.total,
+  }
+}

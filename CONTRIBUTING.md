@@ -2,7 +2,7 @@
 
 ## Overview
 
-This monorepo implements the XA-202606 Smart Factory Safety Monitoring & Control Platform. It features a **live ECharts dashboard** with 5 subsystem panels + semantic catalogue, a **rule-based alert engine**, **multi-protocol adapters** (MQTT / REST / Modbus / OPC UA) for heterogeneous device normalisation, and a **Fuseki-powered semantic runtime** with SOSA/SSN for cross-device SPARQL queries — all running on a 12-service Docker Compose stack.
+This monorepo implements the XA-202606 Smart Factory Safety Monitoring & Control Platform. It features a **live responsive ECharts dashboard** with 5 subsystem panels + semantic catalogue, a **rule-based alert engine**, **multi-protocol adapters** (MQTT / REST / Modbus / OPC UA) for heterogeneous device normalisation, a **Fuseki-powered semantic runtime** with SOSA/SSN for cross-device SPARQL queries, and **AAS digital-twin descriptors** — all running on a Docker Compose stack.
 
 ### Architecture
 
@@ -364,12 +364,13 @@ xa202606-smart-factory/
 │
 ├── semantic-layer/                Shared vocabulary + RDF mapping + Fuseki write
 │   ├── pyproject.toml             + httpx
+│   ├── aas/                       AAS v3-aligned descriptors (5 subsystems + index)
 │   ├── src/semantic_layer/
 │   │   ├── mapping.py             UnifiedMessage → SOSA Observation triples
 │   │   ├── fuseki.py              to_turtle() + write_to_fuseki()
 │   │   └── ontology/
 │   │       └── smart-factory.ttl  Turtle file (SOSA/SSN + custom properties)
-│   └── tests/                     16 tests (ontology 6 + mapping 5 + fuseki 5)
+│   └── tests/                     21 tests (ontology 6 + mapping 5 + fuseki 5 + aas 5)
 │
 ├── dashboard/                     Vue 3 + ECharts frontend
 │   ├── package.json
@@ -388,13 +389,15 @@ xa202606-smart-factory/
 │           ├── AlertsPanel.vue    Alert list (critical blinks red)
 │           ├── HistoryTable.vue   Search + paginated results
 │           └── SemanticPanel.vue  Semantic sensor catalogue
-│           └── HistoryTable.vue   Search + paginated results
+│   └── tests/                      12 tests (vitest)
 │
 ├── deploy/                        Infrastructure
 │   ├── docker-compose.yml         mosquitto + backend + dashboard + fuseki + 4 adapters + 3 simulators
 │   ├── mqtt/mosquitto.conf        Anonymous access, stdout logging
 │   ├── fuseki/shiro.ini           Dev auth config, anon read/write
 │   └── .env.example
+│
+├── docs/                           Demo script, port diagram, poster copy
 │
 ├── Makefile                       up / down / test / lint / clean
 ├── .env.example                   All configurable env vars
@@ -424,6 +427,10 @@ xa202606-smart-factory/
 - [x] Semantic runtime: Fuseki SPARQL endpoint, best-effort write via BackgroundTasks
 - [x] `/api/v1/semantic`: sensor-observations + co-temp-sensors whitelist views
 - [x] Dashboard semantic panel: sensor catalogue table
+- [x] AAS descriptors: 5 v3-aligned JSON files + index, semantic URIs align with TTL
+- [x] Dashboard: responsive 3/2/1-column grid, skeleton loaders, error fallback
+- [x] Demo docs: demo-script.md, port-diagram.md, poster-copy.md
 - [ ] Real hardware integration (future)
-- [ ] Semantic runtime with AAS + SPARQL (future)
+- [ ] InfluxDB / IoTDB migration (future)
+- [ ] BaSyx AAS runtime (future)
 - [ ] Real device control actuation (future)

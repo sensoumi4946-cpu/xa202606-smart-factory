@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
 
 const mockChart = {
   setOption: vi.fn(),
@@ -89,5 +89,27 @@ describe('component smoke tests', () => {
   it('SemanticPanel renders title', () => {
     const wrapper = mount(SemanticPanel, { global: { stubs: { } } })
     expect(wrapper.text()).toContain('语义关联')
+  })
+})
+
+describe('SemanticPanel state handling', () => {
+  it('shows error text when the semantic service is unavailable', async () => {
+    const api = await import('../src/api')
+    vi.mocked(api.fetchSemanticView).mockRejectedValueOnce(new Error('down'))
+    const wrapper = mount(SemanticPanel, { global: { stubs: { } } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('语义服务不可用')
+  })
+
+  it('shows empty hint when no semantic rows are returned', async () => {
+    const api = await import('../src/api')
+    vi.mocked(api.fetchSemanticView).mockResolvedValueOnce({
+      view: 'sensor-observations',
+      description: 'none',
+      results: [],
+    })
+    const wrapper = mount(SemanticPanel, { global: { stubs: { } } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('暂无语义数据')
   })
 })

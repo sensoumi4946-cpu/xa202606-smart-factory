@@ -4,6 +4,7 @@ import { fetchLatest, type LatestDevice } from '../api'
 
 const occupancy = ref<boolean | null>(null)
 const lightState = ref<boolean | null>(null)
+const loading = ref(true)
 const error = ref('')
 let timer: ReturnType<typeof setInterval> | undefined
 
@@ -20,13 +21,16 @@ async function refresh() {
   try {
     const data = await fetchLatest('sensor_pir_01')
     const dev = data.find((d: LatestDevice) => d.device_id === 'sensor_pir_01')
+    error.value = ''
+    loading.value = false
     if (!dev) return
     const occ = dev.measurements.find((m) => m.type === 'occupancy')
     const ls = dev.measurements.find((m) => m.type === 'light_state')
     occupancy.value = occ ? occ.value > 0 : false
     lightState.value = ls ? ls.value > 0 : false
   } catch {
-    error.value = 'Fetch failed'
+    error.value = '数据加载失败'
+    loading.value = false
   }
 }
 
@@ -43,7 +47,9 @@ onUnmounted(() => {
 <template>
   <div class="panel">
     <h3>照明状态</h3>
-    <div class="status-grid">
+    <div v-if="loading" class="skeleton"></div>
+    <div v-else-if="error" class="hint err">{{ error }}</div>
+    <div v-show="!loading && !error" class="status-grid">
       <div class="status-item">
         <span class="label">Occupancy</span>
         <span class="dot" :style="{ background: statusColor }"></span>
@@ -55,7 +61,6 @@ onUnmounted(() => {
         <span>{{ lightState == null ? '--' : lightState ? '开' : '关' }}</span>
       </div>
     </div>
-    <div v-if="error" class="err">{{ error }}</div>
   </div>
 </template>
 
@@ -66,5 +71,8 @@ h3 { color: #38bdf8; font-size: 0.95rem; margin: 0 0 12px; }
 .status-item { display: flex; align-items: center; gap: 12px; color: #e2e8f0; font-size: 1rem; }
 .label { width: 100px; color: #94a3b8; }
 .dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; }
-.err { color: #ef4444; font-size: 0.8rem; }
+.skeleton { width: 100%; height: 96px; border-radius: 6px; background: #334155; animation: pulse 1.4s ease-in-out infinite; }
+.hint { padding: 32px 0; text-align: center; font-size: 0.9rem; color: #64748b; }
+.hint.err { color: #ef4444; }
+@keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.8; } }
 </style>

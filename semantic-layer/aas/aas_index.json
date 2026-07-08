@@ -1,0 +1,47 @@
+{
+  "id": "urn:smart-factory:aas:index",
+  "idShort": "SmartFactoryAasIndex",
+  "description": "Index of all Asset Administration Shell descriptors for the XA-202606 Smart Factory platform. Descriptor-ready, no BaSyx runtime.",
+  "shells": [
+    {
+      "id": "urn:smart-factory:aas:temp-humidity",
+      "idShort": "TempHumidityAAS",
+      "subsystem": "temp_humidity",
+      "protocol": "mqtt",
+      "globalAssetId": "urn:smart-factory:subsystem:temp-humidity",
+      "file": "aas_temp_humidity.json"
+    },
+    {
+      "id": "urn:smart-factory:aas:lighting",
+      "idShort": "LightingAAS",
+      "subsystem": "lighting",
+      "protocol": "rest",
+      "globalAssetId": "urn:smart-factory:subsystem:lighting",
+      "file": "aas_lighting.json"
+    },
+    {
+      "id": "urn:smart-factory:aas:gas",
+      "idShort": "GasAAS",
+      "subsystem": "gas",
+      "protocol": "modbus",
+      "globalAssetId": "urn:smart-factory:subsystem:gas",
+      "file": "aas_gas.json"
+    },
+    {
+      "id": "urn:smart-factory:aas:agv",
+      "idShort": "AgvAAS",
+      "subsystem": "agv",
+      "protocol": "opcua",
+      "globalAssetId": "urn:smart-factory:subsystem:agv",
+      "file": "aas_agv.json"
+    },
+    {
+      "id": "urn:smart-factory:aas:counting",
+      "idShort": "CountingAAS",
+      "subsystem": "counting",
+      "protocol": "rest",
+      "globalAssetId": "urn:smart-factory:subsystem:counting",
+      "file": "aas_counting.json"
+    }
+  ]
+}

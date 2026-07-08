@@ -1,0 +1,34 @@
+{
+  "id": "urn:smart-factory:aas:lighting",
+  "idShort": "LightingAAS",
+  "assetInformation": {
+    "assetKind": "Instance",
+    "globalAssetId": "urn:smart-factory:subsystem:lighting"
+  },
+  "submodels": [
+    {
+      "idShort": "OperationalData",
+      "semanticId": "http://example.org/smart-factory#LightingSubsystem",
+      "subsystem": "lighting",
+      "protocol": "rest",
+      "deviceIds": ["sensor_pir_01"],
+      "observedProperties": [
+        {
+          "type": "occupancy",
+          "unit": "boolean",
+          "semanticUri": "http://example.org/smart-factory#measuresOccupancy"
+        },
+        {
+          "type": "light_state",
+          "unit": "boolean",
+          "semanticUri": "http://example.org/smart-factory#measuresLightState"
+        }
+      ],
+      "controlCapabilities": {
+        "supported": false,
+        "note": "read-only monitoring in current demo"
+      },
+      "demoRole": "红外感应照明，展示 REST 异构格式归一化"
+    }
+  ]
+}

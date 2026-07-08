@@ -1,0 +1,29 @@
+{
+  "id": "urn:smart-factory:aas:agv",
+  "idShort": "AgvAAS",
+  "assetInformation": {
+    "assetKind": "Instance",
+    "globalAssetId": "urn:smart-factory:subsystem:agv"
+  },
+  "submodels": [
+    {
+      "idShort": "OperationalData",
+      "semanticId": "http://example.org/smart-factory#AGVObstacleSubsystem",
+      "subsystem": "agv",
+      "protocol": "opcua",
+      "deviceIds": ["sensor_hcsr04_01"],
+      "observedProperties": [
+        {
+          "type": "distance",
+          "unit": "cm",
+          "semanticUri": "http://example.org/smart-factory#measuresDistance"
+        }
+      ],
+      "controlCapabilities": {
+        "supported": false,
+        "note": "read-only monitoring in current demo"
+      },
+      "demoRole": "AGV 避障监测，展示 OPC UA 订阅模式归一化"
+    }
+  ]
+}

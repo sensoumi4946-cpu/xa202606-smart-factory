@@ -27,7 +27,7 @@ onMounted(load)
 <template>
   <div class="panel">
     <h3>语义关联: 传感器与观测属性</h3>
-    <div v-if="loading" class="hint">加载中…</div>
+    <div v-if="loading" class="skeleton"></div>
     <div v-else-if="error" class="hint err">{{ error }}</div>
     <div v-else-if="!rows.length" class="hint">暂无语义数据</div>
     <table v-else>
@@ -57,4 +57,6 @@ th { color: #94a3b8; font-weight: 600; }
 .proto { color: #fbbf24; text-transform: uppercase; font-size: 0.72rem; }
 .hint { color: #64748b; padding: 12px 0; font-size: 0.85rem; }
 .hint.err { color: #ef4444; }
+.skeleton { width: 100%; height: 96px; border-radius: 6px; background: #334155; animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.8; } }
 </style>

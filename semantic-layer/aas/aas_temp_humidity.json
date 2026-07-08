@@ -1,0 +1,34 @@
+{
+  "id": "urn:smart-factory:aas:temp-humidity",
+  "idShort": "TempHumidityAAS",
+  "assetInformation": {
+    "assetKind": "Instance",
+    "globalAssetId": "urn:smart-factory:subsystem:temp-humidity"
+  },
+  "submodels": [
+    {
+      "idShort": "OperationalData",
+      "semanticId": "http://example.org/smart-factory#TempHumiditySubsystem",
+      "subsystem": "temp_humidity",
+      "protocol": "mqtt",
+      "deviceIds": ["sensor_dht22_01"],
+      "observedProperties": [
+        {
+          "type": "temperature",
+          "unit": "celsius",
+          "semanticUri": "http://example.org/smart-factory#measuresTemperature"
+        },
+        {
+          "type": "humidity",
+          "unit": "percent",
+          "semanticUri": "http://example.org/smart-factory#measuresHumidity"
+        }
+      ],
+      "controlCapabilities": {
+        "supported": false,
+        "note": "read-only monitoring in current demo"
+      },
+      "demoRole": "实时温湿度监测，展示 MQTT 协议接入与高温告警联动"
+    }
+  ]
+}

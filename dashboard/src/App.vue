@@ -76,7 +76,16 @@ body {
   margin-bottom: 12px;
 }
 
-@media (max-width: 960px) {
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .app {
+    padding: 12px 14px;
+  }
   .grid {
     grid-template-columns: 1fr;
   }

@@ -1,0 +1,39 @@
+{
+  "id": "urn:smart-factory:aas:gas",
+  "idShort": "GasAAS",
+  "assetInformation": {
+    "assetKind": "Instance",
+    "globalAssetId": "urn:smart-factory:subsystem:gas"
+  },
+  "submodels": [
+    {
+      "idShort": "OperationalData",
+      "semanticId": "http://example.org/smart-factory#GasMonitoringSubsystem",
+      "subsystem": "gas",
+      "protocol": "modbus",
+      "deviceIds": ["sensor_mq2_01"],
+      "observedProperties": [
+        {
+          "type": "smoke",
+          "unit": "ppm",
+          "semanticUri": "http://example.org/smart-factory#measuresSmoke"
+        },
+        {
+          "type": "co",
+          "unit": "ppm",
+          "semanticUri": "http://example.org/smart-factory#measuresCO"
+        },
+        {
+          "type": "combustible_gas",
+          "unit": "ppm",
+          "semanticUri": "http://example.org/smart-factory#measuresCombustibleGas"
+        }
+      ],
+      "controlCapabilities": {
+        "supported": false,
+        "note": "read-only monitoring in current demo"
+      },
+      "demoRole": "危气三指标监测，展示 Modbus 寄存器映射归一化"
+    }
+  ]
+}

@@ -408,8 +408,10 @@ xa202606-smart-factory/
 │       │   ├── DeviceManagerView.vue  Devices: table + detail drawer
 │       │   └── SystemStatusView.vue   System: health, throughput, events
 │       └── components/
+│           ├── DeviceCard.vue       Unified panel card (protocol badge + @open)
+│           ├── MiniChart.vue        Compact area line per measurement in drawer
 │           ├── StatusBar.vue      5 protocol lights + counters (3s/10s)
-│           ├── DeviceDrawer.vue   Reusable right-slide detail panel
+│           ├── DeviceDrawer.vue   Reusable right-slide detail panel (+ chart toggle)
 │           ├── JsonViewer.vue     Formatted JSON display
 │           ├── TempGauge.vue ...  (5 chart components)
 │           ├── AlertsPanel.vue | HistoryTable.vue | SemanticPanel.vue
@@ -459,6 +461,8 @@ xa202606-smart-factory/
 - [x] StatusBar: 5 protocol lights (30s freshness), device/alert counters
 - [x] Device Manager: table + detail drawer with control placeholder
 - [x] System Status: health probes, throughput rate, event timeline
+- [x] DeviceCard: unified panel component with protocol badge, reusable across views
+- [x] Drawer charts: MiniChart per measurement type in device drawer, JSON/chart toggle
 - [ ] Real hardware integration (future)
 - [ ] InfluxDB / IoTDB migration (future)
 - [ ] BaSyx AAS runtime (future)

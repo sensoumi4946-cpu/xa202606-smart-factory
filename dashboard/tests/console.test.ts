@@ -12,6 +12,7 @@ vi.mock('echarts', () => ({ init: vi.fn(() => mockChart) }))
 
 vi.mock('../src/api', () => ({
   fetchLatest: vi.fn().mockResolvedValue([]),
+  fetchLatestDeduped: vi.fn().mockResolvedValue([]),
   fetchHistory: vi.fn().mockResolvedValue({ items: [], total: 0 }),
   fetchAlerts: vi.fn().mockResolvedValue({ items: [], total: 0 }),
   fetchDevices: vi.fn().mockResolvedValue(['sensor_dht22_01', 'sensor_mq2_01']),
@@ -27,7 +28,7 @@ vi.mock('../src/api', () => ({
     fusekiOk: true,
     deviceCount: 5,
     alertTotal: 3,
-    todayCount: 1200,
+    recentCount: 1200,
   }),
   probeFuseki: vi.fn().mockResolvedValue(true),
   fetchHealth: vi.fn().mockResolvedValue({ ok: true, body: { status: 'ok' } }),

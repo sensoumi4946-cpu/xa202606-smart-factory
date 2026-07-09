@@ -215,6 +215,22 @@ The dashboard is organised as a 4-tab console:
 
 **`DEVICE_META`** is the single source of truth for device–protocol–subsystem–connectVia mapping on the frontend. When adding a new device or changing protocol allocation, update this file.
 
+### Shared components
+
+| Component | Purpose |
+|---|---|
+| `DeviceCard.vue` | Unified panel card: protocol badge, `@open` event, `clickable` prop. Extracted from DashboardView; reused in alerts/semantic panels. |
+| `MiniChart.vue` | Compact ECharts area line per measurement type in the device drawer. Auto-resize, `dispose()` on unmount. |
+| `DeviceDrawer.vue` | Reusable right-slide panel showing recent history as MiniCharts with JSON/chart toggle. |
+
+### Performance notes
+
+- **`fetchLatestDeduped()`** wraps `fetchLatest()` with in-flight request sharing. When multiple components call it within the same tick, only one backend request is sent.
+- **System Status** uses a 10-minute `since` window for `/history` queries instead of midnight, keeping scans bounded.
+- **Device Manager** uses a Map-based lookup (O(1)) instead of `.find()` (O(n)) for device data.
+- **System Status refresh** runs `fetchSystemStatus`, `sampleRate`, and `buildEvents` in parallel rather than sequentially.
+- **Database bottleneck**: the backend `get_latest()` in `store.py` loads all `sensor_data` rows into Python memory. With 150K+ rows this takes seconds. Rewriting to a SQL GROUP BY subquery is the next performance priority.
+
 ---
 
 ## Storage Schema (SQLite)
@@ -463,6 +479,8 @@ xa202606-smart-factory/
 - [x] System Status: health probes, throughput rate, event timeline
 - [x] DeviceCard: unified panel component with protocol badge, reusable across views
 - [x] Drawer charts: MiniChart per measurement type in device drawer, JSON/chart toggle
+- [x] Perf: fetchLatest dedup, O(1) device lookup, parallel system status, 10-min query window
+- [ ] Backend get_latest() GROUP BY rewrite (next)
 - [ ] Real hardware integration (future)
 - [ ] InfluxDB / IoTDB migration (future)
 - [ ] BaSyx AAS runtime (future)

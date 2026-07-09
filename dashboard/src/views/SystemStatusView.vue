@@ -79,13 +79,17 @@ async function buildEvents() {
 }
 
 async function refresh() {
-  try {
-    status.value = await fetchSystemStatus()
+  const [st, _, __] = await Promise.all([
+    fetchSystemStatus().catch(() => null),
+    sampleRate(),
+    buildEvents(),
+  ])
+  if (st) {
+    status.value = st
     error.value = ''
-  } catch {
+  } else {
     error.value = '状态加载失败'
   }
-  await Promise.all([sampleRate(), buildEvents()])
 }
 
 function fmt(ts: string): string {

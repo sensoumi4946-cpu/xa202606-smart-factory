@@ -5,7 +5,7 @@
 // Phase 3A spec: monitoring data (latest + alerts) every 3s, semantic and
 // device list every 10s.
 import { ref, onMounted, onUnmounted } from 'vue'
-import { fetchLatest, fetchAlerts, fetchDevices, probeFuseki } from '../api'
+import { fetchLatestDeduped, fetchAlerts, fetchDevices, probeFuseki } from '../api'
 
 const FRESH_MS = 30_000
 
@@ -28,7 +28,7 @@ function isFresh(ts: string | undefined): boolean {
 
 async function refreshFast() {
   try {
-    const latest = await fetchLatest()
+    const latest = await fetchLatestDeduped()
     const freshIds = new Set(
       latest
         .filter((d) => d.measurements.some((m) => isFresh(m.timestamp)))

@@ -91,6 +91,21 @@ export async function fetchLatest(
   return resp.json()
 }
 
+// Deduped variant: when multiple components call fetchLatest() without
+// device_id within the same tick, only one backend request is sent.
+let _pendingLatest: Promise<LatestDevice[]> | null = null
+export async function fetchLatestDeduped(
+  deviceId?: string,
+): Promise<LatestDevice[]> {
+  if (deviceId) return fetchLatest(deviceId)
+  if (!_pendingLatest) {
+    _pendingLatest = fetchLatest().finally(() => {
+      _pendingLatest = null
+    })
+  }
+  return _pendingLatest
+}
+
 export async function fetchHistory(params: {
   device_id?: string
   since?: string

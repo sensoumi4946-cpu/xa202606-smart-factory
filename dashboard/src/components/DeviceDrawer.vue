@@ -3,10 +3,14 @@
 // fetchDeviceData when the deviceId changes. Reused by DashboardView (panel
 // click) and DeviceManagerView (detail button); the latter also renders the
 // extra meta/control slot content.
-import { ref, watch } from 'vue'
+//
+// Phase 3B: the recent history is charted with one MiniChart per numeric
+// measurement type (oldest->newest). A toggle still exposes the raw JSON.
+import { ref, watch, computed } from 'vue'
 import { fetchDeviceData, type SensorRecord } from '../api'
 import { DEVICE_META, protoLabel } from '../deviceMeta'
 import JsonViewer from './JsonViewer.vue'
+import MiniChart from './MiniChart.vue'
 
 const props = defineProps<{ deviceId: string | null; limit?: number }>()
 const emit = defineEmits<{ close: [] }>()
@@ -14,6 +18,33 @@ const emit = defineEmits<{ close: [] }>()
 const records = ref<SensorRecord[]>([])
 const error = ref('')
 const loading = ref(false)
+const showRaw = ref(false)
+
+interface Series {
+  type: string
+  unit: string
+  points: Array<{ t: string; v: number }>
+}
+
+// Group records into one time series per measurement type, ordered oldest
+// first so the chart reads left-to-right in chronological order.
+const series = computed<Series[]>(() => {
+  const map = new Map<string, Series>()
+  const ordered = [...records.value].sort(
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+  )
+  for (const rec of ordered) {
+    for (const m of rec.measurements) {
+      let s = map.get(m.type)
+      if (!s) {
+        s = { type: m.type, unit: m.unit, points: [] }
+        map.set(m.type, s)
+      }
+      s.points.push({ t: rec.timestamp, v: m.value })
+    }
+  }
+  return [...map.values()]
+})
 
 watch(
   () => props.deviceId,
@@ -21,8 +52,9 @@ watch(
     if (!id) return
     loading.value = true
     error.value = ''
+    showRaw.value = false
     try {
-      records.value = await fetchDeviceData(id, props.limit ?? 5)
+      records.value = await fetchDeviceData(id, props.limit ?? 20)
     } catch {
       error.value = '数据加载失败'
       records.value = []
@@ -54,11 +86,26 @@ watch(
 
       <slot />
 
-      <h4>最近数据</h4>
+      <div class="hist-head">
+        <h4>最近数据</h4>
+        <button class="toggle" @click="showRaw = !showRaw">
+          {{ showRaw ? '图表' : 'JSON' }}
+        </button>
+      </div>
+
       <div v-if="loading" class="hint">加载中...</div>
       <div v-else-if="error" class="hint err">{{ error }}</div>
       <div v-else-if="!records.length" class="hint">暂无数据</div>
-      <JsonViewer v-else :value="records" />
+      <JsonViewer v-else-if="showRaw" :value="records" />
+      <div v-else class="charts">
+        <MiniChart
+          v-for="s in series"
+          :key="s.type"
+          :label="s.type"
+          :unit="s.unit"
+          :points="s.points"
+        />
+      </div>
     </aside>
   </div>
 </template>
@@ -120,10 +167,33 @@ watch(
   width: 72px;
   color: #94a3b8;
 }
+.hist-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 12px 0 8px;
+}
 h4 {
   color: #38bdf8;
   font-size: 0.85rem;
-  margin: 12px 0 8px;
+  margin: 0;
+}
+.toggle {
+  background: #334155;
+  color: #e2e8f0;
+  border: none;
+  padding: 3px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.74rem;
+}
+.toggle:hover {
+  background: #475569;
+}
+.charts {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 .hint {
   color: #64748b;

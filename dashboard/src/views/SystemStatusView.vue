@@ -28,14 +28,16 @@ let lastTotal: number | null = null
 let lastAt: number | null = null
 let timer: ReturnType<typeof setInterval> | undefined
 
-// Estimates messages per second from consecutive /history totals.
+// Estimates messages per second from consecutive /history totals
+// over the last 10 minutes to keep queries fast.
 async function sampleRate() {
   try {
-    const h = await fetchHistory({ limit: 1 })
+    const since = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+    const h = await fetchHistory({ since, limit: 1 })
     const now = Date.now()
     if (lastTotal !== null && lastAt !== null) {
       const dt = (now - lastAt) / 1000
-      if (dt > 0) rate.value = Math.max(0, (h.total - lastTotal) / dt)
+      if (dt > 0) rate.value = (h.total - lastTotal) / dt
     }
     lastTotal = h.total
     lastAt = now
@@ -127,8 +129,8 @@ onUnmounted(() => {
       <div class="card">
         <h3>数据吞吐</h3>
         <div class="row">
-          <span class="k">今日消息</span>
-          <span>{{ status?.todayCount?.toLocaleString() ?? 0 }}</span>
+          <span class="k">近期消息 (10min)</span>
+          <span>{{ status?.recentCount?.toLocaleString() ?? 0 }}</span>
         </div>
         <div class="row">
           <span class="k">速率</span>

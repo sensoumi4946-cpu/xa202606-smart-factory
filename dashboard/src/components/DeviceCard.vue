@@ -3,26 +3,27 @@
 // panel in the shared rounded translucent card, renders a protocol badge in
 // the top-right corner and emits a click carrying the device id. Set clickable
 // to false for wide info panels (alerts, semantic) that have no drawer.
+import { computed } from 'vue'
 import { protoLabel } from '../deviceMeta'
 
-const props = defineProps<{
-  deviceId?: string
-  protocol?: string
-  clickable?: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    deviceId?: string
+    protocol?: string
+    clickable?: boolean
+  }>(),
+  { clickable: true },
+)
 const emit = defineEmits<{ open: [string] }>()
 
+const tappable = computed(() => props.clickable && !!props.deviceId)
+
 function onClick() {
-  if (props.clickable !== false && props.deviceId) emit('open', props.deviceId)
-}
-</script>
+  if (tappable.value && props.deviceId) emit('open', props.deviceId)
+}</script>
 
 <template>
-  <div
-    class="card"
-    :class="{ tappable: clickable !== false && deviceId }"
-    @click="onClick"
-  >
+  <div class="card" :class="{ tappable: tappable }" @click="onClick">
     <span v-if="protocol" class="badge">{{ protoLabel(protocol) }}</span>
     <slot />
   </div>

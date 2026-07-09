@@ -91,6 +91,21 @@ export async function fetchLatest(
   return resp.json()
 }
 
+// Deduped variant: when multiple components call fetchLatest() without
+// device_id within the same tick, only one backend request is sent.
+let _pendingLatest: Promise<LatestDevice[]> | null = null
+export async function fetchLatestDeduped(
+  deviceId?: string,
+): Promise<LatestDevice[]> {
+  if (deviceId) return fetchLatest(deviceId)
+  if (!_pendingLatest) {
+    _pendingLatest = fetchLatest().finally(() => {
+      _pendingLatest = null
+    })
+  }
+  return _pendingLatest
+}
+
 export async function fetchHistory(params: {
   device_id?: string
   since?: string
@@ -192,21 +207,20 @@ export interface SystemStatus {
   fusekiOk: boolean
   deviceCount: number
   alertTotal: number
-  todayCount: number
+  recentCount: number
 }
 
 // Aggregates several read-only endpoints into one system snapshot used by
 // SystemStatusView. Each probe is resilient: a failing call yields a safe
 // default instead of rejecting the whole snapshot.
 export async function fetchSystemStatus(): Promise<SystemStatus> {
-  const midnight = new Date()
-  midnight.setUTCHours(0, 0, 0, 0)
-  const [health, fusekiOk, devices, alerts, today] = await Promise.all([
+  const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000)
+  const [health, fusekiOk, devices, alerts, recent] = await Promise.all([
     fetchHealth().catch(() => ({ ok: false, body: null })),
     probeFuseki(),
     fetchDevices().catch(() => [] as string[]),
     fetchAlerts({ limit: 1 }).catch(() => ({ items: [], total: 0 })),
-    fetchHistory({ since: midnight.toISOString(), limit: 1 }).catch(() => ({
+    fetchHistory({ since: tenMinAgo.toISOString(), limit: 1 }).catch(() => ({
       items: [],
       total: 0,
     })),
@@ -216,6 +230,6 @@ export async function fetchSystemStatus(): Promise<SystemStatus> {
     fusekiOk,
     deviceCount: devices.length,
     alertTotal: alerts.total,
-    todayCount: today.total,
+    recentCount: recent.total,
   }
 }

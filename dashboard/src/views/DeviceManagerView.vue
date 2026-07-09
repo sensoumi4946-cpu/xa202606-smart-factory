@@ -5,7 +5,7 @@
 // opens DeviceDrawer showing the last five records plus a simulated remote
 // control section.
 import { ref, onMounted, computed } from 'vue'
-import { fetchDevices, fetchLatest, type LatestDevice } from '../api'
+import { fetchDevices, fetchLatestDeduped, type LatestDevice } from '../api'
 import { DEVICE_META, protoLabel } from '../deviceMeta'
 import DeviceDrawer from '../components/DeviceDrawer.vue'
 
@@ -21,32 +21,36 @@ function isFresh(ts: string | undefined): boolean {
   return Date.now() - new Date(ts).getTime() < FRESH_MS
 }
 
-// Devices sorted by subsystem so related sensors group together.
+// O(1) lookup: index latest by device_id once.
+const latestMap = computed(() => {
+  const map = new Map<string, LatestDevice>()
+  for (const d of latest.value) map.set(d.device_id, d)
+  return map
+})
+
+// IDs pre-sorted once; only re-computes when ids changes.
+const sortedIds = computed(() =>
+  [...ids.value].sort((a, b) => {
+    const sa = DEVICE_META[a]?.subsystem ?? ''
+    const sb = DEVICE_META[b]?.subsystem ?? ''
+    return sa.localeCompare(sb)
+  }),
+)
+
 const rows = computed(() =>
-  [...ids.value]
-    .sort((a, b) => {
-      const sa = DEVICE_META[a]?.subsystem ?? ''
-      const sb = DEVICE_META[b]?.subsystem ?? ''
-      return sa.localeCompare(sb)
-    })
-    .map((id) => {
-      const dev = latest.value.find((d) => d.device_id === id)
-      const online = !!dev && dev.measurements.some((m) => isFresh(m.timestamp))
-      const summary = dev
-        ? dev.measurements.map((m) => `${m.type}=${m.value}`).join(', ')
-        : '--'
-      return {
-        id,
-        meta: DEVICE_META[id],
-        online,
-        summary,
-      }
-    }),
+  sortedIds.value.map((id) => {
+    const dev = latestMap.value.get(id)
+    const online = !!dev && dev.measurements.some((m) => isFresh(m.timestamp))
+    const summary = dev
+      ? dev.measurements.map((m) => `${m.type}=${m.value}`).join(', ')
+      : '--'
+    return { id, meta: DEVICE_META[id], online, summary }
+  }),
 )
 
 async function load() {
   try {
-    const [d, l] = await Promise.all([fetchDevices(), fetchLatest()])
+    const [d, l] = await Promise.all([fetchDevices(), fetchLatestDeduped()])
     ids.value = d
     latest.value = l
     error.value = ''

@@ -12,7 +12,7 @@ from typing import Any, Optional
 
 from smart_factory_contracts.messages import UnifiedMessage
 
-from backend.config import DATABASE_PATH
+from backend.config import DATABASE_PATH, LATEST_WINDOW_MINUTES
 from backend.rules import evaluate
 
 
@@ -236,16 +236,25 @@ def get_control_status(command_id: str) -> Optional[dict[str, Any]]:
     return r
 
 
-def get_latest(device_id: Optional[str] = None) -> list[dict[str, Any]]:
+def get_latest(device_id: Optional[str] = None, since: Optional[str] = None) -> list[dict[str, Any]]:
+    """Return the latest measurement per (device_id, measurement_type).
+
+    When `since` is None (default), scans the last LATEST_WINDOW_MINUTES.
+    Pass an explicit ISO timestamp to override (e.g. old dates in tests).
+    """
+    window = since if since is not None else (
+        datetime.now(timezone.utc) - timedelta(minutes=LATEST_WINDOW_MINUTES)
+    ).isoformat()
     conn = _get_connection()
     if device_id:
         rows = conn.execute(
-            "SELECT * FROM sensor_data WHERE device_id = ? ORDER BY timestamp ASC",
-            (device_id,),
+            "SELECT * FROM sensor_data WHERE device_id = ? AND timestamp >= ? ORDER BY timestamp ASC",
+            (device_id, window),
         ).fetchall()
     else:
         rows = conn.execute(
-            "SELECT * FROM sensor_data ORDER BY timestamp ASC"
+            "SELECT * FROM sensor_data WHERE timestamp >= ? ORDER BY timestamp ASC",
+            (window,),
         ).fetchall()
     conn.close()
 

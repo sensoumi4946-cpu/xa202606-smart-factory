@@ -1,28 +1,3 @@
-# semantic-layer/src/semantic_layer/aas_bridge.py
-#
-# ─────────────────────────────────────────────────────────────────────────────
-# AAS → RDF bridge  (YOUR contribution to the semantic layer)
-# ─────────────────────────────────────────────────────────────────────────────
-#
-# What this file does, in plain English:
-#   The five AAS JSON files (one per factory subsystem) describe each subsystem
-#   as a "digital twin" — they say things like "the gas subsystem uses Modbus,
-#   has device sensor_mq2_01, and can observe smoke/CO/combustible gas."
-#
-#   But right now those JSON files just sit on disk.  Nothing loads them into
-#   the Fuseki knowledge graph, so you can't SPARQL-query them alongside the
-#   live sensor observations.
-#
-#   This module fixes that gap.  It:
-#     1. Reads all five AAS JSON files from semantic-layer/aas/
-#     2. Converts them into RDF triples (same vocabulary as the ontology)
-#     3. Can POST those triples to Fuseki so everything is queryable together
-#
-#   After this runs, you can ask the knowledge graph things like:
-#     "Which device IDs belong to the gas subsystem AAS?"
-#     "What observable properties does the AGV shell declare?"
-#   — joining AAS asset metadata with live sensor observation data in one query.
-#
 # Exports used by other modules:
 #   load_aas_as_rdf()          → Graph   (RDFlib graph, no network needed)
 #   get_aas_catalog()          → list    (for the REST API endpoint)
@@ -53,9 +28,7 @@ _AAS_FILES = [
 ]
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # Core conversion: AAS JSON → RDFlib Graph
-# ─────────────────────────────────────────────────────────────────────────────
 
 def load_aas_as_rdf() -> Graph:
     """Read all five AAS JSON descriptor files and return an RDFlib Graph.
@@ -83,14 +56,14 @@ def load_aas_as_rdf() -> Graph:
         with open(aas_path, encoding="utf-8") as fh:
             aas = json.load(fh)
 
-        # ── Shell-level triples ──────────────────────────────────────────────
+        # Shell-level triples
         shell_uri = URIRef(aas["id"])
         asset_uri = URIRef(aas["assetInformation"]["globalAssetId"])
 
         g.add((shell_uri, RDF.type, SF.AssetAdministrationShell))
         g.add((shell_uri, SF.globalAssetId, asset_uri))
 
-        # ── One submodel per subsystem (all five JSON files follow this shape) ─
+        # One submodel per subsystem (all five JSON files follow this shape)
         for submodel in aas.get("submodels", []):
 
             # Unique URI for this submodel: <shell-id>:submodel:<idShort>
@@ -121,9 +94,8 @@ def load_aas_as_rdf() -> Graph:
     return g
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # Helpers for the backend REST endpoint (no RDF needed by callers)
-# ─────────────────────────────────────────────────────────────────────────────
 
 def get_aas_catalog() -> list[dict]:
     """Return a Python list with the index entries for all five AAS shells.
@@ -152,9 +124,8 @@ def get_aas_descriptor(subsystem: str) -> dict | None:
         return json.load(fh)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # Fuseki write path
-# ─────────────────────────────────────────────────────────────────────────────
 
 async def write_aas_to_fuseki(endpoint: str) -> bool:
     """Serialise all AAS triples to Turtle and POST them to a Fuseki endpoint.

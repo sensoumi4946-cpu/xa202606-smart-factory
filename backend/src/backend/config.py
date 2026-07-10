@@ -15,3 +15,4 @@ FUSEKI_QUERY_URL: str = os.getenv(
 SEMANTIC_WRITE_ENABLED: bool = (
     os.getenv("SEMANTIC_WRITE_ENABLED", "true").lower() == "true"
 )
+LATEST_WINDOW_MINUTES: int = int(os.getenv("LATEST_WINDOW_MINUTES", "30"))

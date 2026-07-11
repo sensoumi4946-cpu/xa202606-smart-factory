@@ -1,0 +1,51 @@
+@prefix sf:     <http://example.org/smart-factory#> .
+@prefix saref:  <https://saref.etsi.org/core/> .
+@prefix s4envi: <https://saref.etsi.org/saref4envi/> .
+@prefix sosa:   <http://www.w3.org/ns/sosa/> .
+@prefix owl:    <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos:   <http://www.w3.org/2004/02/skos/core#> .
+
+# Sensor class alignment
+# SAREF defines saref:Sensor as a subclass of sosa:Sensor.
+# Sensor classes are already sosa:Sensor subclasses (via the ontology),
+# so these mappings complete the chain: sf:X → sosa:Sensor → saref:Sensor.
+
+sf:TemperatureSensor  rdfs:subClassOf  saref:Sensor ;
+    skos:closeMatch  saref:TemperatureSensor .
+
+sf:HumiditySensor     rdfs:subClassOf  saref:Sensor ;
+    skos:closeMatch  saref:HumiditySensor .
+
+sf:GasSensor          rdfs:subClassOf  saref:Sensor .
+
+sf:ProximitySensor    rdfs:subClassOf  saref:Sensor .
+
+sf:CountSensor        rdfs:subClassOf  saref:Sensor .
+
+sf:OccupancySensor    rdfs:subClassOf  saref:Sensor .
+
+# Observable property alignment
+#
+# SAREF core treats Temperature and Humidity as named Property instances.
+# Use owl:equivalentProperty where the match is exact and
+# skos:closeMatch where the mapping is approximate (e.g. CO ≈ air emission).
+
+sf:measuresTemperature  owl:equivalentProperty  saref:measuresTemperature ;
+    skos:exactMatch  saref:Temperature .
+
+sf:measuresHumidity     owl:equivalentProperty  saref:measuresHumidity ;
+    skos:exactMatch  saref:Humidity .
+
+sf:measuresCO           skos:closeMatch  s4envi:CO2Concentration .
+
+sf:measuresSmoke        skos:closeMatch  s4envi:PM10Concentration .
+
+sf:measuresCombustibleGas  skos:broadMatch  s4envi:AirQuality .
+
+# Subsystem alignment
+# SAREF4BLDG covers building systems; factory subsystems map approximately.
+
+sf:TempHumiditySubsystem   skos:closeMatch  <https://saref.etsi.org/saref4bldg/HVAC> .
+sf:GasMonitoringSubsystem  skos:closeMatch  <https://saref.etsi.org/saref4bldg/FireDetectionSystem> .
+sf:LightingSubsystem       skos:closeMatch  <https://saref.etsi.org/saref4bldg/Lighting> .

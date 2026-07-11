@@ -1,4 +1,5 @@
 import json
+import logging
 import sys
 import traceback
 from contextlib import asynccontextmanager
@@ -7,20 +8,30 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from backend.api.alerts   import router as alerts_router
-from backend.api.control  import router as control_router
-from backend.api.history  import router as history_router
-from backend.api.ingest   import router as ingest_router
-from backend.api.latest   import router as latest_router
-from backend.api.query    import router as query_router
-from backend.api.semantic import router as semantic_router
-from backend.api.aas      import router as aas_router
+from backend import config
+from backend.api.alerts    import router as alerts_router
+from backend.api.control   import router as control_router
+from backend.api.history   import router as history_router
+from backend.api.ingest    import router as ingest_router
+from backend.api.latest    import router as latest_router
+from backend.api.query     import router as query_router
+from backend.api.semantic  import router as semantic_router
+from backend.api.aas       import router as aas_router
+from backend.api.fire_risk import router as fire_risk_router
 from backend.store import init_db
+from semantic_layer.aas_bridge import write_aas_to_fuseki
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    seeded = await write_aas_to_fuseki(config.FUSEKI_DATA_URL)
+    if seeded:
+        logger.info("AAS descriptors seeded into Fuseki")
+    else:
+        logger.warning("AAS seed skipped — Fuseki may not be ready yet")
     yield
 
 
@@ -38,6 +49,7 @@ app.include_router(history_router)
 app.include_router(alerts_router)
 app.include_router(semantic_router)
 app.include_router(aas_router)
+app.include_router(fire_risk_router)
 
 
 @app.get("/health")

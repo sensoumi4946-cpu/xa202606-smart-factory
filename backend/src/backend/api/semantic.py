@@ -1,10 +1,3 @@
-# GET /api/v1/semantic — read-only semantic views over the Fuseki graph.
-#
-# Only two whitelisted views are exposed; the raw ?query= parameter is never
-# proxied. Each view maps to a fixed SPARQL SELECT that the backend runs
-# against Fuseki, then reshapes into a compact JSON catalogue for the
-# dashboard. Sensor / subsystem / property URIs are collapsed back to the
-# short names used across the platform by inverting mapping.py.
 from typing import Any, Optional
 
 import httpx
@@ -24,7 +17,8 @@ _PREFIX = (
 )
 
 _BASE_QUERY = (
-    _PREFIX + "SELECT DISTINCT ?sensor ?subsystem ?protocol ?prop WHERE { "
+    _PREFIX
+    + "SELECT DISTINCT ?sensor ?subsystem ?protocol ?prop WHERE { "
     "?obs a sosa:Observation ; sosa:madeBySensor ?sensor ; "
     "sosa:observedProperty ?prop . "
     "OPTIONAL { ?sensor sf:belongsToSubsystem ?subsystem } "
@@ -38,16 +32,37 @@ _CO_TEMP_FILTER = (
     "VALUES ?fp { sf:measuresCO sf:measuresTemperature } } }"
 )
 
+_FIRE_RISK_FILTER = (
+    "VALUES ?prop { "
+    "sf:measuresTemperature sf:measuresCO "
+    "sf:measuresSmoke sf:measuresCombustibleGas }"
+)
+
+_GAS_DETAIL_FILTER = (
+    "?sensor sf:belongsToSubsystem sf:GasMonitoringSubsystem . "
+    "BIND(sf:GasMonitoringSubsystem AS ?subsystem)"
+)
+
+_PRODUCTION_FILTER = (
+    "VALUES ?prop { "
+    "sf:measuresDistance sf:measuresCount "
+    "sf:measuresOccupancy sf:measuresLightState }"
+)
+
 VIEWS: dict[str, str] = {
     "sensor-observations": _BASE_QUERY % "",
-    "co-temp-sensors": _BASE_QUERY % _CO_TEMP_FILTER,
+    "co-temp-sensors":     _BASE_QUERY % _CO_TEMP_FILTER,
+    "fire-risk-sensors":   _BASE_QUERY % _FIRE_RISK_FILTER,
+    "gas-subsystem-detail": _BASE_QUERY % _GAS_DETAIL_FILTER,
+    "production-sensors":  _BASE_QUERY % _PRODUCTION_FILTER,
 }
 
 DESCRIPTIONS: dict[str, str] = {
-    "sensor-observations": "All sensors with their observed properties and subsystems",
-    "co-temp-sensors": (
-        "Sensors observing CO or temperature — cross-device fire risk correlation"
-    ),
+    "sensor-observations":  "All sensors with their observed properties and subsystems",
+    "co-temp-sensors":      "Sensors observing CO or temperature — cross-device fire risk correlation",
+    "fire-risk-sensors":    "All fire-safety sensors (temperature + CO + smoke + combustible gas) across all protocols",
+    "gas-subsystem-detail": "Gas monitoring subsystem: all three hazardous-gas properties via Modbus TCP",
+    "production-sensors":   "Production-floor sensors: AGV distance (OPC UA), counting (REST), occupancy/lighting (REST)",
 }
 
 
@@ -55,7 +70,6 @@ def _local(uri: str) -> str:
     return uri.rsplit("#", 1)[-1] if "#" in uri else uri.rsplit("/", 1)[-1]
 
 
-# Reverse the mapping-layer tables so graph URIs collapse to short names.
 PROP_NAMES: dict[str, str] = {
     _local(str(uri)): mtype.value for mtype, uri in TYPE_TO_PROPERTY.items()
 }
@@ -86,10 +100,10 @@ def _aggregate(bindings: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if sensor not in by_sensor:
             subsys = _local(b["subsystem"]["value"]) if "subsystem" in b else ""
             by_sensor[sensor] = {
-                "sensor": sensor,
+                "sensor":    sensor,
                 "subsystem": SUBSYS_NAMES.get(subsys, subsys),
-                "observes": [],
-                "protocol": b.get("protocol", {}).get("value", ""),
+                "observes":  [],
+                "protocol":  b.get("protocol", {}).get("value", ""),
             }
             order.append(sensor)
         if "prop" in b:
@@ -102,15 +116,19 @@ def _aggregate(bindings: list[dict[str, Any]]) -> list[dict[str, Any]]:
 @router.get("/api/v1/semantic")
 async def semantic(view: Optional[str] = Query(None)):
     if view not in VIEWS:
-        raise HTTPException(status_code=400, detail="unknown view")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown view '{view}'. Valid options: {sorted(VIEWS.keys())}",
+        )
     try:
         bindings = await _run_sparql(VIEWS[view])
     except httpx.HTTPError:
         return JSONResponse(
-            status_code=503, content={"error": "semantic service unavailable"}
+            status_code=503,
+            content={"error": "semantic service unavailable"},
         )
     return {
-        "view": view,
+        "view":        view,
         "description": DESCRIPTIONS[view],
-        "results": _aggregate(bindings),
+        "results":     _aggregate(bindings),
     }

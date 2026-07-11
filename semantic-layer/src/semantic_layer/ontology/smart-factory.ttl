@@ -39,7 +39,7 @@ sf:OccupancySensor  a  owl:Class ;
     rdfs:label        "Occupancy Sensor"@en ;
     rdfs:comment      "Detects human presence for smart lighting control"@en .
 
-# ── ObservableProperty classes (the quantities each sensor can observe) ──
+# ── ObservableProperty classes ──
 
 sf:measuresTemperature  a  sosa:ObservableProperty ;
     rdfs:label  "Temperature"@en ;
@@ -77,7 +77,7 @@ sf:measuresLightState  a  sosa:ObservableProperty ;
     rdfs:label  "Light State"@en ;
     rdfs:comment  "Binary light state (0 = off, 1 = on)"@en .
 
-# ── Subsystem grouping (not part of SOSA, organisational convenience) ──
+# ── Subsystem grouping ──
 
 sf:Subsystem  a  rdfs:Class .
 
@@ -106,3 +106,35 @@ sf:hasUnit  a  rdf:Property ;
 
 sf:transportedVia  a  rdf:Property ;
     rdfs:label  "transported via"@en .
+
+# ── AAS digital-twin classes and properties ──
+
+sf:AssetAdministrationShell  a  owl:Class ;
+    rdfs:label    "Asset Administration Shell"@en ;
+    rdfs:comment  "Digital-twin shell for a factory subsystem"@en .
+
+sf:Submodel  a  owl:Class ;
+    rdfs:label    "AAS Submodel"@en ;
+    rdfs:comment  "Operational data submodel within an AAS shell"@en .
+
+sf:hasSubmodel  a  rdf:Property ;
+    rdfs:domain  sf:AssetAdministrationShell ;
+    rdfs:range   sf:Submodel ;
+    rdfs:label   "has submodel"@en .
+
+sf:globalAssetId  a  rdf:Property ;
+    rdfs:domain  sf:AssetAdministrationShell ;
+    rdfs:label   "global asset ID"@en .
+
+sf:semanticId  a  rdf:Property ;
+    rdfs:domain  sf:Submodel ;
+    rdfs:label   "semantic ID"@en .
+
+sf:hasDevice  a  rdf:Property ;
+    rdfs:domain  sf:Submodel ;
+    rdfs:label   "has device"@en .
+
+sf:hasObservableProperty  a  rdf:Property ;
+    rdfs:domain  sf:Submodel ;
+    rdfs:range   sosa:ObservableProperty ;
+    rdfs:label   "has observable property"@en .

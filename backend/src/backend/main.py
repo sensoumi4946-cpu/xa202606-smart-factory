@@ -18,6 +18,10 @@ from backend.api.query     import router as query_router
 from backend.api.semantic  import router as semantic_router
 from backend.api.aas       import router as aas_router
 from backend.api.fire_risk import router as fire_risk_router
+from backend.api.analytics_api import router as analytics_router
+from backend.api.semantic_query import router as semantic_query_router
+from backend.security.auth import api_key_middleware
+
 from backend.store import init_db
 from semantic_layer.aas_bridge import write_aas_to_fuseki
 from backend.api.semantic_query import router as semantic_query_router
@@ -41,6 +45,7 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+app.middleware("http")(api_key_middleware)
 
 app.include_router(ingest_router)
 app.include_router(query_router)
@@ -51,6 +56,7 @@ app.include_router(alerts_router)
 app.include_router(semantic_router)
 app.include_router(aas_router)
 app.include_router(fire_risk_router)
+app.include_router(analytics_router)
 app.include_router(semantic_query_router)
 
 

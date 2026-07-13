@@ -53,8 +53,8 @@ def validate_and_explain(g: Graph) -> str:
 
     if valid:
         obs_count = sum(1 for _ in g.subjects(RDF.type, SOSA.Observation))
-        return f"Valid — {obs_count} observation(s) passed all checks."
+        return f"✓ — {obs_count} observation(s) passed all checks."
 
-    lines = [f"Invalid — {len(errors)} violation(s):"]
+    lines = [f"✗ — {len(errors)} violation(s):"]
     lines += [f"  • {e}" for e in errors]
     return "\n".join(lines)

@@ -20,6 +20,8 @@ from backend.api.aas       import router as aas_router
 from backend.api.fire_risk import router as fire_risk_router
 from backend.store import init_db
 from semantic_layer.aas_bridge import write_aas_to_fuseki
+from backend.api.semantic_query import router as semantic_query_router
+app.include_router(semantic_query_router)
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +29,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    seeded = await write_aas_to_fuseki(config.FUSEKI_DATA_URL)
+    seeded = await write_aas_to_fuseki(config.FUSEKI_ENDPOINT)
     if seeded:
         logger.info("AAS descriptors seeded into Fuseki")
     else:

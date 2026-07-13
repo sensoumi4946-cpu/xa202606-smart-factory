@@ -21,7 +21,6 @@ from backend.api.fire_risk import router as fire_risk_router
 from backend.store import init_db
 from semantic_layer.aas_bridge import write_aas_to_fuseki
 from backend.api.semantic_query import router as semantic_query_router
-app.include_router(semantic_query_router)
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +51,7 @@ app.include_router(alerts_router)
 app.include_router(semantic_router)
 app.include_router(aas_router)
 app.include_router(fire_risk_router)
+app.include_router(semantic_query_router)
 
 
 @app.get("/health")

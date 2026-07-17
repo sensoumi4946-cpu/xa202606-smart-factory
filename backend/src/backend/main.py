@@ -21,13 +21,20 @@ from backend.api.fire_risk import router as fire_risk_router
 from backend.api.analytics_api import router as analytics_router
 from backend.api.semantic_query import router as semantic_query_router
 from backend.security.auth import api_key_middleware
+from backend.api.federated import router as federated_router
+from backend.api.provenance_api import router as provenance_router
 
 from backend.store import init_db
 from semantic_layer.aas_bridge import write_aas_to_fuseki
+from semantic_layer.aas_live_sync import AASRegistry, watch_loop as aas_watch_loop
+from semantic_layer.semantic_provenance_audit import ProvenanceAuditLog
+import asyncio
 from backend.api.semantic_query import router as semantic_query_router
 
 logger = logging.getLogger(__name__)
 
+# module-level — place this BEFORE the lifespan function, after the imports
+_aas_registry_global = AASRegistry()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -37,8 +44,17 @@ async def lifespan(app: FastAPI):
         logger.info("AAS descriptors seeded into Fuseki")
     else:
         logger.warning("AAS seed skipped — Fuseki may not be ready yet")
+
+    watch_task = asyncio.create_task(
+        aas_watch_loop(_aas_registry_global, config.FUSEKI_ENDPOINT, poll_interval_seconds=30.0)
+    )
     yield
 
+    watch_task.cancel()
+    try:
+        await watch_task
+    except asyncio.CancelledError:
+        pass
 
 app = FastAPI(
     title="XA-202606 Smart Factory Backend",
@@ -58,6 +74,8 @@ app.include_router(aas_router)
 app.include_router(fire_risk_router)
 app.include_router(analytics_router)
 app.include_router(semantic_query_router)
+app.include_router(federated_router)
+app.include_router(provenance_router)
 
 
 @app.get("/health")

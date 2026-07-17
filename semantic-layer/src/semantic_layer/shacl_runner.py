@@ -10,7 +10,7 @@ _SHAPES_PATH = Path(__file__).parent / "shapes" / "observation_shapes.ttl"
 _shapes_cache: Graph | None = None
 
 
-def _load_shapes() -> Graph:
+def _load_all_shapes() -> Graph:
     global _shapes_cache
     if _shapes_cache is not None:
         return _shapes_cache
@@ -42,17 +42,19 @@ def validate(data_graph: Graph) -> ValidationReport:
     try:
         import pyshacl
     except ImportError:
-        # pyshacl not installed — fall back to the manual checks
         return _fallback_validate(data_graph)
 
-    shapes = _load_shapes()
+    shapes = _load_all_shapes()
 
-    conforms, results_graph, results_text = pyshacl.validate(
+    _result = pyshacl.validate(
         data_graph,
         shacl_graph=shapes,
-        inference="none",      
+        inference="none",
         abort_on_first=False,
     )
+    conforms = bool(_result[0])
+    results_graph = _result[1]
+    assert isinstance(results_graph, Graph)
 
     report = ValidationReport(conforms=conforms)
 
@@ -105,3 +107,38 @@ def _fallback_validate(data_graph: Graph) -> ValidationReport:
         report.conforms = False
 
     return report
+
+def validate_with_domain(data_graph: Graph) -> ValidationReport:
+   # Used by semantic_benchmark.py BM-3
+   from rdflib import URIRef
+   try:
+        from semantic_layer.shacl_domain_shapes import load_domain_shapes
+        combined = Graph()
+        combined += _load_all_shapes()
+        combined += load_domain_shapes()
+        import pyshacl
+        _result = pyshacl.validate(
+            data_graph, shacl_graph=combined, inference="none", abort_on_first=False
+        )
+        conforms = bool(_result[0])
+        results_graph = _result[1]
+        assert isinstance(results_graph, Graph)
+        report = ValidationReport(conforms=conforms)
+        
+        SH = "http://www.w3.org/ns/shacl#"
+        result_class  = URIRef(f"{SH}ValidationResult")
+        severity_prop = URIRef(f"{SH}resultSeverity")
+        message_prop  = URIRef(f"{SH}resultMessage")
+        warning_sev   = URIRef(f"{SH}Warning")
+        from rdflib.namespace import RDF
+        for node in results_graph.subjects(RDF.type, result_class):
+            msgs = list(results_graph.objects(node, message_prop))
+            msg_text = str(msgs[0]) if msgs else "(no message)"
+            sevs = list(results_graph.objects(node, severity_prop))
+            if sevs and sevs[0] == warning_sev:
+                report.warnings.append(msg_text)
+            else:
+                report.violations.append(msg_text)
+        return report
+   except ImportError:
+        return validate(data_graph)

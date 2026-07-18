@@ -1,104 +1,108 @@
-# Receives sensor readings from adapters and writes them to Fuseki.
+# receives UnifiedMessage from connectivity adapters
+# runs semantic gate, writes to SQLite and Fuseki.
 
 import logging
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
 from backend import config
+from backend.services.registry_singleton import aas_registry, provenance_audit
+from backend.services.analytics_ingest_bridge import analyse_after_ingest
 from semantic_layer.fuseki import write_to_fuseki
 from semantic_layer.observation_gate import check_and_prepare
 from semantic_layer.semantic_context_rules import evaluate_with_context
-from semantic_layer.semantic_provenance_audit import ProvenanceAuditLog
-from semantic_layer.aas_live_sync import AASRegistry, LiveDevice, register_device_in_fuseki
-from datetime import datetime, timezone
-
-_audit  = ProvenanceAuditLog()   
-_aas_registry = AASRegistry()    
+from semantic_layer.aas_live_sync import LiveDevice, register_device_in_fuseki
+from smart_factory_contracts.messages import (
+    Measurement, MeasurementType, Protocol, Subsystem, Unit, UnifiedMessage,
+)
+from backend.store import insert_sensor_data
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 
+_MTYPE = {m.value: m for m in MeasurementType}
+_UNIT  = {u.value: u for u in Unit}
+_PROTO = {p.value: p for p in Protocol}
+_SUB   = {s.value: s for s in Subsystem}
+
 
 class SensorReading(BaseModel):
     sensor_id: str
-    subsystem: str       
-    protocol: str        # "MQTT", "OPC-UA", "Modbus", "CoAP"
-    property_name: str   
+    subsystem: str
+    protocol: str
+    property_name: str
     value: float
     unit: str
-    timestamp: str       # ISO-8601 string, e.g. "2025-03-15T10:30:00Z"
+    timestamp: str
+
+
+def _to_unified(reading: SensorReading) -> UnifiedMessage:
+    mtype  = _MTYPE.get(reading.property_name.lower())
+    unit   = _UNIT.get(reading.unit.lower())
+    proto  = _PROTO.get(reading.protocol.lower())
+    sub    = _SUB.get(reading.subsystem.lower())
+
+    if mtype is None:
+        raise ValueError(f"Unknown property_name '{reading.property_name}'. Valid: {list(_MTYPE)}")
+    if unit is None:
+        raise ValueError(f"Unknown unit '{reading.unit}'. Valid: {list(_UNIT)}")
+    if proto is None:
+        raise ValueError(f"Unknown protocol '{reading.protocol}'. Valid: {list(_PROTO)}")
+    if sub is None:
+        raise ValueError(f"Unknown subsystem '{reading.subsystem}'. Valid: {list(_SUB)}")
+
+    return UnifiedMessage(
+        schema_version="v1",
+        device_id=reading.sensor_id,
+        subsystem=sub,
+        protocol=proto,
+        timestamp=datetime.now(timezone.utc),
+        measurements=[Measurement(type=mtype, value=reading.value, unit=unit)],
+    )
+
+
 @router.post("/reading")
-async def ingest_reading(reading: SensorReading, background_tasks: BackgroundTasks) -> dict[str, Any]:
+async def ingest_reading(
+    reading: SensorReading,
+    background_tasks: BackgroundTasks,
+) -> dict[str, Any]:
     ingest_id = str(uuid.uuid4())
 
-    from smart_factory_contracts.messages import (
-        Measurement, MeasurementType, Protocol, Subsystem, Unit, UnifiedMessage,
-    )
-    from datetime import datetime, timezone as _tz
-
-    _mtype_map = {
-        "temperature": MeasurementType.TEMPERATURE,
-        "humidity": MeasurementType.HUMIDITY,
-        "co": MeasurementType.CO,
-        "smoke": MeasurementType.SMOKE,
-        "combustible_gas": MeasurementType.COMBUSTIBLE_GAS,
-        "distance": MeasurementType.DISTANCE,
-        "count": MeasurementType.COUNT,
-        "occupancy": MeasurementType.OCCUPANCY,
-        "light_state": MeasurementType.LIGHT_STATE,
-    }
-    _unit_map = {
-        "celsius": Unit.CELSIUS, "percent": Unit.PERCENT,
-        "ppm": Unit.PPM, "cm": Unit.CM, "count": Unit.COUNT, "boolean": Unit.BOOLEAN,
-    }
-    _proto_map = {
-        "mqtt": Protocol.MQTT, "modbus": Protocol.MODBUS,
-        "opcua": Protocol.OPCUA, "rest": Protocol.REST,
-    }
-    _sub_map = {
-        "temp_humidity": Subsystem.TEMP_HUMIDITY, "lighting": Subsystem.LIGHTING,
-        "gas": Subsystem.GAS, "agv": Subsystem.AGV, "counting": Subsystem.COUNTING,
-    }
-
     try:
-        unified_msg = UnifiedMessage(
-            schema_version="v1",
-            device_id=reading.sensor_id,
-            subsystem=_sub_map.get(reading.subsystem.lower(), Subsystem.GAS),
-            protocol=_proto_map.get(reading.protocol.lower(), Protocol.MQTT),
-            timestamp=datetime.now(_tz.utc),
-            measurements=[Measurement(
-                type=_mtype_map.get(reading.property_name.lower(), MeasurementType.TEMPERATURE),
-                value=reading.value,
-                unit=_unit_map.get(reading.unit.lower(), Unit.CELSIUS),
-            )],
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Could not build UnifiedMessage: {exc}") from exc
+        msg = _to_unified(reading)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
-    gate = check_and_prepare(unified_msg)
-
+    # SHACL + QUDT + provenance
+    gate = check_and_prepare(msg)
     if not gate.accepted:
-        _audit.record_attempt(
+        provenance_audit.record_attempt(
             ingest_id=ingest_id,
             device_id=reading.sensor_id,
             protocol=reading.protocol,
-            observation_timestamp=datetime.now(_tz.utc),
+            observation_timestamp=datetime.now(timezone.utc),
             kg_written=False,
-            error="SHACL gate rejected",
+            error="SHACL gate rejected: " + "; ".join(gate.report.violations),
         )
         raise HTTPException(
             status_code=422,
-            detail={
-                "error": "Observation failed semantic validation",
-                "violations": gate.report.violations,
-                "warnings": gate.report.warnings,
-            },
+            detail={"error": "Semantic validation failed", "violations": gate.report.violations},
         )
 
+    record_id = insert_sensor_data(msg)
+
+    fired_alerts = analyse_after_ingest(
+        device_id=reading.sensor_id,
+        subsystem=reading.subsystem,
+        protocol=reading.protocol,
+        measurements=[{"type": reading.property_name, "value": reading.value, "unit": reading.unit}],
+    )
+
+    ctx_alerts = []
     if gate.graph is not None:
         ctx_alerts = evaluate_with_context(
             device_id=reading.sensor_id,
@@ -106,8 +110,8 @@ async def ingest_reading(reading: SensorReading, background_tasks: BackgroundTas
             value=reading.value,
             graph=gate.graph,
         )
-        for alert in ctx_alerts:
-            logger.warning("Semantic alert: %s", alert.message)
+        for a in ctx_alerts:
+            logger.warning("Context alert: %s", a.message)
 
     device = LiveDevice(
         device_id=reading.sensor_id,
@@ -115,31 +119,34 @@ async def ingest_reading(reading: SensorReading, background_tasks: BackgroundTas
         protocol=reading.protocol.lower(),
         measurement_types=[reading.property_name],
     )
-    if _aas_registry.observe(device):
+    if aas_registry.observe(device):
         background_tasks.add_task(register_device_in_fuseki, device, config.FUSEKI_ENDPOINT)
-
-    kg_written = await write_to_fuseki(unified_msg, config.FUSEKI_ENDPOINT)
-
-    from datetime import datetime as _dt
-    _audit.record_attempt(
+        
+    kg_written = await write_to_fuseki(msg, config.FUSEKI_ENDPOINT)
+    provenance_audit.record_attempt(
         ingest_id=ingest_id,
         device_id=reading.sensor_id,
         protocol=reading.protocol,
-        observation_timestamp=datetime.now(_tz.utc),
+        observation_timestamp=datetime.now(timezone.utc),
         kg_written=kg_written,
         error=None if kg_written else "Fuseki unreachable",
     )
 
     return {
         "status": "ok",
-        "sensor_id": reading.sensor_id,
+        "record_id": record_id,
         "ingest_id": ingest_id,
         "kg_written": kg_written,
+        "anomaly_alerts": len(fired_alerts),
+        "semantic_alerts": len(ctx_alerts),
     }
 
 
 @router.post("/batch")
-async def ingest_batch(readings: list[SensorReading], background_tasks: BackgroundTasks) -> dict[str, Any]:
+async def ingest_batch(
+    readings: list[SensorReading],
+    background_tasks: BackgroundTasks,
+) -> dict[str, Any]:
     accepted, rejected = [], []
     for r in readings:
         try:
@@ -147,4 +154,9 @@ async def ingest_batch(readings: list[SensorReading], background_tasks: Backgrou
             accepted.append(r.sensor_id)
         except HTTPException as exc:
             rejected.append({"sensor_id": r.sensor_id, "reason": str(exc.detail)})
-    return {"total": len(readings), "accepted": len(accepted), "rejected": len(rejected), "rejected_detail": rejected}
+    return {
+        "total": len(readings),
+        "accepted": len(accepted),
+        "rejected": len(rejected),
+        "rejected_detail": rejected,
+    }

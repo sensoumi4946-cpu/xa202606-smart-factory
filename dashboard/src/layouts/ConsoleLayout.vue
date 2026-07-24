@@ -32,7 +32,11 @@ onUnmounted(() => {
 <template>
   <div class="console">
     <header class="top-bar">
-      <span class="brand">XA-202606 Smart Factory</span>
+      <span class="brand">
+        <span class="mark" aria-hidden="true"></span>
+        <span class="name mono">XA-202606</span>
+        <span class="title">智慧工厂安全监控平台</span>
+      </span>
       <nav class="tabs">
         <button
           v-for="t in TABS"
@@ -45,7 +49,7 @@ onUnmounted(() => {
         </button>
       </nav>
       <div class="right">
-        <span class="clock">{{ clock }}</span>
+        <span class="clock mono">{{ clock }}</span>
         <button class="refresh" @click="emit('refresh')">刷新</button>
       </div>
     </header>
@@ -67,37 +71,65 @@ onUnmounted(() => {
 .top-bar {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 8px 16px;
-  background: #1e293b;
-  border-bottom: 1px solid #334155;
+  gap: 20px;
+  padding: 10px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
   flex-wrap: wrap;
 }
 .brand {
-  color: #38bdf8;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+/* Hazard-stripe brand mark */
+.mark {
+  width: 14px;
+  height: 22px;
+  border-radius: 3px;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--warn) 0 5px,
+    var(--surface-2) 5px 10px
+  );
+}
+.name {
+  color: var(--warn);
+  font-weight: 700;
+  font-size: var(--fs-md);
+  letter-spacing: 0.06em;
+}
+.title {
+  color: var(--text);
   font-weight: 600;
-  font-size: 1rem;
+  font-size: var(--fs-md);
 }
 .tabs {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   flex: 1;
 }
 .tab {
   background: transparent;
-  color: #94a3b8;
+  color: var(--text-dim);
   border: none;
+  border-bottom: 2px solid transparent;
   padding: 6px 16px;
-  border-radius: 6px;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: var(--fs-md);
+  font-family: var(--font-ui);
 }
 .tab:hover {
-  color: #e2e8f0;
+  color: var(--text);
+}
+.tab:focus-visible {
+  outline: 2px solid var(--warn);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 .tab.active {
-  background: #0f172a;
-  color: #38bdf8;
+  color: var(--warn);
+  border-bottom-color: var(--warn);
 }
 .right {
   display: flex;
@@ -105,27 +137,35 @@ onUnmounted(() => {
   gap: 12px;
 }
 .clock {
-  color: #94a3b8;
-  font-size: 0.82rem;
-  font-family: monospace;
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
 }
 .refresh {
-  background: #334155;
-  color: #e2e8f0;
-  border: none;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--line-strong);
   padding: 5px 14px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 0.82rem;
+  font-size: var(--fs-sm);
+  font-family: var(--font-ui);
 }
 .refresh:hover {
-  background: #475569;
+  border-color: var(--warn);
+  color: var(--warn);
+}
+.refresh:focus-visible {
+  outline: 2px solid var(--warn);
+  outline-offset: 2px;
 }
 .content {
   flex: 1;
-  padding: 16px 24px;
+  padding: var(--gap) 24px;
 }
-@media (max-width: 600px) {
+@media (max-width: 700px) {
+  .title {
+    display: none;
+  }
   .content {
     padding: 12px 14px;
   }

@@ -233,3 +233,72 @@ export async function fetchSystemStatus(): Promise<SystemStatus> {
     recentCount: recent.total,
   }
 }
+
+// ---- Semantic gate & SPARQL (Phase: KG interactivity) ----------------
+
+export interface GateStatus {
+  status: 'passed' | 'rejected'
+  checked_at: string
+  last_device?: string
+  reason?: string
+  passed_count?: number
+  rejected_count?: number
+}
+
+// Live SHACL gate status. Backend contract (to be implemented in
+// backend/api/semantic.py, backed by observation_gate.py):
+//   GET /api/v1/semantic/gate-status ->
+//     { status, checked_at, last_device?, reason?, passed_count?, rejected_count? }
+// Returns null when the endpoint is not yet available (404) so the UI can
+// render a "pending integration" state instead of an error.
+export async function fetchGateStatus(): Promise<GateStatus | null> {
+  const resp = await fetch(`${BASE_URL}api/v1/semantic/gate-status`)
+  if (resp.status === 404) return null
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  return resp.json()
+}
+
+export interface SparqlResult {
+  columns: string[]
+  rows: Array<Record<string, string>>
+}
+
+// Runs one of the named semantic views (GET /api/v1/semantic?view=X) and
+// flattens the aggregated response into a tabular shape for display.
+export async function runSemanticView(view: string): Promise<SparqlResult> {
+  const data = await fetchSemanticView(view)
+  const rows = data.results.map((r) => ({
+    sensor: r.sensor,
+    subsystem: r.subsystem,
+    observes: r.observes.join(', '),
+    protocol: r.protocol,
+  }))
+  return { columns: ['sensor', 'subsystem', 'observes', 'protocol'], rows }
+}
+
+// Custom SPARQL passthrough. Backend contract (proposed):
+//   POST /api/v1/semantic/query  { "query": "<sparql>" }
+//     -> SPARQL JSON results ({ head.vars, results.bindings })
+// Throws with a descriptive message when the endpoint is missing so the
+// panel can tell the user custom queries need backend integration.
+export async function runSparqlQuery(query: string): Promise<SparqlResult> {
+  const resp = await fetch(`${BASE_URL}api/v1/semantic/query`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query }),
+  })
+  if (resp.status === 404 || resp.status === 405) {
+    throw new Error('ENDPOINT_MISSING')
+  }
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  const data = await resp.json()
+  const vars: string[] = data?.head?.vars ?? []
+  const bindings: Array<Record<string, { value: string }>> =
+    data?.results?.bindings ?? []
+  return {
+    columns: vars,
+    rows: bindings.map((b) =>
+      Object.fromEntries(vars.map((v) => [v, b[v]?.value ?? ''])),
+    ),
+  }
+}

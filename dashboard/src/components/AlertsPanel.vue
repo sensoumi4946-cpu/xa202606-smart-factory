@@ -1,4 +1,7 @@
 <script setup lang="ts">
+// Live alert feed. Cross-subsystem correlation alerts get their own
+// stronger row treatment so single-sensor warnings and correlated events
+// read as different severities at a glance.
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { fetchAlerts, type AlertItem } from '../api'
 
@@ -12,12 +15,17 @@ const filtered = computed(() => {
   return alerts.value.filter((a) => a.level === filterLevel.value)
 })
 
+function isCross(a: AlertItem): boolean {
+  return a.subsystem === 'cross_subsystem'
+}
+
 async function refresh() {
   try {
     const data = await fetchAlerts({ limit: 20 })
     alerts.value = data.items
+    error.value = ''
   } catch {
-    error.value = 'Fetch failed'
+    error.value = '告警数据加载失败'
   }
 }
 
@@ -33,35 +41,132 @@ onUnmounted(() => {
 
 <template>
   <div class="panel">
-    <h3>告警面板</h3>
-    <select v-model="filterLevel" class="filter">
-      <option value="">All</option>
-      <option value="warning">Warning</option>
-      <option value="critical">Critical</option>
-    </select>
+    <header class="head">
+      <h3>告警面板</h3>
+      <select v-model="filterLevel" class="filter" aria-label="按级别筛选">
+        <option value="">全部</option>
+        <option value="warning">Warning</option>
+        <option value="critical">Critical</option>
+      </select>
+    </header>
     <div v-if="error" class="err">{{ error }}</div>
-    <div v-if="!filtered.length" class="empty">No alerts</div>
-    <div v-for="a in filtered" :key="a.id" class="alert-row" :class="a.level">
-      <span class="level-badge" :class="a.level">{{ a.level }}</span>
-      <span class="msg">{{ a.message }}</span>
-      <span class="time">{{ new Date(a.triggered_at).toLocaleTimeString() }}</span>
+    <div v-else-if="!filtered.length" class="empty">
+      暂无告警 — 系统运行正常
     </div>
+    <TransitionGroup v-else name="row" tag="div" class="rows">
+      <div
+        v-for="a in filtered"
+        :key="a.id"
+        class="alert-row"
+        :class="[a.level, { cross: isCross(a) }]"
+      >
+        <span class="level-badge mono" :class="a.level">
+          {{ isCross(a) ? 'CROSS' : a.level }}
+        </span>
+        <span class="msg" :title="a.message">{{ a.message }}</span>
+        <span class="time mono">{{
+          new Date(a.triggered_at).toLocaleTimeString()
+        }}</span>
+      </div>
+    </TransitionGroup>
   </div>
 </template>
 
 <style scoped>
-.panel { background: #1e293b; border-radius: 8px; padding: 12px; }
-h3 { color: #38bdf8; font-size: 0.95rem; margin: 0 0 8px; }
-.filter { background: #0f172a; color: #e2e8f0; border: 1px solid #334155; padding: 2px 6px; border-radius: 4px; margin-bottom: 8px; }
-.alert-row { display: flex; gap: 8px; align-items: center; padding: 6px 8px; font-size: 0.8rem; border-radius: 4px; margin-bottom: 4px; }
-.alert-row.warning { background: #78350f; }
-.alert-row.critical { background: #7f1d1d; animation: blink 1s infinite; }
-.level-badge { padding: 1px 6px; border-radius: 3px; font-weight: 600; text-transform: uppercase; font-size: 0.7rem; }
-.level-badge.warning { background: #fbbf24; color: #1e293b; }
-.level-badge.critical { background: #ef4444; color: #fff; }
-.msg { flex: 1; color: #e2e8f0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.time { color: #94a3b8; white-space: nowrap; }
-.empty { color: #64748b; padding: 12px 0; }
-.err { color: #ef4444; font-size: 0.8rem; }
-@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+.panel {
+  padding: var(--pad);
+}
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+h3 {
+  color: var(--text);
+  font-size: var(--fs-md);
+  margin: 0;
+}
+.filter {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--line-strong);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+}
+.rows {
+  max-height: 300px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.alert-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 10px;
+  font-size: var(--fs-sm);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid transparent;
+}
+.alert-row.warning {
+  background: var(--warn-bg);
+  border-left-color: var(--warn);
+}
+.alert-row.critical {
+  background: var(--danger-bg);
+  border-left-color: var(--danger);
+}
+.alert-row.cross {
+  border: 1px solid var(--danger);
+  border-left-width: 3px;
+}
+.level-badge {
+  padding: 1px 7px;
+  border-radius: 3px;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: var(--fs-xs);
+  flex: none;
+}
+.level-badge.warning {
+  background: var(--warn);
+  color: #14100a;
+}
+.level-badge.critical {
+  background: var(--danger);
+  color: #fff;
+}
+.msg {
+  flex: 1;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.time {
+  color: var(--text-dim);
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+}
+.empty {
+  color: var(--text-faint);
+  padding: 16px 0;
+  font-size: var(--fs-sm);
+}
+.err {
+  color: var(--danger);
+  font-size: var(--fs-sm);
+  padding: 8px 0;
+}
+.row-enter-active {
+  transition: all 0.25s var(--ease);
+}
+.row-enter-from {
+  opacity: 0;
+  transform: translateY(-6px);
+}
 </style>

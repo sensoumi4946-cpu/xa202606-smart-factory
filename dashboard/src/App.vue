@@ -26,11 +26,3 @@ const VIEWS: Record<string, unknown> = {
   </ConsoleLayout>
 </template>
 
-<style>
-body {
-  margin: 0;
-  font-family: 'Segoe UI', system-ui, sans-serif;
-  background: #0f172a;
-  color: #e2e8f0;
-}
-</style>

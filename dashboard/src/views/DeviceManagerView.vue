@@ -9,7 +9,7 @@ import { fetchDevices, fetchLatestDeduped, type LatestDevice } from '../api'
 import { DEVICE_META, protoLabel } from '../deviceMeta'
 import DeviceDrawer from '../components/DeviceDrawer.vue'
 
-const FRESH_MS = 30_000
+const FRESH_MS = 120_000
 
 const ids = ref<string[]>([])
 const latest = ref<LatestDevice[]>([])

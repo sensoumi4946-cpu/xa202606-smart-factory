@@ -4,15 +4,19 @@ version = "0.1.0"
 description = "Semantic interoperability layer for XA-202606 Smart Factory platform"
 requires-python = ">=3.11"
 dependencies = [
-    "rdflib>=7.0",
+    "rdflib>=6.0",
+    "requests>=2.31.0",
     "httpx>=0.28",
+    "pyshacl>=0.25.0",
     "smart-factory-contracts",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0",
-    "pytest-asyncio>=0.24",
+    "pytest>=7.0",
+    "rdflib>=6.0",
+    "pyshacl>=0.25.0",
+    "requests>=2.31.0",
 ]
 
 [build-system]

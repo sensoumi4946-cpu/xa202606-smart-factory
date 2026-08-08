@@ -1,8 +1,5 @@
 # GET /api/v1/history — time-range sensor data query with pagination.
-#
-# Extends existing query capabilities with explicit since/until range,
-# offset-based pagination, and total count. The existing GET /api/v1/data
-# endpoint continues to work unchanged.
+
 from datetime import datetime
 from typing import Optional
 

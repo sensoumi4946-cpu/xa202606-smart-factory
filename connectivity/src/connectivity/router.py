@@ -1,12 +1,6 @@
 # Message router — receives UnifiedMessage objects from any adapter
 # and forwards them to the backend API with retry logic.
-#
-# Retry policy: 3 attempts, 1s interval between each. If all fail
-# the message is dropped and an error is logged. This is fire-and-forget
-# for sensor data; control commands will get stronger guarantees later.
-#
-# Using connectivity_models.BACKEND_URL (module attribute, not a local
-# binding) so tests can monkeypatch the URL at runtime.
+
 import json
 import logging
 import sys
@@ -37,13 +31,14 @@ def log_event(event: str, level: str, device_id: Optional[str] = None, **kwargs)
     print(json.dumps(entry), file=sys.stderr if level == "error" else sys.stdout)
 
 
+
 async def forward_to_backend(msg: UnifiedMessage) -> bool:
     payload = msg.model_dump(mode="json")
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.post(
-                    f"{connectivity_models.BACKEND_URL}/api/v1/data",
+                    f"{connectivity_models.BACKEND_URL}/ingest/api/v1/data",
                     json=payload,
                 )
             if resp.status_code in (200, 201):
@@ -67,13 +62,7 @@ async def forward_to_backend(msg: UnifiedMessage) -> bool:
             )
         if attempt < MAX_RETRIES:
             import asyncio
-
             await asyncio.sleep(RETRY_INTERVAL)
 
-    log_event(
-        "forward_failed",
-        "error",
-        device_id=msg.device_id,
-        retries=MAX_RETRIES,
-    )
+    log_event("forward_failed", "error", device_id=msg.device_id, retries=MAX_RETRIES)
     return False

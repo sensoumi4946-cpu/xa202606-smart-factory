@@ -11,7 +11,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from smart_factory_contracts.messages import UnifiedMessage
-
 from backend.config import DATABASE_PATH, LATEST_WINDOW_MINUTES
 from backend.rules import evaluate
 

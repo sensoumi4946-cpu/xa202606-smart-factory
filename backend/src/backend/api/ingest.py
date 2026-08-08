@@ -160,3 +160,47 @@ async def ingest_batch(
         "rejected": len(rejected),
         "rejected_detail": rejected,
     }
+
+@router.post("/api/v1/data")
+async def ingest_unified_data(
+    msg: UnifiedMessage,
+    background_tasks: BackgroundTasks,
+) -> dict[str, Any]:
+    ingest_id = str(uuid.uuid4())
+    gate = check_and_prepare(msg)
+    if not gate.accepted:
+        provenance_audit.record_attempt(
+            ingest_id=ingest_id,
+            device_id=msg.device_id,
+            protocol=msg.protocol.value if hasattr(msg.protocol, "value") else str(msg.protocol),
+            observation_timestamp=datetime.now(timezone.utc),
+            kg_written=False,
+            error="SHACL gate rejected: " + "; ".join(gate.report.violations),
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "Semantic validation failed", "violations": gate.report.violations},
+        )
+
+    record_id = insert_sensor_data(msg)
+
+    # trigger live device registry & Fuseki sync
+    if msg.measurements:
+        first_m = msg.measurements[0]
+        device = LiveDevice(
+            device_id=msg.device_id,
+            subsystem=msg.subsystem.value if hasattr(msg.subsystem, "value") else str(msg.subsystem),
+            protocol=msg.protocol.value if hasattr(msg.protocol, "value") else str(msg.protocol),
+            measurement_types=[first_m.type.value if hasattr(first_m.type, "value") else str(first_m.type)],
+        )
+        if aas_registry.observe(device):
+            background_tasks.add_task(register_device_in_fuseki, device, config.FUSEKI_ENDPOINT)
+
+    kg_written = await write_to_fuseki(msg, config.FUSEKI_ENDPOINT)
+    
+    return {
+        "status": "ok",
+        "record_id": record_id,
+        "ingest_id": ingest_id,
+        "kg_written": kg_written,
+    }

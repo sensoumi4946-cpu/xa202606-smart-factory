@@ -73,10 +73,9 @@ def check_and_prepare(
                 inference="none",
                 abort_on_first=False,
             )
-            conforms = bool(_result[0])
             results_graph = _result[1]
             assert isinstance(results_graph, Graph)
-            report = ValidationReport(conforms=conforms)
+            report = ValidationReport(conforms=True)
             SH = "http://www.w3.org/ns/shacl#"
             result_class  = URIRef(f"{SH}ValidationResult")
             severity_prop = URIRef(f"{SH}resultSeverity")
@@ -90,6 +89,7 @@ def check_and_prepare(
                     report.warnings.append(msg_text)
                 else:
                     report.violations.append(msg_text)
+            report.conforms = len(report.violations) == 0
         except ImportError:
             report = validate(g)
     else:
@@ -98,7 +98,7 @@ def check_and_prepare(
     if not report.conforms:
         return GateResult(accepted=False, graph=None, report=report)
 
-    # Step 4: stamp provenance
+    # stamp provenance
     if add_prov:
         _add_provenance(g, msg)
 

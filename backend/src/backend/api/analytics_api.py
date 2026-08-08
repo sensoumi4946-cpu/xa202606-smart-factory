@@ -114,3 +114,7 @@ async def pending_anomalies() -> dict[str, Any]:
         "pending_count": len(pending),
         "items": pending,
     }
+# Public aliases
+detector = _detector
+correlator = _correlator
+alert_history = _alert_history

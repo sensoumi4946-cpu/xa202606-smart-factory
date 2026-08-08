@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sqlite3
+import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -16,7 +17,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_AUDIT_DB = Path("/tmp/semantic_provenance_audit.db")
+DEFAULT_AUDIT_DB = Path(tempfile.gettempdir()) / "semantic_provenance_audit.db"
 
 _CREATE_TABLE = """\
 CREATE TABLE IF NOT EXISTS prov_audit (
@@ -70,6 +71,9 @@ class ProvenanceAuditLog:
         now = datetime.now(timezone.utc).isoformat()
         with _db_conn(self._db) as conn:
             conn.execute(
+                "INSERT INTO prov_audit "
+                "(ingest_id, device_id, protocol, timestamp, kg_written, written_at, error) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     ingest_id,
                     device_id,
@@ -86,6 +90,8 @@ class ProvenanceAuditLog:
         now = datetime.now(timezone.utc).isoformat()
         with _db_conn(self._db) as conn:
             conn.execute(
+                "UPDATE prov_audit SET kg_written = 1, written_at = ? "
+                "WHERE ingest_id = ?",
                 (now, ingest_id),
             )
             conn.commit()
@@ -93,6 +99,8 @@ class ProvenanceAuditLog:
     def increment_retry(self, ingest_id: str, error: Optional[str] = None) -> None:
         with _db_conn(self._db) as conn:
             conn.execute(
+                "UPDATE prov_audit SET retry_count = retry_count + 1, error = ? "
+                "WHERE ingest_id = ?",
                 (error, ingest_id),
             )
             conn.commit()
@@ -100,6 +108,8 @@ class ProvenanceAuditLog:
     def pending_retries(self, limit: int = 50) -> list[dict]:
         with _db_conn(self._db) as conn:
             rows = conn.execute(
+                "SELECT * FROM prov_audit WHERE kg_written = 0 "
+                "AND retry_count < ? ORDER BY id LIMIT ?",
                 (_RETRY_LIMIT, limit),
             ).fetchall()
         return [dict(r) for r in rows]

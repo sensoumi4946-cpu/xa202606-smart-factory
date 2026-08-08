@@ -31,8 +31,6 @@ from semantic_layer.aas_live_sync import watch_loop as aas_watch_loop
 from backend.services.retry_service import retry_loop
 from backend.api.health_check import router as health_router
 import asyncio
-import asyncio
-from backend.api.semantic_query import router as semantic_query_router
 
 logger = logging.getLogger(__name__)
 

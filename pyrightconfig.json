@@ -1,0 +1,15 @@
+{
+  "include": ["."],
+  "extraPaths": [
+    ".",
+    "shared/src",
+    "semantic-layer/src",
+    "backend/src",
+    "connectivity/src",
+    "analytics/src"
+  ],
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": "warning",
+  "reportMissingModuleSource": "none"
+}

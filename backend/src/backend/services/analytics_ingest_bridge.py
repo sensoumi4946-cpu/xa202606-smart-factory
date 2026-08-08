@@ -8,7 +8,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 try:
-    from backend.api.analytics_api import _detector, _correlator, _alert_history
+    from backend.api.analytics_api import detector as _detector, correlator as _correlator, alert_history as _alert_history
     _analytics_available = True
 except ImportError:
     _analytics_available = False

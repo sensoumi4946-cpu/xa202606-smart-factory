@@ -62,6 +62,7 @@ def test_gate_adds_provenance():
     msg = _make_msg()
     result = check_and_prepare(msg, add_prov=True, use_domain_shapes=False)
     assert result.accepted
+    assert result.graph is not None  
     agents = list(result.graph.subjects(RDF.type, URIRef(f"{PROV}SoftwareAgent")))
     assert len(agents) >= 1
 

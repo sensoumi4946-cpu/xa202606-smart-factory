@@ -1,7 +1,7 @@
 services:
 
   fuseki:
-    image: stain/jena-fuseki:5.0.0
+    image: apache/jena-fuseki:4.10.0
     ports:
       - "3030:3030"
     environment:
@@ -27,7 +27,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      FUSEKI_ENDPOINT: "http://fuseki:3030/factory/data"
+      FUSEKI_ENDPOINT: "http://localhost:3030/factory"
       FUSEKI_QUERY_URL: "http://fuseki:3030/factory/sparql"
       MQTT_BROKER_HOST: "mosquitto"
       DATABASE_PATH: "/data/smart_factory.db"

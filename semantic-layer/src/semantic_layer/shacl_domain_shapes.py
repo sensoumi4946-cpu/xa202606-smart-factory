@@ -13,29 +13,19 @@ DOMAIN_SHAPES_TTL = """\
 @prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix qudt:  <http://qudt.org/schema/qudt/> .
 
-# Temperature observation: physical range + allowed units
-
-sf:TemperatureObservationShape
+sf:TemperatureBranch
     a sh:NodeShape ;
-    sh:targetClass sosa:Observation ;
-    rdfs:comment "Structural + domain constraint for temperature observations." ;
-
-    # Only applies to observations of measuresTemperature
     sh:property [
         sh:path sosa:observedProperty ;
         sh:hasValue sf:measuresTemperature ;
     ] ;
-
-    # Physical range: −60 °C to 150 °C
     sh:property [
         sh:path sosa:hasSimpleResult ;
         sh:minInclusive -60.0 ;
         sh:maxInclusive 150.0 ;
-        sh:message "Temperature value must be in range [−60, 150] °C." ;
+        sh:message "Temperature value must be in range [-60, 150] C." ;
         sh:severity sh:Violation ;
     ] ;
-
-    # Unit must be celsius, fahrenheit, or kelvin
     sh:property [
         sh:path sf:hasUnit ;
         sh:in ( "celsius" "fahrenheit" "kelvin" ) ;
@@ -43,54 +33,19 @@ sf:TemperatureObservationShape
         sh:severity sh:Violation ;
     ] .
 
-# Gas concentration: physical range + unit
-
-sf:GasObservationShape
+sf:HumidityBranch
     a sh:NodeShape ;
-    sh:targetClass sosa:Observation ;
-    rdfs:comment "Domain constraint for gas sensor observations (CO, smoke, combustible gas)." ;
-
-    sh:or (
-        [ sh:property [ sh:path sosa:observedProperty ; sh:hasValue sf:measuresCO           ] ]
-        [ sh:property [ sh:path sosa:observedProperty ; sh:hasValue sf:measuresSmoke         ] ]
-        [ sh:property [ sh:path sosa:observedProperty ; sh:hasValue sf:measuresCombustibleGas] ]
-    ) ;
-
-    sh:property [
-        sh:path sosa:hasSimpleResult ;
-        sh:minInclusive 0.0 ;
-        sh:maxInclusive 10000.0 ;
-        sh:message "Gas concentration must be in range [0, 10000] ppm." ;
-        sh:severity sh:Violation ;
-    ] ;
-
-    sh:property [
-        sh:path sf:hasUnit ;
-        sh:in ( "ppm" ) ;
-        sh:message "Gas concentration unit must be 'ppm'." ;
-        sh:severity sh:Violation ;
-    ] .
-
-# Humidity: range [0, 100] %, unit must be percent
-
-sf:HumidityObservationShape
-    a sh:NodeShape ;
-    sh:targetClass sosa:Observation ;
-    rdfs:comment "Domain constraint for humidity observations." ;
-
     sh:property [
         sh:path sosa:observedProperty ;
         sh:hasValue sf:measuresHumidity ;
     ] ;
-
     sh:property [
         sh:path sosa:hasSimpleResult ;
         sh:minInclusive 0.0 ;
         sh:maxInclusive 100.0 ;
-        sh:message "Humidity must be in range [0, 100] %." ;
+        sh:message "Humidity must be in range [0, 100] percent." ;
         sh:severity sh:Violation ;
     ] ;
-
     sh:property [
         sh:path sf:hasUnit ;
         sh:in ( "percent" ) ;
@@ -98,17 +53,32 @@ sf:HumidityObservationShape
         sh:severity sh:Violation ;
     ] .
 
-# AGV distance: must be positive, unit cm
-
-sf:DistanceObservationShape
+sf:GasBranch
     a sh:NodeShape ;
-    sh:targetClass sosa:Observation ;
+    sh:property [
+        sh:path sosa:observedProperty ;
+        sh:in ( sf:measuresCO sf:measuresSmoke sf:measuresCombustibleGas ) ;
+    ] ;
+    sh:property [
+        sh:path sosa:hasSimpleResult ;
+        sh:minInclusive 0.0 ;
+        sh:maxInclusive 10000.0 ;
+        sh:message "Gas concentration must be in range [0, 10000] ppm." ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path sf:hasUnit ;
+        sh:in ( "ppm" ) ;
+        sh:message "Gas concentration unit must be 'ppm'." ;
+        sh:severity sh:Violation ;
+    ] .
 
+sf:DistanceBranch
+    a sh:NodeShape ;
     sh:property [
         sh:path sosa:observedProperty ;
         sh:hasValue sf:measuresDistance ;
     ] ;
-
     sh:property [
         sh:path sosa:hasSimpleResult ;
         sh:minInclusive 0.0 ;
@@ -116,13 +86,88 @@ sf:DistanceObservationShape
         sh:message "AGV distance must be in range [0, 2000] cm." ;
         sh:severity sh:Violation ;
     ] ;
-
     sh:property [
         sh:path sf:hasUnit ;
         sh:in ( "cm" "mm" ) ;
         sh:message "Distance unit must be 'cm' or 'mm'." ;
         sh:severity sh:Violation ;
     ] .
+
+sf:CountBranch
+    a sh:NodeShape ;
+    sh:property [
+        sh:path sosa:observedProperty ;
+        sh:hasValue sf:measuresCount ;
+    ] ;
+    sh:property [
+        sh:path sosa:hasSimpleResult ;
+        sh:minInclusive 0.0 ;
+        sh:maxInclusive 100000.0 ;
+        sh:message "Count value must be zero or a positive number." ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path sf:hasUnit ;
+        sh:in ( "count" ) ;
+        sh:message "Count unit must be 'count'." ;
+        sh:severity sh:Violation ;
+    ] .
+
+sf:OccupancyBranch
+    a sh:NodeShape ;
+    sh:property [
+        sh:path sosa:observedProperty ;
+        sh:hasValue sf:measuresOccupancy ;
+    ] ;
+    sh:property [
+        sh:path sosa:hasSimpleResult ;
+        sh:in ( "0.0"^^xsd:double "1.0"^^xsd:double ) ;
+        sh:message "Occupancy value must be 0 or 1." ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path sf:hasUnit ;
+        sh:in ( "boolean" ) ;
+        sh:message "Occupancy unit must be 'boolean'." ;
+        sh:severity sh:Violation ;
+    ] .
+
+sf:LightStateBranch
+    a sh:NodeShape ;
+    sh:property [
+        sh:path sosa:observedProperty ;
+        sh:hasValue sf:measuresLightState ;
+    ] ;
+    sh:property [
+        sh:path sosa:hasSimpleResult ;
+        sh:in ( "0.0"^^xsd:double "1.0"^^xsd:double ) ;
+        sh:message "Light state value must be 0 or 1." ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path sf:hasUnit ;
+        sh:in ( "boolean" ) ;
+        sh:message "Light state unit must be 'boolean'." ;
+        sh:severity sh:Violation ;
+    ] .
+
+# ── Dispatcher: every Observation must satisfy exactly one branch above ──
+
+sf:ObservationDomainShape
+    a sh:NodeShape ;
+    sh:targetClass sosa:Observation ;
+    rdfs:comment "Routes each observation to the ONE branch matching its measured property, instead of forcing it to satisfy all branches." ;
+    sh:or (
+        sf:TemperatureBranch
+        sf:HumidityBranch
+        sf:GasBranch
+        sf:DistanceBranch
+        sf:CountBranch
+        sf:OccupancyBranch
+        sf:LightStateBranch
+    ) ;
+    sh:message "Observation does not satisfy the domain constraints for any known measurement type." ;
+    sh:severity sh:Violation .
 
 # Subsystem membership: sensor must belong to a known subsystem (Warning)
 
@@ -145,7 +190,7 @@ sf:SensorSubsystemShape
         sh:severity sh:Warning ;
     ] .
 
-# 6.  QUDT enrichment presence check (Warning — only if harmonizer ran)
+# QUDT enrichment presence check (Warning — only if harmonizer ran)
 
 sf:QUDTEnrichmentShape
     a sh:NodeShape ;
@@ -155,7 +200,7 @@ sf:QUDTEnrichmentShape
     sh:property [
         sh:path qudt:unit ;
         sh:minCount 1 ;
-        sh:message "Observation is missing qudt:unit triple — run semantic_unit_harmonizer.enrich_graph_with_qudt()." ;
+        sh:message "Observation is missing qudt:unit triple - run semantic_unit_harmonizer.enrich_graph_with_qudt()." ;
         sh:severity sh:Warning ;
     ] .
 """

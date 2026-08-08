@@ -1,0 +1,77 @@
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix sosa:  <http://www.w3.org/ns/sosa/> .
+@prefix sf:    <http://example.org/smart-factory#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+
+# ref: W3C SHACL spec §2.3, SOSA/SSN §5.2
+
+sf:ObservationShape
+    a sh:NodeShape ;
+    sh:targetClass sosa:Observation ;
+    rdfs:comment "Every SOSA Observation must have a sensor, property, numeric result, and timestamp." ;
+
+    sh:property [
+        sh:path sosa:madeBySensor ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:name "madeBySensor" ;
+        sh:message "Observation needs exactly one sosa:madeBySensor (IRI of the sensor device)." ;
+    ] ;
+
+    sh:property [
+        sh:path sosa:observedProperty ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:name "observedProperty" ;
+        sh:message "Observation needs exactly one sosa:observedProperty." ;
+    ] ;
+
+    sh:property [
+        sh:path sosa:hasSimpleResult ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:double ;
+        sh:name "hasSimpleResult" ;
+        sh:message "Observation needs exactly one numeric sosa:hasSimpleResult (xsd:double)." ;
+    ] ;
+
+    sh:property [
+        sh:path sosa:resultTime ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:dateTime ;
+        sh:name "resultTime" ;
+        sh:message "Observation needs exactly one sosa:resultTime (xsd:dateTime)." ;
+    ] .
+
+
+# Sensor node shape
+
+sf:SensorShape
+    a sh:NodeShape ;
+    sh:targetObjectsOf sosa:madeBySensor ;
+
+    sh:property [
+        sh:path rdf:type ;
+        sh:minCount 1 ;
+        sh:name "sensorType" ;
+        sh:message "Sensor node must have at least one rdf:type triple." ;
+    ] .
+
+
+# ObservableProperty value constraint
+
+sf:KnownPropertyShape
+    a sh:NodeShape ;
+    sh:targetObjectsOf sosa:observedProperty ;
+    sh:property [
+        sh:path [ sh:inversePath sosa:observedProperty ] ;
+        sh:minCount 1 ;
+    ] ;
+    sh:pattern "^http://example\\.org/smart-factory#measures" ;
+    sh:severity sh:Warning ;
+    sh:message "ObservableProperty URI does not match the sf:measures* pattern — might be from a different ontology." .

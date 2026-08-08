@@ -1,0 +1,107 @@
+services:
+
+  fuseki:
+    image: apache/jena-fuseki:4.10.0
+    ports:
+      - "3030:3030"
+    environment:
+      ADMIN_PASSWORD: "${FUSEKI_ADMIN_PASSWORD:-admin}"
+      JVM_ARGS: "-Xmx1g"
+    volumes:
+      - fuseki_data:/fuseki
+      - ./fuseki/shiro.ini:/fuseki/shiro.ini:ro
+    restart: unless-stopped
+
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      FUSEKI_ENDPOINT: "http://localhost:3030/factory"
+      FUSEKI_QUERY_URL: "http://fuseki:3030/factory/sparql"
+      MQTT_BROKER_HOST: "mosquitto"
+      DATABASE_PATH: "/data/smart_factory.db"
+      SEMANTIC_WRITE_ENABLED: "true"
+      HARDWARE_PROFILE: "lab_zstu"         # ← uses real hardware profile
+      API_KEY: "${API_KEY:-changeme}"
+    volumes:
+      - backend_data:/data
+    depends_on:
+      - fuseki
+      - mosquitto
+    restart: unless-stopped
+
+  # Connectivity: MQTT adapter 
+  connectivity-mqtt:
+    build:
+      context: ../connectivity
+      dockerfile: Dockerfile
+    command: ["python", "-m", "connectivity.runner", "--adapter", "mqtt"]
+    environment:
+      MQTT_HOST: "mosquitto"
+      MQTT_PORT: "1883"
+      BACKEND_URL: "http://backend:8000"
+      API_KEY: "${API_KEY:-changeme}"
+    depends_on:
+      - mosquitto
+      - backend
+    restart: unless-stopped
+
+  # Connectivity: Modbus adapter
+  connectivity-modbus:
+    build:
+      context: ../connectivity
+      dockerfile: Dockerfile
+    command: ["python", "-m", "connectivity.runner", "--adapter", "modbus"]
+    environment:
+      MODBUS_HOST: "${MODBUS_HOST:-192.168.1.101}"   # device IP
+      MODBUS_PORT: "${MODBUS_PORT:-502}"
+      BACKEND_URL: "http://backend:8000"
+      API_KEY: "${API_KEY:-changeme}"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    extra_hosts:
+      - "host-gateway:host-gateway"          # reach devices on LAN
+
+  # Connectivity: OPC-UA adapter 
+  connectivity-opcua:
+    build:
+      context: ../connectivity
+      dockerfile: Dockerfile
+    command: ["python", "-m", "connectivity.runner", "--adapter", "opcua"]
+    environment:
+      OPCUA_URL: "${OPCUA_URL:-opc.tcp://192.168.1.102:4840}"  # our device
+      BACKEND_URL: "http://backend:8000"
+      API_KEY: "${API_KEY:-changeme}"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    extra_hosts:
+      - "host-gateway:host-gateway"
+
+  dashboard:
+    build:
+      context: ../dashboard
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    environment:
+      VITE_API_BASE: "http://backend:8000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  fuseki_data:
+  backend_data:

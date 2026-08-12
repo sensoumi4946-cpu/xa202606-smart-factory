@@ -62,7 +62,7 @@ const ENDPOINTS: Endpoint[] = [
   {
     id: 'data',
     method: 'POST',
-    path: 'api/v1/data',
+    path: 'ingest/api/v1/data',
     desc: '写入传感器数据',
     body: DATA_TMPL,
   },

@@ -1,9 +1,6 @@
 <script setup lang="ts">
-// Node-edge view of the semantic layer: Factory -> subsystems -> sensors
-// -> observed properties, built from GET /api/v1/semantic (the same data
-// the ontology serves). Sensors with an active alert pulse red so judges
-// can see anomalies propagate through the knowledge graph.
-import { ref, onMounted, onUnmounted } from 'vue'
+
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { init } from 'echarts'
 import {
   fetchSemanticView,
@@ -22,8 +19,6 @@ let beatTimer: ReturnType<typeof setInterval> | undefined
 
 let sensors: SemanticSensor[] = []
 let alertedDevices = new Set<string>()
-// Sensors whose latest measurement arrived within the last poll window;
-// their nodes briefly glow so the graph visibly "beats" with live data.
 let freshDevices = new Set<string>()
 
 const css = (name: string) =>
@@ -161,12 +156,12 @@ async function loadGraph() {
     error.value = '语义服务不可用 — 无法加载知识图谱'
   } finally {
     loading.value = false
+    await nextTick()
+    chart?.resize()
     if (!error.value && chart) chart.setOption(buildOption(), true)
   }
 }
 
-// Data heartbeat: mark sensors with a measurement newer than 6s as fresh
-// so their nodes glow for one beat, then relax on the next poll.
 async function refreshHeartbeat() {
   try {
     const latest = await fetchLatestDeduped()

@@ -9,6 +9,10 @@ export default defineConfig({
         target: process.env.BACKEND_URL || 'http://localhost:8000',
         changeOrigin: true,
       },
+      '/ingest': {
+        target: process.env.BACKEND_URL || 'http://localhost:8000',
+        changeOrigin: true,
+      }, 
       '/health': {
         target: process.env.BACKEND_URL || 'http://localhost:8000',
         changeOrigin: true,

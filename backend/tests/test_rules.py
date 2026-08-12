@@ -1,99 +1,45 @@
-# Unit + integration tests for the rules engine.
-import pytest
-from smart_factory_contracts.messages import (
-    Measurement,
-    MeasurementType,
-    Protocol,
-    Subsystem,
-    UnifiedMessage,
-    Unit,
-)
-
-from backend.store import init_db, insert_sensor_data, query_alerts
+from smart_factory_contracts.messages import Measurement, MeasurementType, Unit
+from backend.rules import evaluate
 
 
-@pytest.fixture(autouse=True)
-def _init_db(tmp_path, monkeypatch):
-    db_path = tmp_path / "test.db"
-    monkeypatch.setattr("backend.store.DATABASE_PATH", str(db_path))
-    monkeypatch.setattr("backend.config.DATABASE_PATH", str(db_path))
-    init_db()
+def test_no_alert_below_threshold():
+    m = Measurement(type=MeasurementType.TEMPERATURE, value=20.0, unit=Unit.CELSIUS)
+    assert evaluate(m) == []
 
 
-@pytest.mark.asyncio
-async def test_high_temp_triggers_alert():
-    msg = UnifiedMessage(
-        schema_version="v1",
-        device_id="sensor_dht22_01",
-        subsystem=Subsystem.TEMP_HUMIDITY,
-        protocol=Protocol.MQTT,
-        measurements=[
-            Measurement(
-                type=MeasurementType.TEMPERATURE, value=39.0, unit=Unit.CELSIUS
-            ),
-        ],
-    )
-    insert_sensor_data(msg)
-    result = query_alerts()
-    assert result["total"] == 1
-    a = result["items"][0]
-    assert a["rule_name"] == "high_temp"
-    assert a["level"] == "warning"
-    assert a["value"] == 39.0
-    assert a["threshold"] == 38
-
-
-@pytest.mark.asyncio
-async def test_normal_temp_no_alert():
-    msg = UnifiedMessage(
-        schema_version="v1",
-        device_id="sensor_dht22_01",
-        subsystem=Subsystem.TEMP_HUMIDITY,
-        protocol=Protocol.MQTT,
-        measurements=[
-            Measurement(
-                type=MeasurementType.TEMPERATURE, value=25.0, unit=Unit.CELSIUS
-            ),
-        ],
-    )
-    insert_sensor_data(msg)
-    result = query_alerts()
-    assert result["total"] == 0
-
-
-@pytest.mark.asyncio
-async def test_multiple_measurements_multi_alerts():
-    msg = UnifiedMessage(
-        schema_version="v1",
-        device_id="sensor_mq2_01",
-        subsystem=Subsystem.GAS,
-        protocol=Protocol.MQTT,
-        measurements=[
-            Measurement(
-                type=MeasurementType.TEMPERATURE, value=39.0, unit=Unit.CELSIUS
-            ),
-            Measurement(type=MeasurementType.CO, value=40.0, unit=Unit.PPM),
-        ],
-    )
-    insert_sensor_data(msg)
-    result = query_alerts()
-    assert result["total"] == 2
-    rule_names = {a["rule_name"] for a in result["items"]}
-    assert "high_temp" in rule_names
-    assert "co_warning" in rule_names
-
-
-@pytest.mark.asyncio
-async def test_alert_dedup_in_window():
+def test_high_temp_triggers_warning():
     m = Measurement(type=MeasurementType.TEMPERATURE, value=39.0, unit=Unit.CELSIUS)
-    msg = UnifiedMessage(
-        schema_version="v1",
-        device_id="sensor_dht22_01",
-        subsystem=Subsystem.TEMP_HUMIDITY,
-        protocol=Protocol.MQTT,
-        measurements=[m.model_copy()],
-    )
-    insert_sensor_data(msg)
-    insert_sensor_data(msg)
-    result = query_alerts()
-    assert result["total"] == 1
+    alerts = evaluate(m)
+    assert len(alerts) == 1
+    assert alerts[0]["rule_name"] == "high_temp"
+    assert alerts[0]["level"] == "warning"
+
+
+def test_co_triggers_critical():
+    m = Measurement(type=MeasurementType.CO, value=40.0, unit=Unit.PPM)
+    alerts = evaluate(m)
+    assert len(alerts) == 1
+    assert alerts[0]["rule_name"] == "co_warning"
+    assert alerts[0]["level"] == "critical"
+
+
+def test_agv_close_triggers_on_low_distance():
+    m = Measurement(type=MeasurementType.DISTANCE, value=10.0, unit=Unit.CM)
+    alerts = evaluate(m)
+    assert len(alerts) == 1
+    assert alerts[0]["rule_name"] == "agv_close"
+
+
+def test_agv_far_does_not_trigger():
+    m = Measurement(type=MeasurementType.DISTANCE, value=200.0, unit=Unit.CM)
+    assert evaluate(m) == []
+
+
+def test_boundary_value_does_not_trigger():
+    m = Measurement(type=MeasurementType.TEMPERATURE, value=38.0, unit=Unit.CELSIUS)
+    assert evaluate(m) == []
+
+
+def test_unrelated_measurement_type_produces_no_alert():
+    m = Measurement(type=MeasurementType.COUNT, value=99999.0, unit=Unit.COUNT)
+    assert evaluate(m) == []

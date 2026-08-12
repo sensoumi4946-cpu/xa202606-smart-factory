@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from backend import config
 from backend.services.registry_singleton import aas_registry, provenance_audit
+from backend.services import gate_status_tracker
 from backend.services.analytics_ingest_bridge import analyse_after_ingest
 from semantic_layer.fuseki import write_to_fuseki
 from semantic_layer.observation_gate import check_and_prepare
@@ -168,6 +169,11 @@ async def ingest_unified_data(
 ) -> dict[str, Any]:
     ingest_id = str(uuid.uuid4())
     gate = check_and_prepare(msg)
+    gate_status_tracker.record(
+        gate.accepted,
+        msg.device_id,
+        None if gate.accepted else "; ".join(gate.report.violations),
+    )
     if not gate.accepted:
         provenance_audit.record_attempt(
             ingest_id=ingest_id,

@@ -112,12 +112,8 @@ def test_analytics_bridge_no_anomaly():
 def test_store_insert_and_query(tmp_path, monkeypatch):
 
     db_path = str(tmp_path / "test.db")
-    monkeypatch.setenv("DATABASE_PATH", db_path)
-
-    import importlib
-    import backend.config as cfg
-    importlib.reload(cfg)
-    cfg.DATABASE_PATH = db_path
+    monkeypatch.setattr("backend.store.DATABASE_PATH", db_path)
+    monkeypatch.setattr("backend.config.DATABASE_PATH", db_path)
 
     from backend.store import init_db, insert_sensor_data, query_sensor_data
     init_db()
@@ -136,8 +132,8 @@ def test_store_insert_and_query(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_full_ingest_pipeline_mocked_fuseki(tmp_path, monkeypatch):
     db_path = str(tmp_path / "test_e2e.db")
-    import backend.config as cfg
-    cfg.DATABASE_PATH = db_path
+    monkeypatch.setattr("backend.store.DATABASE_PATH", db_path)
+    monkeypatch.setattr("backend.config.DATABASE_PATH", db_path)
     from backend.store import init_db
     init_db()
 

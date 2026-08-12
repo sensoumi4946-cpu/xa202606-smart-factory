@@ -4,7 +4,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query
 
-from backend.store import get_devices, query_sensor_data
+from backend.store import get_devices, get_device_registry, query_sensor_data
 
 router = APIRouter()
 
@@ -22,3 +22,8 @@ async def query(
 @router.get("/api/v1/devices")
 async def devices():
     return get_devices()
+
+
+@router.get("/api/v1/devices/registry")
+async def devices_registry():
+    return get_device_registry()

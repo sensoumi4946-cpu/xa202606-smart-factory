@@ -36,7 +36,7 @@ async def _ingest(client, device_id, temp=25.0):
             ),
         ],
     )
-    await client.post("/api/v1/data", json=msg.model_dump(mode="json"))
+    await client.post("/ingest/api/v1/data", json=msg.model_dump(mode="json"))
 
 
 @pytest.mark.asyncio

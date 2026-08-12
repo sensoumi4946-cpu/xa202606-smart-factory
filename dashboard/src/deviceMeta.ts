@@ -1,43 +1,49 @@
-// Static device metadata shared by StatusBar, DeviceManager and detail
-// drawers. Maps each known device id to its protocol, subsystem and the
-// concrete access path (MQTT topic / REST endpoint / Modbus register /
-// OPC UA node). Kept as a frontend constant because the backend API does
-// not expose this wiring.
+import { fetchDeviceRegistry } from './api'
+
 export interface DeviceMeta {
   protocol: string
   subsystem: string
   connectVia: string
 }
 
-export const DEVICE_META: Record<string, DeviceMeta> = {
-  sensor_dht22_01: {
-    protocol: 'mqtt',
-    subsystem: 'temp_humidity',
-    connectVia: 'factory/temp_humidity/sensors/sensor_dht22_01/...',
-  },
-  sensor_pir_01: {
-    protocol: 'rest',
-    subsystem: 'lighting',
-    connectVia: 'POST /adapter/rest/ingest (lighting vendor JSON)',
-  },
-  sensor_mq2_01: {
-    protocol: 'modbus',
-    subsystem: 'gas',
-    connectVia: 'holding registers [0-2] (zero-based)',
-  },
-  sensor_hcsr04_01: {
-    protocol: 'opcua',
-    subsystem: 'agv',
-    connectVia: 'ns=2;s=distance (subscription)',
-  },
-  sensor_ir_01: {
-    protocol: 'rest',
-    subsystem: 'counting',
-    connectVia: 'POST /adapter/rest/ingest (compact payload)',
-  },
+const _CONNECT_VIA_FALLBACK: Record<string, string> = {
+  mqtt: 'MQTT topic (see connectivity/adapters/mqtt_adapter.py)',
+  modbus: 'Modbus holding registers (see connectivity/adapters/modbus_adapter.py)',
+  opcua: 'OPC UA subscription (see connectivity/adapters/opcua_adapter.py)',
+  rest: 'POST /adapter/rest/ingest',
 }
 
-// Uppercase protocol label for badges (mqtt -> MQTT, opcua -> OPC UA).
+export const DEVICE_META: Record<string, DeviceMeta> = {}
+
+let _loaded = false
+let _loadingPromise: Promise<void> | null = null
+
+async function _load(): Promise<void> {
+  try {
+    const registry = await fetchDeviceRegistry()
+    for (const entry of registry) {
+      DEVICE_META[entry.device_id] = {
+        protocol: entry.protocol,
+        subsystem: entry.subsystem,
+        connectVia: _CONNECT_VIA_FALLBACK[entry.protocol] ?? entry.protocol,
+      }
+    }
+    _loaded = true
+  } catch {
+    // Leave DEVICE_META empty on failure; callers already handle a
+    // missing entry gracefully (optional-chained lookups).
+  }
+}
+
+// Call this once near app startup (e.g. in App.vue's onMounted) so
+// DEVICE_META is populated before components read from it. Safe to call
+// multiple times — only fetches once.
+export function ensureDeviceMetaLoaded(): Promise<void> {
+  if (_loaded) return Promise.resolve()
+  if (!_loadingPromise) _loadingPromise = _load()
+  return _loadingPromise
+}
+
 export function protoLabel(proto: string): string {
   if (proto === 'opcua') return 'OPC UA'
   return proto.toUpperCase()

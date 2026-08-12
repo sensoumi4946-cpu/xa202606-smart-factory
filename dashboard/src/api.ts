@@ -1,5 +1,13 @@
 const BASE_URL = '/'
 
+const API_KEY = import.meta.env.VITE_API_KEY ?? ''
+
+async function apiFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers)
+  if (API_KEY) headers.set('X-API-Key', API_KEY)
+  return fetch(url, { ...init, headers })
+}
+
 export interface SensorRecord {
   id: string
   device_id: string
@@ -57,8 +65,21 @@ export interface SemanticView {
   results: SemanticSensor[]
 }
 
+export interface DeviceRegistryEntry {
+  device_id: string
+  subsystem: string
+  protocol: string
+  last_seen: string
+}
+
+export async function fetchDeviceRegistry(): Promise<DeviceRegistryEntry[]> {
+  const resp = await apiFetch(`${BASE_URL}api/v1/devices/registry`)
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  return resp.json()
+}
+
 export async function fetchDevices(): Promise<string[]> {
-  const resp = await fetch(`${BASE_URL}api/v1/devices`)
+  const resp = await apiFetch(`${BASE_URL}api/v1/devices`)
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
   return resp.json()
 }
@@ -68,14 +89,14 @@ export async function fetchDeviceData(
   limit = 100,
 ): Promise<SensorRecord[]> {
   const params = new URLSearchParams({ device_id: deviceId, limit: String(limit) })
-  const resp = await fetch(`${BASE_URL}api/v1/data?${params}`)
+  const resp = await apiFetch(`${BASE_URL}api/v1/data?${params}`)
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
   return resp.json()
 }
 
 export async function fetchAllData(limit = 100): Promise<SensorRecord[]> {
   const params = new URLSearchParams({ limit: String(limit) })
-  const resp = await fetch(`${BASE_URL}api/v1/data?${params}`)
+  const resp = await apiFetch(`${BASE_URL}api/v1/data?${params}`)
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
   return resp.json()
 }
@@ -86,13 +107,12 @@ export async function fetchLatest(
   const params = deviceId
     ? `?device_id=${encodeURIComponent(deviceId)}`
     : ''
-  const resp = await fetch(`${BASE_URL}api/v1/latest${params}`)
+  const resp = await apiFetch(`${BASE_URL}api/v1/latest${params}`)
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
   return resp.json()
 }
 
-// Deduped variant: when multiple components call fetchLatest() without
-// device_id within the same tick, only one backend request is sent.
+
 let _pendingLatest: Promise<LatestDevice[]> | null = null
 export async function fetchLatestDeduped(
   deviceId?: string,
@@ -120,7 +140,7 @@ export async function fetchHistory(params: {
   if (params.limit !== undefined) sp.set('limit', String(params.limit))
   if (params.offset !== undefined) sp.set('offset', String(params.offset))
   const qs = sp.toString()
-  const resp = await fetch(`${BASE_URL}api/v1/history${qs ? '?' + qs : ''}`)
+  const resp = await apiFetch(`${BASE_URL}api/v1/history${qs ? '?' + qs : ''}`)
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
   return resp.json()
 }
@@ -137,7 +157,7 @@ export async function fetchAlerts(params: {
   if (params.limit !== undefined) sp.set('limit', String(params.limit))
   if (params.offset !== undefined) sp.set('offset', String(params.offset))
   const qs = sp.toString()
-  const resp = await fetch(`${BASE_URL}api/v1/alerts${qs ? '?' + qs : ''}`)
+  const resp = await apiFetch(`${BASE_URL}api/v1/alerts${qs ? '?' + qs : ''}`)
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
   return resp.json()
 }
@@ -146,7 +166,7 @@ export async function fetchSemanticView(
   view = 'sensor-observations',
 ): Promise<SemanticView> {
   const params = new URLSearchParams({ view })
-  const resp = await fetch(`${BASE_URL}api/v1/semantic?${params}`)
+  const resp = await apiFetch(`${BASE_URL}api/v1/semantic?${params}`)
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
   return resp.json()
 }
@@ -158,8 +178,6 @@ export interface RawResult {
   body: unknown
 }
 
-// Generic request used by the API Console. Returns status, elapsed time
-// and parsed body without throwing on non-2xx so the UI can render errors.
 export async function rawRequest(
   method: string,
   path: string,
@@ -171,7 +189,7 @@ export async function rawRequest(
     init.headers = { 'Content-Type': 'application/json' }
     init.body = typeof body === 'string' ? body : JSON.stringify(body)
   }
-  const resp = await fetch(`${BASE_URL}${path.replace(/^\//, '')}`, init)
+  const resp = await apiFetch(`${BASE_URL}${path.replace(/^\//, '')}`, init)
   const ms = Math.round(performance.now() - start)
   let parsed: unknown
   const text = await resp.text()
@@ -184,16 +202,14 @@ export async function rawRequest(
 }
 
 export async function fetchHealth(): Promise<{ ok: boolean; body: unknown }> {
-  const resp = await fetch(`${BASE_URL}health`)
+  const resp = await apiFetch(`${BASE_URL}health`)
   const body = await resp.json().catch(() => null)
   return { ok: resp.ok, body }
 }
 
-// Probes Fuseki reachability via the semantic endpoint: 200 = online,
-// 503 (or any error) = offline.
 export async function probeFuseki(): Promise<boolean> {
   try {
-    const resp = await fetch(
+    const resp = await apiFetch(
       `${BASE_URL}api/v1/semantic?view=sensor-observations`,
     )
     return resp.ok
@@ -210,9 +226,6 @@ export interface SystemStatus {
   recentCount: number
 }
 
-// Aggregates several read-only endpoints into one system snapshot used by
-// SystemStatusView. Each probe is resilient: a failing call yields a safe
-// default instead of rejecting the whole snapshot.
 export async function fetchSystemStatus(): Promise<SystemStatus> {
   const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000)
   const [health, fusekiOk, devices, alerts, recent] = await Promise.all([
@@ -231,5 +244,60 @@ export async function fetchSystemStatus(): Promise<SystemStatus> {
     deviceCount: devices.length,
     alertTotal: alerts.total,
     recentCount: recent.total,
+  }
+}
+
+
+export interface GateStatus {
+  status: 'passed' | 'rejected'
+  checked_at: string
+  last_device?: string
+  reason?: string
+  passed_count?: number
+  rejected_count?: number
+}
+
+export async function fetchGateStatus(): Promise<GateStatus | null> {
+  const resp = await apiFetch(`${BASE_URL}api/v1/semantic/gate-status`)
+  if (resp.status === 404) return null
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  return resp.json()
+}
+
+export interface SparqlResult {
+  columns: string[]
+  rows: Array<Record<string, string>>
+}
+
+export async function runSemanticView(view: string): Promise<SparqlResult> {
+  const data = await fetchSemanticView(view)
+  const rows = data.results.map((r) => ({
+    sensor: r.sensor,
+    subsystem: r.subsystem,
+    observes: r.observes.join(', '),
+    protocol: r.protocol,
+  }))
+  return { columns: ['sensor', 'subsystem', 'observes', 'protocol'], rows }
+}
+
+export async function runSparqlQuery(query: string): Promise<SparqlResult> {
+  const resp = await apiFetch(`${BASE_URL}api/v1/semantic/query`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query }),
+  })
+  if (resp.status === 404 || resp.status === 405) {
+    throw new Error('ENDPOINT_MISSING')
+  }
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  const data = await resp.json()
+  const vars: string[] = data?.head?.vars ?? []
+  const bindings: Array<Record<string, { value: string }>> =
+    data?.results?.bindings ?? []
+  return {
+    columns: vars,
+    rows: bindings.map((b) =>
+      Object.fromEntries(vars.map((v) => [v, b[v]?.value ?? ''])),
+    ),
   }
 }

@@ -362,3 +362,23 @@ def query_alerts(
     rows = conn.execute(query, params + [limit, offset]).fetchall()
     conn.close()
     return {"items": [dict(row) for row in rows], "total": total}
+
+def get_device_registry() -> list[dict[str, Any]]:
+    conn = _get_connection()
+    rows = conn.execute(
+        "SELECT device_id, subsystem, protocol, timestamp FROM sensor_data ORDER BY timestamp ASC"
+    ).fetchall()
+    conn.close()
+
+    latest: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        r = dict(row)
+        latest[r["device_id"]] = {
+            "device_id": r["device_id"],
+            "subsystem": r["subsystem"],
+            "protocol": r["protocol"],
+            "last_seen": r["timestamp"],
+        }
+
+    return sorted(latest.values(), key=lambda d: d["device_id"])
+

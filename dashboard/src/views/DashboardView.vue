@@ -1,8 +1,10 @@
 <script setup lang="ts">
-// Tab 1: migrates the original App.vue dashboard content into a dedicated
-// view. Chart logic stays inside the existing panel components; this view
-// wraps each panel in the shared DeviceCard (protocol badge + click) and
-// opens a history drawer keyed to the panel's primary device.
+// Tab 1 — the story view. Reads top-to-bottom as:
+//   1. SystemPulse   — is the factory safe right now?
+//   2. CrossAlertBanner — if not, WHY (correlated causal chain)
+//   3. Sensor grid   — live per-device detail (click for history)
+//   4. KnowledgeGraph (full width, live) — the semantic structure
+//   5. SparqlPanel + AlertsPanel — query the ontology & event log
 import { ref } from 'vue'
 import TempGauge from '../components/TempGauge.vue'
 import GasMonitor from '../components/GasMonitor.vue'
@@ -10,9 +12,12 @@ import AgvTrack from '../components/AgvTrack.vue'
 import CountBar from '../components/CountBar.vue'
 import LightingPanel from '../components/LightingPanel.vue'
 import AlertsPanel from '../components/AlertsPanel.vue'
-import SemanticPanel from '../components/SemanticPanel.vue'
+import SparqlPanel from '../components/SparqlPanel.vue'
 import DeviceCard from '../components/DeviceCard.vue'
 import DeviceDrawer from '../components/DeviceDrawer.vue'
+import SystemPulse from '../components/SystemPulse.vue'
+import CrossAlertBanner from '../components/CrossAlertBanner.vue'
+import KnowledgeGraph from '../components/KnowledgeGraph.vue'
 
 // Panel -> primary device id + component, so a card click can open history.
 const PANELS = [
@@ -28,6 +33,9 @@ const drawerDev = ref<string | null>(null)
 
 <template>
   <div class="dash">
+    <SystemPulse />
+    <CrossAlertBanner />
+
     <div class="grid">
       <DeviceCard
         v-for="p in PANELS"
@@ -40,12 +48,16 @@ const drawerDev = ref<string | null>(null)
       </DeviceCard>
     </div>
 
+    <DeviceCard :clickable="false">
+      <KnowledgeGraph />
+    </DeviceCard>
+
     <div class="lower">
       <DeviceCard :clickable="false">
-        <AlertsPanel />
+        <SparqlPanel />
       </DeviceCard>
       <DeviceCard :clickable="false">
-        <SemanticPanel />
+        <AlertsPanel />
       </DeviceCard>
     </div>
 
@@ -54,16 +66,20 @@ const drawerDev = ref<string | null>(null)
 </template>
 
 <style scoped>
+.dash {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
 .grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: var(--gap);
 }
 .lower {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: 1.2fr 1fr;
+  gap: var(--gap);
 }
 @media (max-width: 900px) {
   .grid {

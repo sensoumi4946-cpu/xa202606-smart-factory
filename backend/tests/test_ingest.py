@@ -38,10 +38,11 @@ async def test_ingest_valid_single_measurement():
     )
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.post("/api/v1/data", json=msg.model_dump(mode="json"))
-    assert resp.status_code == 201
+        resp = await client.post("/ingest/api/v1/data", json=msg.model_dump(mode="json"))
+    assert resp.status_code == 200
     data = resp.json()
-    assert "id" in data
+    assert data["status"] == "ok"
+    assert "record_id" in data
 
 
 @pytest.mark.asyncio
@@ -60,8 +61,8 @@ async def test_ingest_valid_multi_measurement():
     )
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.post("/api/v1/data", json=msg.model_dump(mode="json"))
-    assert resp.status_code == 201
+        resp = await client.post("/ingest/api/v1/data", json=msg.model_dump(mode="json"))
+    assert resp.status_code == 200
 
 
 @pytest.mark.asyncio
@@ -69,7 +70,7 @@ async def test_ingest_missing_device_id():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
-            "/api/v1/data",
+            "/ingest/api/v1/data",
             json={
                 "schema_version": "v1",
                 "device_id": "",
@@ -88,7 +89,7 @@ async def test_ingest_missing_measurements():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
-            "/api/v1/data",
+            "/ingest/api/v1/data",
             json={
                 "schema_version": "v1",
                 "device_id": "sensor_dht22_01",
@@ -105,7 +106,7 @@ async def test_ingest_missing_schema_version():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
-            "/api/v1/data",
+            "/ingest/api/v1/data",
             json={
                 "device_id": "sensor_dht22_01",
                 "subsystem": "temp_humidity",
@@ -136,5 +137,5 @@ async def test_ingest_with_raw_payload():
     )
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.post("/api/v1/data", json=msg.model_dump(mode="json"))
-    assert resp.status_code == 201
+        resp = await client.post("/ingest/api/v1/data", json=msg.model_dump(mode="json"))
+    assert resp.status_code == 200

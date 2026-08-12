@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { init } from 'echarts'
 import { fetchLatest, type LatestDevice } from '../api'
 
@@ -15,6 +15,8 @@ async function refresh() {
     const dev = data.find((d: LatestDevice) => d.device_id === 'sensor_ir_01')
     error.value = ''
     loading.value = false
+    await nextTick()
+    chart?.resize()
     if (!dev || !chart) return
     const cnt = dev.measurements.find((m) => m.type === 'count')
     chart.setOption({

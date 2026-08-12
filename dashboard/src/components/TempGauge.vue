@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { init } from 'echarts'
 import { fetchLatest, type LatestDevice } from '../api'
 
@@ -28,6 +28,8 @@ async function refresh() {
     const dev = data.find((d: LatestDevice) => d.device_id === 'sensor_dht22_01')
     error.value = ''
     loading.value = false
+    await nextTick()
+    gaugeChart?.resize()
     if (!dev || !gaugeChart) return
     const temp = dev.measurements.find((m) => m.type === 'temperature')
     gaugeChart.setOption(buildOptions('Temperature', temp?.value ?? 0, '°C', 60), true)

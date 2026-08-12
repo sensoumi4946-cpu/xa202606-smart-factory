@@ -1,7 +1,6 @@
+import { ensureDeviceMetaLoaded } from './deviceMeta'
+ensureDeviceMetaLoaded()
 <script setup lang="ts">
-// Root component: hosts ConsoleLayout and renders the active tab's view.
-// The refresh button in the layout bumps a key that force-remounts the
-// current view so it re-fetches on demand.
 import { ref } from 'vue'
 import ConsoleLayout from './layouts/ConsoleLayout.vue'
 import DashboardView from './views/DashboardView.vue'
@@ -26,11 +25,3 @@ const VIEWS: Record<string, unknown> = {
   </ConsoleLayout>
 </template>
 
-<style>
-body {
-  margin: 0;
-  font-family: 'Segoe UI', system-ui, sans-serif;
-  background: #0f172a;
-  color: #e2e8f0;
-}
-</style>

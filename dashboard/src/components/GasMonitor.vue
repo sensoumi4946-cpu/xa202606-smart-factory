@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { init } from 'echarts'
 import { fetchHistory } from '../api'
 
@@ -17,6 +17,8 @@ async function refresh() {
     const items = [...data.items].reverse()
     error.value = ''
     loading.value = false
+    await nextTick()
+    chart?.resize()
     if (!chart) return
     const times = items.map((r) => new Date(r.timestamp).toLocaleTimeString())
     const smoke = items.map((r) => r.measurements.find((m) => m.type === 'smoke')?.value ?? 0)

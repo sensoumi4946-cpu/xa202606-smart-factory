@@ -23,6 +23,7 @@ from backend.api.semantic_query import router as semantic_query_router
 from backend.security.auth import api_key_middleware
 from backend.api.federated import router as federated_router
 from backend.api.provenance_api import router as provenance_router
+from backend.api.semantic_gate_status import router as gate_status_router
 
 from backend.store import init_db
 from semantic_layer.aas_bridge import write_aas_to_fuseki
@@ -79,6 +80,7 @@ app.include_router(semantic_query_router)
 app.include_router(federated_router)
 app.include_router(provenance_router)
 app.include_router(health_router)
+app.include_router(gate_status_router)
 
 
 @app.get("/health")

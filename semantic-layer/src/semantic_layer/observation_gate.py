@@ -6,7 +6,7 @@ from rdflib import Graph, Literal, Namespace, URIRef, XSD
 from rdflib.namespace import RDF, SOSA
 
 from semantic_layer.mapping import SF, to_rdf_graph
-from semantic_layer.shacl_runner import ValidationReport, validate
+from semantic_layer.shacl_runner import ValidationReport, _load_all_shapes as _base_shapes, validate
 from semantic_layer.semantic_unit_harmonizer import enrich_graph_with_qudt
 from semantic_layer.shacl_domain_shapes import load_all_shapes
 
@@ -66,7 +66,19 @@ def check_and_prepare(
     if use_domain_shapes:
         try:
             import pyshacl
-            shapes = _get_domain_shapes()
+
+            # The domain shapes are additional constraints, not a replacement.
+            # Validating against them alone silently skipped observation_shapes
+            # entirely, so the base cardinality and datatype rules never ran on
+            # the production path. Union both graphs.
+            shapes = Graph()
+            shapes += _base_shapes()
+            shapes += _get_domain_shapes()
+
+            report = validate(g)
+            if not report.conforms:
+                return GateResult(accepted=False, graph=None, report=report)
+
             _result = pyshacl.validate(
                 g,
                 shacl_graph=shapes,

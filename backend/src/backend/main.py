@@ -24,6 +24,14 @@ from backend.security.auth import api_key_middleware
 from backend.api.federated import router as federated_router
 from backend.api.provenance_api import router as provenance_router
 from backend.api.semantic_gate_status import router as gate_status_router
+from backend.api.prediction import router as prediction_router
+from backend.api.security_api import router as security_router
+from backend.api.ontology_api import router as ontology_router
+from backend.api.federation_api import router as federation_router
+from backend.api.ops import router as ops_router
+from backend.api.assistant_api import router as assistant_router
+from backend.middleware import RequestContextMiddleware
+from backend.runtime_state import assert_single_worker
 
 from backend.store import init_db
 from semantic_layer.aas_bridge import write_aas_to_fuseki
@@ -37,6 +45,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    assert_single_worker()
     init_db()
     seeded = await write_aas_to_fuseki(config.FUSEKI_ENDPOINT)
     if seeded:
@@ -81,6 +90,13 @@ app.include_router(federated_router)
 app.include_router(provenance_router)
 app.include_router(health_router)
 app.include_router(gate_status_router)
+app.include_router(prediction_router)
+app.include_router(security_router)
+app.include_router(ontology_router)
+app.include_router(federation_router)
+app.include_router(ops_router)
+app.include_router(assistant_router)
+app.add_middleware(RequestContextMiddleware)
 
 
 @app.get("/health")

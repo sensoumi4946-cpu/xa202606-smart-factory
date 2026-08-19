@@ -1,13 +1,7 @@
 <script setup lang="ts">
-// Bottom status bar: four adapter lamps (MQTT/REST/Modbus/OPC UA) inferred
-// from recent /latest data freshness, a Fuseki lamp from the semantic probe,
-// plus device and alert counts. Refresh is split by data class per the
-// Phase 3A spec: monitoring data (latest + alerts) every 3s, semantic and
-// device list every 10s.
 import { ref, onMounted, onUnmounted } from 'vue'
 import { fetchLatestDeduped, fetchAlerts, fetchDevices, probeFuseki } from '../api'
-
-const FRESH_MS = 30_000
+import { FRESH_MS } from '../constants'
 
 const mqttOn = ref(false)
 const restOn = ref(false)
@@ -121,7 +115,6 @@ onUnmounted(() => {
 }
 .lamp i.on {
   background: #34d399;
-  box-shadow: 0 0 6px #34d399;
 }
 .counts {
   display: flex;

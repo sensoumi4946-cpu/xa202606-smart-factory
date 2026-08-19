@@ -1,8 +1,4 @@
 <script setup lang="ts">
-// App shell: top tab bar + content slot + bottom StatusBar. The active tab
-// is a two-way bound value so the parent decides which view to render in the
-// default slot. A clock and manual refresh button sit on the right of the
-// top bar; the refresh button bumps a key the parent can watch.
 import { ref, onMounted, onUnmounted } from 'vue'
 import StatusBar from '../components/StatusBar.vue'
 

@@ -1,43 +1,30 @@
-/* ============================================================
-   XA-202606 Smart Factory — Design Tokens (v1)
-   Single source of truth for color / type / spacing.
-   Documented in docs/dashboard-design-system.md
-   Palette is derived from industrial safety signage:
-   green = normal, amber = caution, red = danger,
-   violet = semantic/ontology entities.
-   ============================================================ */
-
 :root {
-  /* --- Surfaces --- */
-  --bg: #111417;            /* app background (neutral graphite) */
-  --surface: #191e24;       /* panel background */
-  --surface-2: #1f262e;     /* raised elements: inputs, badges */
-  --line: #2a313a;          /* hairline borders */
+  
+  --bg: #111417;            
+  --surface: #191e24;       
+  --surface-2: #1f262e;     
+  --line: #2a313a;          
   --line-strong: #3a434e;
 
-  /* --- Text --- */
   --text: #e8eaed;
   --text-dim: #9aa3af;
   --text-faint: #6b7480;
 
-  /* --- Safety signal colors (ISO-inspired) --- */
   --ok: #4cc38a;
   --ok-bg: rgba(76, 195, 138, 0.12);
-  --warn: #f5a524;          /* safety amber — brand accent */
+  --warn: #f5a524;          
   --warn-bg: rgba(245, 165, 36, 0.12);
   --danger: #f04444;
   --danger-bg: rgba(240, 68, 68, 0.14);
 
-  /* --- Semantic layer identity --- */
-  --semantic: #8b8cf6;      /* ontology / knowledge-graph entities */
+  
+  --semantic: #8b8cf6;      
   --semantic-bg: rgba(139, 140, 246, 0.12);
 
-  /* --- Data accents (charts) --- */
-  --data-1: #56b4e9;        /* temperature / generic series */
-  --data-2: #e69f00;        /* gas */
-  --data-3: #4cc38a;        /* distance / motion */
-
-  /* --- Type --- */
+  --data-1: #56b4e9;        
+  --data-2: #e69f00;        
+  --data-3: #4cc38a; 
+  
   --font-ui: 'HarmonyOS Sans SC', 'MiSans', 'Noto Sans SC', 'Segoe UI',
     system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, 'Courier New',
@@ -49,17 +36,14 @@
   --fs-lg: 1.05rem;
   --fs-xl: 1.5rem;
 
-  /* --- Shape & spacing --- */
   --radius: 10px;
   --radius-sm: 6px;
   --gap: 14px;
   --pad: 14px;
 
-  /* --- Motion --- */
   --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 
-/* Base element resets shared by every view */
 body {
   margin: 0;
   background: var(--bg);
@@ -67,12 +51,10 @@ body {
   font-family: var(--font-ui);
 }
 
-/* Utility: mono data values */
 .mono {
   font-family: var(--font-mono);
 }
 
-/* Utility: status dot */
 .dot {
   display: inline-block;
   width: 8px;
@@ -82,7 +64,6 @@ body {
 }
 .dot.on {
   background: var(--ok);
-  box-shadow: 0 0 6px rgba(76, 195, 138, 0.6);
 }
 .dot.warn {
   background: var(--warn);

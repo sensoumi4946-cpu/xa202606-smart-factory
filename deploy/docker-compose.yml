@@ -1,4 +1,23 @@
+#   docker compose -f deploy/docker-compose.yml up -d --build
+name: xa202606
+
 services:
+
+  fuseki:
+    image: apache/jena-fuseki:4.10.0
+    environment:
+      ADMIN_PASSWORD: "${FUSEKI_ADMIN_PASSWORD:?set FUSEKI_ADMIN_PASSWORD}"
+      JVM_ARGS: "-Xmx1g"
+      FUSEKI_DATASET_1: "factory"
+    volumes:
+      - fuseki_data:/fuseki
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:3030/$$/ping || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+    restart: unless-stopped
 
   mosquitto:
     image: eclipse-mosquitto:2.0
@@ -7,3 +26,128 @@ services:
     volumes:
       - ./mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
     restart: unless-stopped
+
+  backend:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    environment:
+      FUSEKI_ENDPOINT: "http://fuseki:3030/factory/data"
+      FUSEKI_QUERY_URL: "http://fuseki:3030/factory/sparql"
+      MQTT_BROKER_HOST: "mosquitto"
+      MQTT_BROKER_PORT: "1883"
+      DATABASE_PATH: "/data/smart_factory.db"
+      SEMANTIC_WRITE_ENABLED: "true"
+      HARDWARE_PROFILE: "${HARDWARE_PROFILE:-mock}"
+      BINDINGS_TTL: "/app/bindings.ttl"
+      API_KEY: "${API_KEY:?set API_KEY}"
+      COMMAND_SIGNING_KEY: "${COMMAND_SIGNING_KEY:?set COMMAND_SIGNING_KEY}"
+      PUBLIC_BACKEND_URL: "http://${HOST_LAN_IP:-backend}:8000"
+      LLM_API_KEY: "${LLM_API_KEY:-}"
+      LLM_MODEL: "${LLM_MODEL:-qwen-plus}"
+      WEB_CONCURRENCY: "1"
+    volumes:
+      - backend_data:/data
+      - ../bindings.ttl:/app/bindings.ttl:ro
+    depends_on:
+      fuseki:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped
+
+  connectivity-mqtt:
+    build:
+      context: ..
+      dockerfile: connectivity/Dockerfile
+    command: ["python", "-m", "connectivity.runner", "--adapter", "mqtt"]
+    environment:
+      MQTT_BROKER_HOST: "mosquitto"
+      BACKEND_URL: "http://backend:8000"
+      BINDINGS_TTL: "/app/bindings.ttl"
+      API_KEY: "${API_KEY}"
+    volumes:
+      - ../bindings.ttl:/app/bindings.ttl:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  connectivity-rest:
+    build:
+      context: ..
+      dockerfile: connectivity/Dockerfile
+    command: ["python", "-m", "connectivity.runner", "--adapter", "rest"]
+    environment:
+      BACKEND_URL: "http://backend:8000"
+      BINDINGS_TTL: "/app/bindings.ttl"
+      API_KEY: "${API_KEY}"
+    volumes:
+      - ../bindings.ttl:/app/bindings.ttl:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  actuator-valve:
+    build:
+      context: ..
+      dockerfile: connectivity/Dockerfile
+    command:
+      - "python"
+      - "/app/firmware/sim/actuator_agent.py"
+      - "--device-id"
+      - "valve_gas_main"
+      - "--subsystem"
+      - "gas"
+    environment:
+      MQTT_BROKER_HOST: "mosquitto"
+      API_KEY: "${API_KEY}"
+    volumes:
+      - ../firmware:/app/firmware:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  actuator-hvac:
+    build:
+      context: ..
+      dockerfile: connectivity/Dockerfile
+    command:
+      - "python"
+      - "/app/firmware/sim/actuator_agent.py"
+      - "--device-id"
+      - "hvac_exhaust_01"
+      - "--subsystem"
+      - "hvac"
+    environment:
+      MQTT_BROKER_HOST: "mosquitto"
+      API_KEY: "${API_KEY}"
+    volumes:
+      - ../firmware:/app/firmware:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: ..
+      dockerfile: dashboard/Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  fuseki_data:
+  backend_data:

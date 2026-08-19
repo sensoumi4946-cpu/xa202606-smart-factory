@@ -1,0 +1,180 @@
+{
+  "fault_prediction": {
+    "records": [
+      {
+        "t": 0.0,
+        "value": 5.0,
+        "prediction": "样本不足或趋势不显著"
+      },
+      {
+        "t": 1.0,
+        "value": 8.5,
+        "prediction": "样本不足或趋势不显著"
+      },
+      {
+        "t": 2.0,
+        "value": 12.0,
+        "prediction": "样本不足或趋势不显著"
+      },
+      {
+        "t": 3.0,
+        "value": 15.5,
+        "prediction": "5.6s 后达到阈值 (R²=1.000, high)"
+      },
+      {
+        "t": 4.0,
+        "value": 19.0,
+        "prediction": "4.6s 后达到阈值 (R²=1.000, high)"
+      },
+      {
+        "t": 5.0,
+        "value": 22.5,
+        "prediction": "3.6s 后达到阈值 (R²=1.000, high)"
+      },
+      {
+        "t": 6.0,
+        "value": 26.0,
+        "prediction": "2.6s 后达到阈值 (R²=1.000, high)"
+      },
+      {
+        "t": 7.0,
+        "value": 29.5,
+        "prediction": "1.6s 后达到阈值 (R²=1.000, high)"
+      },
+      {
+        "t": 8.0,
+        "value": 33.0,
+        "prediction": "0.6s 后达到阈值 (R²=1.000, high)"
+      },
+      {
+        "t": 9.0,
+        "value": 36.5,
+        "prediction": "已超过阈值"
+      },
+      {
+        "t": 10.0,
+        "value": 40.0,
+        "prediction": "已超过阈值"
+      }
+    ],
+    "first_warning": {
+      "t": 3.0,
+      "value": 15.5,
+      "lead_time_s": 5.571428571428571,
+      "r_squared": 1.0
+    }
+  },
+  "hazard_alert": {
+    "alert": {
+      "hazard_id": "1eb29f57-c45c-4eb2-a1da-f18fa14dd6ca",
+      "rule_name": "fire_risk",
+      "label_zh": "火灾风险",
+      "label_en": "Fire risk",
+      "severity": "critical",
+      "confidence": "high",
+      "triggered_at": 102.0,
+      "subsystems": [
+        "gas",
+        "temp_humidity"
+      ],
+      "protocols": [
+        "modbus",
+        "mqtt"
+      ],
+      "chain": [
+        "gas/co=50.0 (>35.0, via MODBUS)",
+        "temp_humidity/temperature=45.0 (>38.0, via MQTT)"
+      ],
+      "recommended_action": "疏散人员，切断电源，启动排风",
+      "evidence": [
+        {
+          "device_id": "esp32_02_mq2",
+          "subsystem": "gas",
+          "protocol": "modbus",
+          "property_name": "co",
+          "value": 50.0,
+          "threshold": 35.0,
+          "observed_at": 100.0
+        },
+        {
+          "device_id": "esp32_01_dht22",
+          "subsystem": "temp_humidity",
+          "protocol": "mqtt",
+          "property_name": "temperature",
+          "value": 45.0,
+          "threshold": 38.0,
+          "observed_at": 102.0
+        }
+      ]
+    }
+  },
+  "agv_avoidance": {
+    "records": [
+      {
+        "t": 0.0,
+        "distance_cm": 300.0,
+        "closing_rate": 0.0,
+        "braking_distance": 0.0,
+        "level": "clear",
+        "action": null
+      },
+      {
+        "t": 1.0,
+        "distance_cm": 210.0,
+        "closing_rate": 90.0,
+        "braking_distance": 121.5,
+        "level": "slow",
+        "action": "slow"
+      },
+      {
+        "t": 2.0,
+        "distance_cm": 120.0,
+        "closing_rate": 90.0,
+        "braking_distance": 121.5,
+        "level": "stop",
+        "action": "stop"
+      },
+      {
+        "t": 3.0,
+        "distance_cm": 60.0,
+        "closing_rate": 80.0,
+        "braking_distance": 99.11111111111111,
+        "level": "stop",
+        "action": null
+      },
+      {
+        "t": 4.0,
+        "distance_cm": 25.0,
+        "closing_rate": 68.75,
+        "braking_distance": 76.57986111111111,
+        "level": "stop",
+        "action": null
+      },
+      {
+        "t": 5.0,
+        "distance_cm": 12.0,
+        "closing_rate": 57.6,
+        "braking_distance": 57.024,
+        "level": "stop",
+        "action": null
+      }
+    ],
+    "first_stop": {
+      "t": 2.0,
+      "distance_cm": 120.0,
+      "braking_distance_cm": 121.5,
+      "reason": "closing 90.0cm/s needs 122cm to brake, only 120cm available"
+    }
+  },
+  "policy_verification": {
+    "verified": true,
+    "policy_count": 3,
+    "pair_count": 3,
+    "checks_run": 6,
+    "conflicts": [],
+    "unreachable_policies": [],
+    "solver_version": "5.0.0",
+    "generated_at": "2026-08-15T11:26:59.404916+00:00",
+    "fingerprint": "a747696be2cbddc740f6681dd29a888f5fdf0b102bc9dd766e2e1b463d734358"
+  }
+}

@@ -1,3 +1,7 @@
+# Full stack, real-hardware profile.
+# cd deploy && docker compose -f hardware_compose.yml up -d --build
+# Requires deploy/.env with API_KEY and FUSEKI_ADMIN_PASSWORD set.
+
 services:
 
   fuseki:
@@ -5,11 +9,17 @@ services:
     ports:
       - "3030:3030"
     environment:
-      ADMIN_PASSWORD: "${FUSEKI_ADMIN_PASSWORD:-admin}"
+      ADMIN_PASSWORD: "${FUSEKI_ADMIN_PASSWORD:?set FUSEKI_ADMIN_PASSWORD in deploy/.env}"
       JVM_ARGS: "-Xmx1g"
+      FUSEKI_DATASET_1: "factory"
     volumes:
       - fuseki_data:/fuseki
-      - ./fuseki/shiro.ini:/fuseki/shiro.ini:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:3030/$$/ping || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
     restart: unless-stopped
 
   mosquitto:
@@ -17,87 +27,107 @@ services:
     ports:
       - "1883:1883"
     volumes:
-      - ./mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ../deploy/mqtt/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
     restart: unless-stopped
 
   backend:
     build:
-      context: ../backend
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: backend/Dockerfile
     ports:
       - "8000:8000"
     environment:
-      FUSEKI_ENDPOINT: "http://localhost:3030/factory"
+      FUSEKI_ENDPOINT: "http://fuseki:3030/factory/data"
       FUSEKI_QUERY_URL: "http://fuseki:3030/factory/sparql"
       MQTT_BROKER_HOST: "mosquitto"
+      MQTT_BROKER_PORT: "1883"
       DATABASE_PATH: "/data/smart_factory.db"
+      PROVENANCE_AUDIT_DB: "/data/prov_audit.db"
       SEMANTIC_WRITE_ENABLED: "true"
-      HARDWARE_PROFILE: "lab_zstu"         # ← uses real hardware profile
-      API_KEY: "${API_KEY:-changeme}"
+      HARDWARE_PROFILE: "lab_zstu"
+      API_KEY: "${API_KEY:?set API_KEY in deploy/.env}"
+      # What a device on the LAN should call back on. Set HOST_LAN_IP in
+      # deploy/.env to this machine's address, e.g. 192.168.1.50
+      PUBLIC_BACKEND_URL: "http://${HOST_LAN_IP:-backend}:8000"
     volumes:
       - backend_data:/data
     depends_on:
-      - fuseki
-      - mosquitto
+      fuseki:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
     restart: unless-stopped
 
-  # Connectivity: MQTT adapter 
   connectivity-mqtt:
     build:
-      context: ../connectivity
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: connectivity/Dockerfile
     command: ["python", "-m", "connectivity.runner", "--adapter", "mqtt"]
     environment:
-      MQTT_HOST: "mosquitto"
-      MQTT_PORT: "1883"
+      MQTT_BROKER_HOST: "mosquitto"
+      MQTT_BROKER_PORT: "1883"
       BACKEND_URL: "http://backend:8000"
-      API_KEY: "${API_KEY:-changeme}"
+      API_KEY: "${API_KEY:?set API_KEY in deploy/.env}"
     depends_on:
       - mosquitto
       - backend
     restart: unless-stopped
 
-  # Connectivity: Modbus adapter
   connectivity-modbus:
     build:
-      context: ../connectivity
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: connectivity/Dockerfile
     command: ["python", "-m", "connectivity.runner", "--adapter", "modbus"]
     environment:
-      MODBUS_HOST: "${MODBUS_HOST:-192.168.1.101}"   # device IP
+      MODBUS_HOST: "${MODBUS_HOST:-192.168.1.101}"
       MODBUS_PORT: "${MODBUS_PORT:-502}"
       BACKEND_URL: "http://backend:8000"
-      API_KEY: "${API_KEY:-changeme}"
+      API_KEY: "${API_KEY:?set API_KEY in deploy/.env}"
     depends_on:
       - backend
     restart: unless-stopped
-    extra_hosts:
-      - "host-gateway:host-gateway"          # reach devices on LAN
 
-  # Connectivity: OPC-UA adapter 
   connectivity-opcua:
     build:
-      context: ../connectivity
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: connectivity/Dockerfile
     command: ["python", "-m", "connectivity.runner", "--adapter", "opcua"]
     environment:
-      OPCUA_URL: "${OPCUA_URL:-opc.tcp://192.168.1.102:4840}"  # our device
+      OPCUA_ENDPOINT: "${OPCUA_ENDPOINT:-opc.tcp://192.168.1.102:4840/}"
       BACKEND_URL: "http://backend:8000"
-      API_KEY: "${API_KEY:-changeme}"
+      API_KEY: "${API_KEY:?set API_KEY in deploy/.env}"
     depends_on:
       - backend
     restart: unless-stopped
-    extra_hosts:
-      - "host-gateway:host-gateway"
+
+  actuator-sim:
+    build:
+      context: ..
+      dockerfile: connectivity/Dockerfile
+    command:
+      - "python"
+      - "/app/firmware/sim/actuator_agent.py"
+      - "--device-id"
+      - "relay_lighting_01"
+      - "--subsystem"
+      - "lighting"
+    environment:
+      MQTT_BROKER_HOST: "mosquitto"
+      MQTT_BROKER_PORT: "1883"
+      API_KEY: "${API_KEY:?set API_KEY in deploy/.env}"
+    volumes:
+      - ../firmware:/app/firmware:ro
+    depends_on:
+      - mosquitto
+      - backend
+    restart: unless-stopped
 
   dashboard:
     build:
-      context: ../dashboard
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: dashboard/Dockerfile
     ports:
       - "5173:80"
-    environment:
-      VITE_API_BASE: "http://backend:8000"
     depends_on:
       - backend
     restart: unless-stopped

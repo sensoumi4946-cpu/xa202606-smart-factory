@@ -1,7 +1,4 @@
-# Integration tests for the router's forward_to_backend() function.
-# Test-forward-to-backend-success starts a real uvicorn subprocess on a
-# random port to verify end-to-end forwarding. The failure test points
-# at an unused port to exercise the 3-retry-then-drop logic.
+# Integration tests for the router's forward_to_backend() function
 import pytest
 from smart_factory_contracts.messages import (
     Measurement,
@@ -24,11 +21,18 @@ async def test_forward_to_backend_success_starts_backend(tmp_path, monkeypatch):
 
     init_db()
 
-    import uvicorn
+    import socket
     import threading
     import time
 
-    port = 19998
+    import uvicorn
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+
+    monkeypatch.setattr("backend.config.SEMANTIC_WRITE_ENABLED", False)
+
     config = uvicorn.Config(
         "backend.main:app", host="127.0.0.1", port=port, log_level="error"
     )
@@ -36,7 +40,17 @@ async def test_forward_to_backend_success_starts_backend(tmp_path, monkeypatch):
 
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
-    time.sleep(1)
+
+    deadline = time.time() + 15
+    while time.time() < deadline:
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=0.25):
+                break
+        except OSError:
+            time.sleep(0.1)
+    else:
+        server.should_exit = True
+        pytest.fail(f"backend did not start on port {port} within 15s")
 
     monkeypatch.setattr("connectivity.models.BACKEND_URL", f"http://127.0.0.1:{port}")
 

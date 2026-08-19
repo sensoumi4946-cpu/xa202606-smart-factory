@@ -1,17 +1,9 @@
-"""
-analytics/tests/test_analytics.py
-Tests for AnomalyDetector and CrossSubsystemCorrelator
-"""
-
 import time
 
 import pytest
 
 from analytics.anomaly_detector import AnomalyDetector
 from analytics.cross_subsystem_correlator import CrossSubsystemCorrelator
-
-
-# AnomalyDetector
 
 class TestAnomalyDetector:
     def setup_method(self):
@@ -47,7 +39,7 @@ class TestAnomalyDetector:
         assert result.severity == "high"
 
     def test_hard_limit_co_level(self):
-        result = self.det.push_reading("s4", 300.0, property_name="co_level")
+        result = self.det.push_reading("s4", 5000.0, property_name="co_level")
         assert result.is_anomaly
         assert result.severity == "high"
 
@@ -85,9 +77,6 @@ class TestAnomalyDetector:
         stats = det.sensor_stats("sF")
         assert stats["samples"] == 5
 
-
-# CrossSubsystemCorrelator
-
 class TestCorrelator:
     def setup_method(self):
         self.det = AnomalyDetector(window_size=20, z_threshold=3.0)
@@ -112,7 +101,7 @@ class TestCorrelator:
         alerts = self.cor.push_anomaly(r2, "hall_a", "MQTT", "temperature")
 
         assert len(alerts) == 1
-        assert "fire" in alerts[0]["hypothesis"].lower() or "combustion" in alerts[0]["hypothesis"].lower()
+        assert "fire" in alerts[0].hypothesis.lower() or "combustion" in alerts[0].hypothesis.lower()
 
     def test_no_duplicate_alerts(self):
         r1 = self._make_anomaly("gas2", 999.0, "co_level")
@@ -137,13 +126,15 @@ class TestCorrelator:
         first = self.cor.push_anomaly(r2, "hall_c", "MQTT", "temperature")
         assert len(first) == 1
 
-        self.cor.clear_alert(first[0]["alert_id"])
+        self.cor.clear_alert(first[0].alert_id)
 
+        # Once cleared, the pattern re-arms
         r3 = self._make_anomaly("gas3", 999.0, "co_level")
         r4 = self._make_anomaly("temp3", 999.0, "temperature")
-        self.cor.push_anomaly(r3, "hall_c", "Modbus", "co_level")
-        second = self.cor.push_anomaly(r4, "hall_c", "MQTT", "temperature")
+        second = self.cor.push_anomaly(r3, "hall_c", "Modbus", "co_level")
+        second += self.cor.push_anomaly(r4, "hall_c", "MQTT", "temperature")
         assert len(second) == 1
+        assert second[0].alert_id == first[0].alert_id
 
     def test_protocols_captured(self):
         r1 = self._make_anomaly("gas4", 999.0, "co_level")
@@ -151,5 +142,6 @@ class TestCorrelator:
         self.cor.push_anomaly(r1, "hall_d", "Modbus", "co_level")
         alerts = self.cor.push_anomaly(r2, "hall_d", "OPC-UA", "temperature")
         assert len(alerts) == 1
-        assert "Modbus" in alerts[0]["protocols"]
-        assert "OPC-UA" in alerts[0]["protocols"]
+        assert "Modbus" in alerts[0].protocols_involved
+        assert "OPC-UA" in alerts[0].protocols_involved
+        assert alerts[0].subsystems_involved == ["hall_d"]

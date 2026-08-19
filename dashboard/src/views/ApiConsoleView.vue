@@ -1,320 +1,397 @@
 <script setup lang="ts">
-// Tab 2: manual API debugging console. Left column lists the eight public
-// endpoints; the right column shows method/url, an editable params or JSON
-// body field and a Send button that issues a real request via rawRequest.
-// Nothing polls here — the user drives every call by hand.
 import { ref, computed } from 'vue'
-import { rawRequest, type RawResult } from '../api'
-import JsonViewer from '../components/JsonViewer.vue'
+import { rawRequest } from '../api'
 
-interface Endpoint {
-  id: string
-  method: string
-  path: string
-  desc: string
-  params?: string
-  body?: string
+interface Assertion {
+  label: string
+  check: (status: number, body: unknown) => boolean
 }
 
-const DATA_TMPL = JSON.stringify(
-  {
-    schema_version: 'v1',
-    device_id: 'sensor_dht22_01',
-    subsystem: 'temp_humidity',
-    protocol: 'mqtt',
-    measurements: [{ type: 'temperature', value: 25.3, unit: 'celsius' }],
-  },
-  null,
-  2,
-)
+interface TestCase {
+  id: string
+  name: string
+  protocol: string
+  method: 'GET' | 'POST'
+  path: string
+  body?: unknown
+  assertions: Assertion[]
+}
 
-const CTRL_TMPL = JSON.stringify(
-  { device_id: 'sensor_pir_01', action: 'relay', params: { state: 'on' } },
-  null,
-  2,
-)
+interface Outcome {
+  ran: boolean
+  status: number
+  ms: number
+  results: { label: string; pass: boolean }[]
+  pass: boolean
+  raw: unknown
+}
 
-const ENDPOINTS: Endpoint[] = [
-  { id: 'health', method: 'GET', path: 'health', desc: '服务健康检查' },
-  { id: 'latest', method: 'GET', path: 'api/v1/latest', desc: '各设备最新读数' },
+const isObject = (b: unknown): b is Record<string, unknown> =>
+  typeof b === 'object' && b !== null
+
+const CASES: TestCase[] = [
   {
-    id: 'history',
+    id: 'health',
+    name: '平台健康检查',
+    protocol: 'REST',
     method: 'GET',
-    path: 'api/v1/history',
-    desc: '历史记录查询',
-    params: 'limit=10',
+    path: '/health',
+    assertions: [
+      { label: 'HTTP 200', check: (s) => s === 200 },
+      {
+        label: 'status = ok',
+        check: (_s, b) => isObject(b) && b.status === 'ok',
+      },
+    ],
   },
   {
-    id: 'alerts',
-    method: 'GET',
-    path: 'api/v1/alerts',
-    desc: '查询告警记录',
-    params: 'limit=10',
-  },
-  {
-    id: 'semantic',
-    method: 'GET',
-    path: 'api/v1/semantic',
-    desc: '语义视图 (SPARQL)',
-    params: 'view=sensor-observations',
-  },
-  { id: 'devices', method: 'GET', path: 'api/v1/devices', desc: '设备 ID 列表' },
-  {
-    id: 'data',
+    id: 'ingest-mqtt',
+    name: 'MQTT 报文接入 (DHT22)',
+    protocol: 'MQTT',
     method: 'POST',
-    path: 'ingest/api/v1/data',
-    desc: '写入传感器数据',
-    body: DATA_TMPL,
+    path: '/ingest/api/v1/data',
+    body: {
+      schema_version: 'v1',
+      device_id: 'ESP32_001_dht22',
+      subsystem: 'temp_humidity',
+      protocol: 'mqtt',
+      measurements: [
+        { type: 'temperature', value: 26.1, unit: 'celsius' },
+        { type: 'humidity', value: 56.2, unit: 'percent' },
+      ],
+    },
+    assertions: [
+      { label: 'HTTP 200', check: (s) => s === 200 },
+      { label: '入库成功', check: (_s, b) => isObject(b) && b.status === 'ok' },
+      { label: '返回记录号', check: (_s, b) => isObject(b) && !!b.record_id },
+    ],
+  },
+  {
+    id: 'ingest-rest',
+    name: 'REST 报文接入 (红外计数)',
+    protocol: 'REST',
+    method: 'POST',
+    path: '/ingest/api/v1/data',
+    body: {
+      schema_version: 'v1',
+      device_id: 'ESP32_002_ir',
+      subsystem: 'counting',
+      protocol: 'rest',
+      measurements: [{ type: 'count', value: 3, unit: 'count' }],
+    },
+    assertions: [
+      { label: 'HTTP 200', check: (s) => s === 200 },
+      { label: '入库成功', check: (_s, b) => isObject(b) && b.status === 'ok' },
+    ],
+  },
+  {
+    id: 'reject-unit',
+    name: '单位错误应被语义校验拒绝',
+    protocol: 'SHACL',
+    method: 'POST',
+    path: '/ingest/api/v1/data',
+    body: {
+      schema_version: 'v1',
+      device_id: 'ESP32_001_dht22',
+      subsystem: 'temp_humidity',
+      protocol: 'mqtt',
+      measurements: [
+        { type: 'temperature', value: 26.1, unit: 'fahrenheit' },
+      ],
+    },
+    assertions: [
+      { label: '应返回 4xx', check: (s) => s >= 400 && s < 500 },
+    ],
+  },
+  {
+    id: 'reject-range',
+    name: '超量程数据应被拒绝',
+    protocol: 'SHACL',
+    method: 'POST',
+    path: '/ingest/api/v1/data',
+    body: {
+      schema_version: 'v1',
+      device_id: 'ESP32_001_dht22',
+      subsystem: 'temp_humidity',
+      protocol: 'mqtt',
+      measurements: [
+        { type: 'humidity', value: 999, unit: 'percent' },
+      ],
+    },
+    assertions: [
+      { label: '应返回 4xx', check: (s) => s >= 400 && s < 500 },
+    ],
+  },
+  {
+    id: 'devices',
+    name: '设备注册表',
+    protocol: 'REST',
+    method: 'GET',
+    path: '/api/v1/devices',
+    assertions: [
+      { label: 'HTTP 200', check: (s) => s === 200 },
+      { label: '至少一台设备', check: (_s, b) => Array.isArray(b) ? b.length > 0 : isObject(b) && Array.isArray(b.items) && b.items.length > 0 },
+    ],
   },
   {
     id: 'control',
+    name: '远程控制指令下发',
+    protocol: 'MQTT',
     method: 'POST',
-    path: 'api/v1/control',
-    desc: '下发远程控制指令',
-    body: CTRL_TMPL,
+    path: '/api/v1/control',
+    body: { device_id: 'relay_lighting_01', action: 'on', subsystem: 'lighting' },
+    assertions: [
+      { label: 'HTTP 202', check: (s) => s === 202 },
+      { label: '返回指令号', check: (_s, b) => isObject(b) && !!b.command_id },
+    ],
+  },
+  {
+    id: 'audit',
+    name: '审计链完整性',
+    protocol: 'AUDIT',
+    method: 'GET',
+    path: '/api/v1/security/audit/verify',
+    assertions: [
+      { label: 'HTTP 200', check: (s) => s === 200 },
+      { label: '链未被篡改', check: (_s, b) => isObject(b) && b.valid === true },
+    ],
   },
 ]
 
-const selected = ref<Endpoint>(ENDPOINTS[0])
-const params = ref('')
-const body = ref('')
-const result = ref<RawResult | null>(null)
-const errMsg = ref('')
-const sending = ref(false)
+const outcomes = ref<Record<string, Outcome>>({})
+const running = ref(false)
+const selected = ref<string | null>(null)
 
-function select(ep: Endpoint) {
-  selected.value = ep
-  params.value = ep.params ?? ''
-  body.value = ep.body ?? ''
-  result.value = null
-  errMsg.value = ''
-}
-select(ENDPOINTS[0])
-
-const fullUrl = computed(() => {
-  const base = '/' + selected.value.path
-  if (selected.value.method === 'GET' && params.value.trim()) {
-    return base + '?' + params.value.trim()
+const summary = computed(() => {
+  const done = Object.values(outcomes.value).filter((o) => o.ran)
+  return {
+    total: CASES.length,
+    run: done.length,
+    passed: done.filter((o) => o.pass).length,
+    failed: done.filter((o) => !o.pass).length,
   }
-  return base
 })
 
-async function send() {
-  sending.value = true
-  errMsg.value = ''
-  result.value = null
-  try {
-    let payload: unknown
-    if (selected.value.method === 'POST') {
-      payload = JSON.parse(body.value || '{}')
-    }
-    result.value = await rawRequest(
-      selected.value.method,
-      fullUrl.value,
-      payload,
-    )
-  } catch (e) {
-    errMsg.value =
-      '请求失败: ' + (e instanceof Error ? e.message : String(e))
-  } finally {
-    sending.value = false
+async function runCase(c: TestCase) {
+  const res = await rawRequest(c.method, c.path, c.body)
+  const results = c.assertions.map((a) => ({
+    label: a.label,
+    pass: a.check(res.status, res.body),
+  }))
+  outcomes.value[c.id] = {
+    ran: true,
+    status: res.status,
+    ms: res.ms,
+    results,
+    pass: results.every((r) => r.pass),
+    raw: res.body,
   }
+}
+
+async function runAll() {
+  running.value = true
+  outcomes.value = {}
+  for (const c of CASES) {
+    await runCase(c)
+  }
+  running.value = false
+}
+
+function outcomeOf(id: string): Outcome | undefined {
+  return outcomes.value[id]
 }
 </script>
 
 <template>
-  <div class="console-view">
-    <aside class="endpoints">
-      <h3>Endpoints</h3>
-      <button
-        v-for="ep in ENDPOINTS"
-        :key="ep.id"
-        class="ep"
-        :class="{ active: selected.id === ep.id }"
-        @click="select(ep)"
-      >
-        <span class="verb" :class="ep.method.toLowerCase()">{{ ep.method }}</span>
-        <span class="path">/{{ ep.path }}</span>
-      </button>
-    </aside>
-
-    <section class="req">
-      <div class="line">
-        <span class="verb" :class="selected.method.toLowerCase()">
-          {{ selected.method }}
-        </span>
-        <code class="url">{{ fullUrl }}</code>
+  <div class="conformance">
+    <header class="bar">
+      <div class="left">
+        <h1>协议一致性测试</h1>
+        <p>验证四种协议的接入、语义校验拒绝行为与审计链完整性。</p>
       </div>
-      <p class="desc">{{ selected.desc }}</p>
-
-      <label v-if="selected.method === 'GET'" class="field">
-        <span>Params</span>
-        <input v-model="params" placeholder="key=value&key2=value2" />
-      </label>
-      <label v-else class="field">
-        <span>Body (JSON)</span>
-        <textarea v-model="body" rows="9"></textarea>
-      </label>
-
-      <button class="send" :disabled="sending" @click="send">
-        {{ sending ? '发送中...' : 'Send' }}
-      </button>
-
-      <div v-if="errMsg" class="err">{{ errMsg }}</div>
-      <div v-if="result" class="resp">
-        <div class="status-line">
-          <span class="code" :class="{ ok: result.ok }">{{ result.status }}</span>
-          <span class="time">{{ result.ms }}ms</span>
+      <div class="right">
+        <div class="tally mono">
+          <span class="pass">{{ summary.passed }} 通过</span>
+          <span class="fail">{{ summary.failed }} 失败</span>
+          <span class="dim">/ {{ summary.total }}</span>
         </div>
-        <JsonViewer :value="result.body" />
+        <button class="run" :disabled="running" @click="runAll">
+          {{ running ? '执行中…' : '运行全部用例' }}
+        </button>
       </div>
-    </section>
+    </header>
+
+    <table class="cases">
+      <thead>
+        <tr>
+          <th class="c-status"></th>
+          <th>用例</th>
+          <th class="c-proto">协议</th>
+          <th class="c-path">接口</th>
+          <th class="c-code">状态码</th>
+          <th class="c-ms">耗时</th>
+          <th class="c-assert">断言</th>
+        </tr>
+      </thead>
+      <tbody>
+        <template v-for="c in CASES" :key="c.id">
+          <tr
+            class="case"
+            :class="{
+              pass: outcomeOf(c.id)?.pass === true,
+              fail: outcomeOf(c.id)?.pass === false,
+              open: selected === c.id,
+            }"
+            @click="selected = selected === c.id ? null : c.id"
+          >
+            <td class="c-status">
+              <span v-if="!outcomeOf(c.id)" class="dot idle"></span>
+              <span v-else-if="outcomeOf(c.id)!.pass" class="dot ok">✓</span>
+              <span v-else class="dot bad">✕</span>
+            </td>
+            <td>{{ c.name }}</td>
+            <td class="c-proto mono">{{ c.protocol }}</td>
+            <td class="c-path mono">{{ c.method }} {{ c.path }}</td>
+            <td class="c-code mono">{{ outcomeOf(c.id)?.status ?? '--' }}</td>
+            <td class="c-ms mono">
+              {{ outcomeOf(c.id) ? outcomeOf(c.id)!.ms + 'ms' : '--' }}
+            </td>
+            <td class="c-assert">
+              <span
+                v-for="r in outcomeOf(c.id)?.results ?? []"
+                :key="r.label"
+                class="chip"
+                :class="r.pass ? 'ok' : 'bad'"
+              >{{ r.label }}</span>
+              <span v-if="!outcomeOf(c.id)" class="dim">未运行</span>
+            </td>
+          </tr>
+          <tr v-if="selected === c.id && outcomeOf(c.id)" class="detail">
+            <td colspan="7">
+              <pre class="mono">{{ JSON.stringify(outcomeOf(c.id)!.raw, null, 2) }}</pre>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+
+    <p class="foot">
+      拒绝类用例（单位错误、超量程）返回 4xx 才算通过——平台必须挡下不合规数据，而不是照单全收。
+    </p>
   </div>
 </template>
 
 <style scoped>
-.console-view {
-  display: grid;
-  grid-template-columns: 240px 1fr;
+.conformance {
+  padding: 12px 16px 20px;
+}
+.bar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
   gap: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 10px;
 }
-.endpoints {
-  background: rgba(30, 41, 59, 0.6);
-  border: 1px solid #334155;
-  border-radius: 10px;
-  padding: 12px;
+h1 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
 }
-h3 {
-  color: #38bdf8;
-  font-size: 0.9rem;
-  margin: 0 0 10px;
+.bar p {
+  margin: 3px 0 0;
+  font-size: 11px;
+  color: var(--text-faint);
 }
-.ep {
+.right {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 14px;
+}
+.tally {
+  font-size: 12px;
+  display: flex;
+  gap: 8px;
+}
+.tally .pass { color: var(--ok); }
+.tally .fail { color: var(--danger); }
+.tally .dim { color: var(--text-faint); }
+.run {
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  padding: 5px 14px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.run:disabled { opacity: 0.5; cursor: wait; }
+
+.cases {
   width: 100%;
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  padding: 6px 8px;
-  cursor: pointer;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.cases th {
   text-align: left;
-  margin-bottom: 2px;
+  font-weight: 500;
+  color: var(--text-faint);
+  font-size: 11px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--line);
 }
-.ep:hover {
-  background: #0f172a;
+.case td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-dim);
 }
-.ep.active {
-  background: #0f172a;
+.case { cursor: pointer; }
+.case:hover td { background: var(--surface-2); }
+.case.pass td:nth-child(2) { color: var(--text); }
+.case.fail td { background: var(--danger-bg); }
+
+.c-status { width: 24px; text-align: center; }
+.c-proto { width: 70px; }
+.c-path { width: 210px; color: var(--text-faint) !important; }
+.c-code, .c-ms { width: 66px; }
+
+.dot { font-size: 12px; }
+.dot.ok { color: var(--ok); }
+.dot.bad { color: var(--danger); }
+.dot.idle::before {
+  content: '';
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--line-strong);
 }
-.verb {
-  font-size: 0.66rem;
-  font-weight: 700;
-  border-radius: 3px;
-  padding: 1px 5px;
+
+.chip {
+  display: inline-block;
+  font-size: 10px;
+  padding: 1px 6px;
+  margin: 1px 4px 1px 0;
+  border: 1px solid var(--line-strong);
 }
-.verb.get {
-  background: #164e63;
-  color: #67e8f9;
+.chip.ok { color: var(--ok); border-color: var(--ok); }
+.chip.bad { color: var(--danger); border-color: var(--danger); }
+.dim { color: var(--text-faint); }
+
+.detail td {
+  background: var(--bg);
+  padding: 0;
 }
-.verb.post {
-  background: #422006;
-  color: #fbbf24;
+.detail pre {
+  margin: 0;
+  padding: 10px 14px;
+  font-size: 11px;
+  color: var(--text-dim);
+  max-height: 240px;
+  overflow: auto;
 }
-.path {
-  font-family: monospace;
-  font-size: 0.74rem;
-  color: #cbd5e1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.req {
-  background: rgba(30, 41, 59, 0.6);
-  border: 1px solid #334155;
-  border-radius: 10px;
-  padding: 16px;
-}
-.line {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.url {
-  font-family: monospace;
-  font-size: 0.85rem;
-  color: #7dd3fc;
-}
-.desc {
-  color: #94a3b8;
-  font-size: 0.8rem;
-  margin: 6px 0 14px;
-}
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  margin-bottom: 12px;
-}
-.field span {
-  color: #94a3b8;
-  font-size: 0.78rem;
-}
-.field input,
-.field textarea {
-  background: #0f172a;
-  color: #e2e8f0;
-  border: 1px solid #334155;
-  border-radius: 6px;
-  padding: 8px 10px;
-  font-family: monospace;
-  font-size: 0.8rem;
-}
-.send {
-  background: #0e7490;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: 8px 24px;
-  cursor: pointer;
-  font-size: 0.85rem;
-}
-.send:hover {
-  background: #0891b2;
-}
-.send:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.err {
-  color: #ef4444;
-  font-size: 0.82rem;
-  margin-top: 12px;
-}
-.resp {
-  margin-top: 16px;
-}
-.status-line {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 8px;
-}
-.code {
-  font-weight: 700;
-  color: #ef4444;
-}
-.code.ok {
-  color: #34d399;
-}
-.time {
-  color: #94a3b8;
-  font-size: 0.8rem;
-}
-@media (max-width: 700px) {
-  .console-view {
-    grid-template-columns: 1fr;
-  }
+.foot {
+  margin: 10px 0 0;
+  font-size: 10px;
+  color: var(--text-faint);
 }
 </style>

@@ -1,0 +1,17 @@
+@prefix sf:   <http://example.org/smart-factory#> .
+@prefix sosa: <http://www.w3.org/ns/sosa/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix unit: <http://qudt.org/vocab/unit/> .
+
+sf:measuresVibration a sosa:ObservableProperty ;
+    rdfs:label "vibration"@en, "振动"@zh ;
+    sf:hasUnit unit:MilliM-PER-SEC ;
+    sf:minValue "0.0"^^xsd:double ;
+    sf:maxValue "50.0"^^xsd:double ;
+    sf:warnThreshold "8.0"^^xsd:double ;
+    sf:dangerThreshold "15.0"^^xsd:double ;
+    sf:belongsToSubsystem sf:VibrationSubsystem .
+
+sf:VibrationSubsystem a sf:Subsystem ;
+    rdfs:label "vibration monitoring"@en, "振动监测"@zh .

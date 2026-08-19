@@ -37,8 +37,6 @@ vi.mock('../src/api', () => ({
     .mockResolvedValue({ status: 200, ok: true, ms: 5, body: { pong: true } }),
 }))
 
-// Real timers are used here because flushPromises relies on setTimeout to
-// drain the microtask queue, which never fires under fake timers.
 afterEach(() => {
   vi.clearAllMocks()
 })
@@ -91,7 +89,7 @@ describe('ApiConsoleView', () => {
     expect(wrapper.find('.url').text()).toContain('/api/v1/latest')
     await wrapper.find('.send').trigger('click')
     await flushPromises()
-    const api = await import('../src/api')
+    const api = await import('../api')
     expect(vi.mocked(api.rawRequest)).toHaveBeenCalled()
     expect(wrapper.find('.code').text()).toBe('200')
   })

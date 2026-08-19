@@ -17,15 +17,29 @@ logger = logging.getLogger(__name__)
 
 _API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
 
-_VALID_KEY_HASHES: set[str] = set(
-    filter(None, os.environ.get("API_KEYS", "").split(","))
-)
-
-_AUTH_DISABLED = len(_VALID_KEY_HASHES) == 0
-
-
 def _hash_key(key: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()
+
+
+def _load_valid_hashes() -> set[str]:
+    """Accept keys from either env var.
+
+    API_KEYS  comma-separated sha256 hashes (preferred in production)
+    API_KEY   a single plaintext key, hashed here
+
+    The deploy files and .env only ever set API_KEY, so reading API_KEYS
+    alone silently disabled authentication on every deployment.
+    """
+    hashes = {h.strip() for h in os.environ.get("API_KEYS", "").split(",") if h.strip()}
+    plain = os.environ.get("API_KEY", "").strip()
+    if plain and plain != "changeme":
+        hashes.add(_hash_key(plain))
+    return hashes
+
+
+_VALID_KEY_HASHES: set[str] = _load_valid_hashes()
+
+_AUTH_DISABLED = len(_VALID_KEY_HASHES) == 0
 
 
 def _is_valid(key: str | None) -> bool:

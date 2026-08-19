@@ -21,6 +21,7 @@ from smart_factory_contracts.messages import (
     Measurement, MeasurementType, Protocol, Subsystem, Unit, UnifiedMessage,
 )
 from backend.store import insert_sensor_data
+from backend.api.prediction import process_reading as run_prediction_pipeline
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ingest", tags=["ingest"])
@@ -190,7 +191,6 @@ async def ingest_unified_data(
 
     record_id = insert_sensor_data(msg)
 
-    # trigger live device registry & Fuseki sync
     if msg.measurements:
         first_m = msg.measurements[0]
         device = LiveDevice(
@@ -202,11 +202,27 @@ async def ingest_unified_data(
         if aas_registry.observe(device):
             background_tasks.add_task(register_device_in_fuseki, device, config.FUSEKI_ENDPOINT)
 
+    analytics_result = run_prediction_pipeline(
+        device_id=msg.device_id,
+        subsystem=msg.subsystem.value if hasattr(msg.subsystem, "value") else str(msg.subsystem),
+        protocol=msg.protocol.value if hasattr(msg.protocol, "value") else str(msg.protocol),
+        measurements=[
+            {
+                "type": m.type.value if hasattr(m.type, "value") else str(m.type),
+                "value": m.value,
+            }
+            for m in msg.measurements
+        ],
+    )
+
     kg_written = await write_to_fuseki(msg, config.FUSEKI_ENDPOINT)
-    
+
     return {
         "status": "ok",
         "record_id": record_id,
         "ingest_id": ingest_id,
         "kg_written": kg_written,
+        "predictions": analytics_result["predictions"],
+        "hazards": analytics_result["hazards"],
+        "agv": analytics_result["agv"],
     }

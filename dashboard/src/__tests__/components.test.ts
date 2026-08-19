@@ -94,7 +94,7 @@ describe('component smoke tests', () => {
 
 describe('SemanticPanel state handling', () => {
   it('shows error text when the semantic service is unavailable', async () => {
-    const api = await import('../src/api')
+    const api = await import('../api')
     vi.mocked(api.fetchSemanticView).mockRejectedValueOnce(new Error('down'))
     const wrapper = mount(SemanticPanel, { global: { stubs: { } } })
     await flushPromises()
@@ -102,7 +102,7 @@ describe('SemanticPanel state handling', () => {
   })
 
   it('shows empty hint when no semantic rows are returned', async () => {
-    const api = await import('../src/api')
+    const api = await import('../api')
     vi.mocked(api.fetchSemanticView).mockResolvedValueOnce({
       view: 'sensor-observations',
       description: 'none',

@@ -39,8 +39,7 @@ _FIRE_RISK_FILTER = (
 )
 
 _GAS_DETAIL_FILTER = (
-    "?sensor sf:belongsToSubsystem sf:GasMonitoringSubsystem . "
-    "BIND(sf:GasMonitoringSubsystem AS ?subsystem)"
+    "?sensor sf:belongsToSubsystem sf:GasMonitoringSubsystem ."
 )
 
 _PRODUCTION_FILTER = (

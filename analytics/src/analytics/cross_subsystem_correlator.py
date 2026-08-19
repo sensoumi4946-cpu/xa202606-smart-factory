@@ -5,7 +5,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
-from analytics.anomaly_detector import AnomalyResult
+from analytics.anomaly_detector import AnomalyResult, canonical_property
 
 logger = logging.getLogger(__name__)
 
@@ -24,31 +24,47 @@ class CorrelatedAlert:
     subsystems_involved: list[str]
     protocols_involved: list[str]
 
+    def to_dict(self) -> dict:
+        return {
+            "alert_id": self.alert_id,
+            "triggered_at": self.triggered_at,
+            "sources": self.sources,
+            "hypothesis": self.hypothesis,
+            "confidence": self.confidence,
+            "subsystems_involved": self.subsystems_involved,
+            "protocols_involved": self.protocols_involved,
+        }
 
-# Known multi-sensor patterns and what they might mean.
+
 _PATTERNS: list[dict] = [
     {
         "name": "fire_risk",
-        "required_properties": {"co_level", "temperature"},
+        "required_properties": {"co", "temperature"},
         "hypothesis": "Simultaneous rise in CO and temperature — possible fire or combustion event",
         "confidence": "high",
     },
     {
-        "name": "electrical_fault",
-        "required_properties": {"current", "voltage"},
-        "hypothesis": "Correlated current and voltage anomalies — possible electrical fault or arc",
+        "name": "smouldering",
+        "required_properties": {"smoke", "co"},
+        "hypothesis": "Smoke and CO rising together — possible smouldering material before open flame",
         "confidence": "high",
     },
     {
-        "name": "mechanical_stress",
-        "required_properties": {"vibration", "temperature"},
-        "hypothesis": "Vibration and temperature rising together — possible bearing or motor issue",
+        "name": "gas_accumulation",
+        "required_properties": {"combustible_gas", "temperature"},
+        "hypothesis": "Combustible gas anomaly with temperature change — possible leak near a heat source",
+        "confidence": "high",
+    },
+    {
+        "name": "unattended_hazard",
+        "required_properties": {"combustible_gas", "occupancy"},
+        "hypothesis": "Gas anomaly in an area with no personnel — leak may go unnoticed",
         "confidence": "medium",
     },
     {
-        "name": "pressure_event",
-        "required_properties": {"pressure", "temperature"},
-        "hypothesis": "Pressure and temperature anomalies — check relief valves and seals",
+        "name": "environment_stress",
+        "required_properties": {"temperature", "humidity"},
+        "hypothesis": "Temperature and humidity anomalies together — condensation or HVAC failure risk",
         "confidence": "medium",
     },
 ]
@@ -98,7 +114,7 @@ class CrossSubsystemCorrelator:
                 "sensor_id": result.sensor_id,
                 "subsystem": subsystem,
                 "protocol": protocol,
-                "property_name": property_name,
+                "property_name": canonical_property(property_name),
                 "value": result.value,
                 "ts": now,
             }

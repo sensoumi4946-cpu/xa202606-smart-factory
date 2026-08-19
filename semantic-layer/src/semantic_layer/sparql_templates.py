@@ -1,5 +1,7 @@
 # SPARQL query templates for the knowledge graph.
 
+import re
+
 _PREFIXES = (
     "PREFIX sosa: <http://www.w3.org/ns/sosa/>\n"
     "PREFIX sf:   <http://example.org/smart-factory#>\n"
@@ -7,9 +9,34 @@ _PREFIXES = (
     "PREFIX prov: <http://www.w3.org/ns/prov#>\n"
 )
 
+_LOCAL_NAME = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
+
+_BASE_IRI = "http://example.org/smart-factory#"
+
+
+class UnsafeIdentifierError(ValueError):
+    pass
+
+
+def _safe_iri(local_name: str, kind: str = "identifier") -> str:
+    if not isinstance(local_name, str) or not _LOCAL_NAME.match(local_name):
+        raise UnsafeIdentifierError(
+            f"unsafe {kind}: only letters, digits, '_', '.', ':' and '-' "
+            f"are allowed (max 128 chars), got {local_name!r}"
+        )
+    return _BASE_IRI + local_name
+
+
+def _safe_limit(limit: int, maximum: int = 1000) -> int:
+    value = int(limit)
+    if value < 1:
+        return 1
+    return min(value, maximum)
+
+
 def latest_by_device(device_id: str, limit: int = 10) -> str:
     
-    device_uri = f"http://example.org/smart-factory#{device_id}"
+    device_uri = _safe_iri(device_id, "device_id")
     return (
         _PREFIXES +
         "SELECT ?prop ?value ?unit ?time WHERE {\n"
@@ -20,7 +47,7 @@ def latest_by_device(device_id: str, limit: int = 10) -> str:
         "       sosa:resultTime ?time .\n"
         "  OPTIONAL { ?obs sf:hasUnit ?unit }\n"
         "}\n"
-        f"ORDER BY DESC(?time) LIMIT {int(limit)}"
+        f"ORDER BY DESC(?time) LIMIT {_safe_limit(limit)}"
     )
 
 
@@ -75,8 +102,8 @@ def device_property_matrix() -> str:
 def cross_subsystem_correlation(prop_a: str, prop_b: str,
                                 minutes: int = 10) -> str:
     
-    uri_a = f"http://example.org/smart-factory#{prop_a}"
-    uri_b = f"http://example.org/smart-factory#{prop_b}"
+    uri_a = _safe_iri(prop_a, "property")
+    uri_b = _safe_iri(prop_b, "property")
 
     return (
         _PREFIXES +
@@ -93,8 +120,8 @@ def cross_subsystem_correlation(prop_a: str, prop_b: str,
         "        sosa:resultTime ?timeB .\n"
         # different sensors
         "  FILTER(?sensorA != ?sensorB)\n"
-        # within the same time window
-        f"  FILTER(?time >= xsd:dateTime(NOW() - \"PT{int(minutes)}M\"^^xsd:duration))\n"
+        f"  FILTER(?timeA >= (NOW() - \"PT{int(minutes)}M\"^^xsd:dayTimeDuration))\n"
+        f"  FILTER(?timeB >= (NOW() - \"PT{int(minutes)}M\"^^xsd:dayTimeDuration))\n"
         "}\n"
         "ORDER BY DESC(?timeA) LIMIT 20"
     )
@@ -102,7 +129,7 @@ def cross_subsystem_correlation(prop_a: str, prop_b: str,
 
 def provenance_trace(device_id: str) -> str:
     
-    device_uri = f"http://example.org/smart-factory#{device_id}"
+    device_uri = _safe_iri(device_id, "device_id")
     return (
         _PREFIXES +
         "SELECT ?obs ?prop ?value ?agent ?ingestedAt WHERE {\n"

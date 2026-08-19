@@ -1,10 +1,10 @@
-# Integration tests for POST /api/v1/control and GET /api/v1/control/{id}.
-# Phase 1 control commands are always recorded as 'pending' — real device
-# actuation is deferred to Phase 2+.
+# Integration tests for the control endpoints.
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from backend.main import app
+from backend.services import control_dispatcher
 from backend.store import init_db
 
 
@@ -14,6 +14,13 @@ def _init_db(tmp_path, monkeypatch):
     monkeypatch.setattr("backend.store.DATABASE_PATH", str(db_path))
     monkeypatch.setattr("backend.config.DATABASE_PATH", str(db_path))
     init_db()
+
+
+@pytest.fixture(autouse=True)
+def _stub_broker(monkeypatch):
+    monkeypatch.setattr(
+        control_dispatcher, "_publish_blocking", lambda topic, payload: None
+    )
 
 
 @pytest.mark.asyncio
@@ -67,7 +74,7 @@ async def test_control_status():
     assert status_resp.status_code == 200
     status_data = status_resp.json()
     assert status_data["command_id"] == command_id
-    assert status_data["status"] == "pending"
+    assert status_data["status"] == "dispatched"
     assert status_data["device_id"] == "relay_03"
 
 

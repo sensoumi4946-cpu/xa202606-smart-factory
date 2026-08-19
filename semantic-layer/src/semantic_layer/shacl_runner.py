@@ -29,7 +29,7 @@ class ValidationReport:
 
     def summary(self) -> str:
         if self.conforms and not self.warnings:
-            return f"✓ SHACL validation passed"
+            return "✓ SHACL validation passed"
         elif self.conforms:
             # passed but has warnings (sh:Warning severity)
             return f"✓ passed with {len(self.warnings)} warning(s)"
@@ -37,8 +37,19 @@ class ValidationReport:
             return f"✗ {len(self.violations)} violation(s)"
 
 
+def _has_observations(data_graph: Graph) -> bool:
+    from rdflib import RDF, SOSA
+
+    return next(data_graph.subjects(RDF.type, SOSA.Observation), None) is not None
+
+
 def validate(data_graph: Graph) -> ValidationReport:
-    
+    if not _has_observations(data_graph):
+        return ValidationReport(
+            conforms=False,
+            violations=["No sosa:Observation nodes found in graph"],
+        )
+
     try:
         import pyshacl
     except ImportError:
@@ -111,6 +122,11 @@ def _fallback_validate(data_graph: Graph) -> ValidationReport:
 def validate_with_domain(data_graph: Graph) -> ValidationReport:
    # Used by semantic_benchmark.py BM-3
    from rdflib import URIRef
+   if not _has_observations(data_graph):
+        return ValidationReport(
+            conforms=False,
+            violations=["No sosa:Observation nodes found in graph"],
+        )
    try:
         from semantic_layer.shacl_domain_shapes import load_domain_shapes
         combined = Graph()

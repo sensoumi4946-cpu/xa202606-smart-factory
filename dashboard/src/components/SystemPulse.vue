@@ -1,10 +1,4 @@
 <script setup lang="ts">
-// The dashboard's opening statement: answers "is the factory safe?"
-// in one glance. Overall state is computed from active alerts:
-//   critical alert in last 60s -> CRITICAL (red)
-//   warning  alert in last 60s -> WARNING  (amber)
-//   otherwise                  -> NORMAL   (green)
-// Right side: four live KPIs (devices, msgs/10min, alerts, semantic gate).
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import {
   fetchAlerts,
@@ -173,15 +167,12 @@ onUnmounted(() => {
 }
 .beacon.normal {
   background: var(--ok);
-  box-shadow: 0 0 10px rgba(76, 195, 138, 0.7);
 }
 .beacon.warning {
   background: var(--warn);
-  box-shadow: 0 0 10px rgba(245, 165, 36, 0.7);
 }
 .beacon.critical {
   background: var(--danger);
-  box-shadow: 0 0 12px rgba(240, 68, 68, 0.9);
   animation: throb 0.9s ease-in-out infinite;
 }
 @keyframes throb {

@@ -1,32 +1,21 @@
 <script setup lang="ts">
-// Live SHACL validation gate badge: ✓ PASSED / ✗ REJECTED, polled from
-// GET /api/v1/semantic/gate-status. Three states:
-//   passed   — last observation conformed to observation_shapes.ttl
-//   rejected — last observation was refused by the gate (reason shown)
-//   pending  — endpoint not implemented yet (returns 404) or unreachable
-// The "pending" state keeps the badge honest while the gate integration
-// branch is unmerged; the expected contract is documented in api.ts.
 import { ref, onMounted, onUnmounted } from 'vue'
 import { fetchGateStatus, type GateStatus } from '../api'
 
-const gate = ref<GateStatus | null>(null)
-const pending = ref(true)
+const status = ref<GateStatus | null>(null)
 let timer: ReturnType<typeof setInterval> | undefined
 
 async function refresh() {
   try {
-    const data = await fetchGateStatus()
-    gate.value = data
-    pending.value = data === null
+    status.value = await fetchGateStatus()
   } catch {
-    gate.value = null
-    pending.value = true
+    status.value = null
   }
 }
 
 onMounted(() => {
   refresh()
-  timer = setInterval(refresh, 3000)
+  timer = setInterval(refresh, 5000)
 })
 onUnmounted(() => {
   if (timer) clearInterval(timer)
@@ -35,52 +24,58 @@ onUnmounted(() => {
 
 <template>
   <span
-    class="gate-badge mono"
-    :class="pending ? 'pending' : gate?.status"
+    class="badge"
+    :class="status?.status ?? 'pending'"
     :title="
-      pending
-        ? 'SHACL 网关状态端点待接入 (/api/v1/semantic/gate-status)'
-        : gate?.status === 'rejected'
-          ? `${gate?.last_device ?? ''}: ${gate?.reason ?? ''}`
-          : `已通过 ${gate?.passed_count ?? '—'} · 已拒绝 ${gate?.rejected_count ?? '—'}`
+      status
+        ? `${status.passed_count ?? 0} 通过 / ${status.rejected_count ?? 0} 拒绝` +
+          (status.status === 'rejected' && status.reason ? ' — ' + status.reason : '')
+        : '尚无入库记录'
     "
   >
-    <template v-if="pending">SHACL · 待接入</template>
-    <template v-else-if="gate?.status === 'passed'">✓ SHACL PASSED</template>
-    <template v-else>✗ SHACL REJECTED</template>
+    <span class="dot"></span>
+    SHACL ·
+    {{
+      status?.status === 'passed'
+        ? '通过'
+        : status?.status === 'rejected'
+          ? '拒绝'
+          : '待接入'
+    }}
   </span>
 </template>
 
 <style scoped>
-.gate-badge {
+.badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
+  gap: 5px;
+  font-size: var(--fs-xs, 0.72rem);
+  padding: 2px 8px;
   border-radius: 999px;
-  font-size: var(--fs-xs);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  border: 1px solid var(--line-strong);
-  cursor: help;
+  border: 1px solid var(--line-strong, #334155);
+  color: var(--text-dim, #94a3b8);
+  cursor: default;
+  white-space: nowrap;
 }
-.gate-badge.passed {
-  color: var(--ok);
-  border-color: var(--ok);
-  background: var(--ok-bg);
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #64748b;
 }
-.gate-badge.rejected {
-  color: var(--danger);
-  border-color: var(--danger);
-  background: var(--danger-bg);
-  animation: flash 1s ease-in-out infinite;
+.badge.passed {
+  border-color: #34d399;
+  color: #34d399;
 }
-.gate-badge.pending {
-  color: var(--text-faint);
+.badge.passed .dot {
+  background: #34d399;
 }
-@keyframes flash {
-  50% {
-    opacity: 0.65;
-  }
+.badge.rejected {
+  border-color: var(--danger, #ef4444);
+  color: var(--danger, #ef4444);
+}
+.badge.rejected .dot {
+  background: var(--danger, #ef4444);
 }
 </style>

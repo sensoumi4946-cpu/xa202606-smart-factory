@@ -1,0 +1,33 @@
+{
+  "benchmark": "BM-SHACL-1 ingest path validation cost",
+  "iterations": 300,
+  "stages": [
+    {
+      "stage": "contract_parse",
+      "samples": 300,
+      "mean_ms": 0.005,
+      "p50_ms": 0.004,
+      "p95_ms": 0.005,
+      "p99_ms": 0.036,
+      "max_ms": 0.048,
+      "throughput_per_s": 220599.3
+    },
+    {
+      "stage": "shacl_validation",
+      "samples": 300,
+      "mean_ms": 21.236,
+      "p50_ms": 20.119,
+      "p95_ms": 24.676,
+      "p99_ms": 54.939,
+      "max_ms": 75.855,
+      "throughput_per_s": 47.1
+    }
+  ],
+  "single_worker_ceiling_msg_per_s": 47.1,
+  "devices_at_2hz": 23,
+  "devices_at_0_5hz": 94,
+  "notes": [
+    "SHACL validation runs synchronously in the ingest request path.",
+    "The figure above is the measured ceiling for one uvicorn worker."
+  ]
+}

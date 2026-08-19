@@ -11,77 +11,58 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from smart_factory_contracts.messages import UnifiedMessage
-from backend.config import DATABASE_PATH, LATEST_WINDOW_MINUTES
+from backend import config
+from backend.config import LATEST_WINDOW_MINUTES
+from backend.db import connection, ensure_schema, reset_pools
+
+# Kept so existing tests can monkeypatch backend.store.DATABASE_PATH. The
+# value the pool actually uses is backend.config.DATABASE_PATH, resolved on
+# every call; this name is an alias for compatibility only.
+DATABASE_PATH = config.DATABASE_PATH
 from backend.rules import evaluate
 
 
-def _get_connection() -> sqlite3.Connection:
-    db_dir = os.path.dirname(DATABASE_PATH)
-    if db_dir:
-        os.makedirs(db_dir, exist_ok=True)
-    conn = sqlite3.connect(DATABASE_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    return conn
+class _PooledConnection:
+    """Adapter so existing call sites keep working.
+
+    Every function in this module was written as
+        conn = _get_connection() ... conn.close()
+    Rewriting all of them at once is risky, so close() returns the
+    connection to the pool instead of tearing it down. The path is resolved
+    per call, which is what stops tables being created in one file and read
+    from another after configuration changes.
+    """
+
+    def __init__(self):
+        self._ctx = connection()
+        self._conn = self._ctx.__enter__()
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    def close(self):
+        self._ctx.__exit__(None, None, None)
+
+
+def _get_connection():
+    return _PooledConnection()
+
+
+def _add_column_if_missing(
+    conn: sqlite3.Connection, table: str, column: str, decl: str
+) -> None:
+    cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+    if column not in cols:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
 
 
 def init_db() -> None:
-    conn = _get_connection()
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS sensor_data (
-            id TEXT PRIMARY KEY,
-            device_id TEXT NOT NULL,
-            subsystem TEXT NOT NULL,
-            protocol TEXT NOT NULL,
-            timestamp TEXT NOT NULL,
-            measurements TEXT NOT NULL,
-            raw_payload TEXT,
-            ingested_at TEXT NOT NULL
-        )"""
-    )
-    conn.execute(
-        """CREATE INDEX IF NOT EXISTS idx_sensor_data_device
-        ON sensor_data(device_id)"""
-    )
-    conn.execute(
-        """CREATE INDEX IF NOT EXISTS idx_sensor_data_timestamp
-        ON sensor_data(timestamp DESC)"""
-    )
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS control_commands (
-            command_id TEXT PRIMARY KEY,
-            device_id TEXT NOT NULL,
-            action TEXT NOT NULL,
-            params TEXT NOT NULL DEFAULT '{}',
-            status TEXT NOT NULL DEFAULT 'pending',
-            created_at TEXT NOT NULL
-        )"""
-    )
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS alerts (
-            id TEXT PRIMARY KEY,
-            rule_name TEXT NOT NULL,
-            level TEXT NOT NULL,
-            device_id TEXT NOT NULL,
-            subsystem TEXT NOT NULL,
-            measurement_type TEXT NOT NULL,
-            value REAL NOT NULL,
-            threshold REAL NOT NULL,
-            message TEXT NOT NULL,
-            source_record_id TEXT NOT NULL,
-            triggered_at TEXT NOT NULL
-        )"""
-    )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_alerts_triggered_at ON alerts(triggered_at DESC)"
-    )
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_alerts_device ON alerts(device_id)")
-    conn.execute(
-        """CREATE INDEX IF NOT EXISTS idx_alerts_rule_device_time
-        ON alerts(rule_name, device_id, triggered_at DESC)"""
-    )
-    conn.commit()
-    conn.close()
+    """Create or upgrade the schema for the currently configured database."""
+    ensure_schema(config.DATABASE_PATH)
+
+
+def close_db() -> None:
+    reset_pools()
 
 
 def insert_alert(
@@ -208,6 +189,14 @@ def get_devices() -> list[str]:
     return [row["device_id"] for row in rows]
 
 
+# Command lifecycle:
+#   pending    row written, not yet on the broker
+#   dispatched published to MQTT, waiting for the device
+#   executed   device confirmed it did the thing
+#   failed     broker unreachable, or the device reported an error
+VALID_COMMAND_STATUS = ("pending", "dispatched", "executed", "failed")
+
+
 def insert_control_command(device_id: str, action: str, params: dict) -> str:
     command_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
@@ -220,6 +209,84 @@ def insert_control_command(device_id: str, action: str, params: dict) -> str:
     conn.commit()
     conn.close()
     return command_id
+
+
+def mark_command_dispatched(command_id: str, ok: bool) -> None:
+    """Called straight after the MQTT publish attempt."""
+    now = datetime.now(timezone.utc).isoformat()
+    conn = _get_connection()
+    if ok:
+        conn.execute(
+            """UPDATE control_commands
+               SET status = 'dispatched', dispatched_at = ?
+               WHERE command_id = ? AND status = 'pending'""",
+            (now, command_id),
+        )
+    else:
+        conn.execute(
+            """UPDATE control_commands
+               SET status = 'failed', result = 'broker unreachable'
+               WHERE command_id = ? AND status = 'pending'""",
+            (command_id,),
+        )
+    conn.commit()
+    conn.close()
+
+
+def ack_control_command(
+    command_id: str, success: bool, detail: str = ""
+) -> Optional[dict[str, Any]]:
+    """Record the device's confirmation. Returns None if the id is unknown.
+
+    Acks are idempotent — a device that retries its POST must not flip an
+    already-executed command back to something else.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    conn = _get_connection()
+    row = conn.execute(
+        "SELECT status FROM control_commands WHERE command_id = ?", (command_id,)
+    ).fetchone()
+    if row is None:
+        conn.close()
+        return None
+
+    if row["status"] in ("executed", "failed"):
+        conn.close()
+        return get_control_status(command_id)
+
+    conn.execute(
+        """UPDATE control_commands
+           SET status = ?, acked_at = ?, result = ?
+           WHERE command_id = ?""",
+        ("executed" if success else "failed", now, detail, command_id),
+    )
+    conn.commit()
+    conn.close()
+    return get_control_status(command_id)
+
+
+def list_control_commands(
+    device_id: Optional[str] = None, limit: int = 50
+) -> list[dict[str, Any]]:
+    conn = _get_connection()
+    if device_id:
+        rows = conn.execute(
+            """SELECT * FROM control_commands WHERE device_id = ?
+               ORDER BY created_at DESC LIMIT ?""",
+            (device_id, limit),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM control_commands ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    conn.close()
+    out = []
+    for row in rows:
+        r = dict(row)
+        r["params"] = json.loads(r["params"])
+        out.append(r)
+    return out
 
 
 def get_control_status(command_id: str) -> Optional[dict[str, Any]]:

@@ -1,12 +1,3 @@
-# MQTT protocol adapter — the only fully implemented adapter in Phase 1.
-#
-# Subscribes to factory/+/sensors/# (wildcard for all subsystems, all
-# devices, all measurement types), parses each payload into a
-# UnifiedMessage, and pushes it through the router to the backend.
-#
-# Topic structure: factory/{subsystem}/sensors/{device_id}/{measurement_type}
-# Control topics (factory/*/control/...) are explicitly filtered out
-# so they never enter the sensor data pipeline.
 import asyncio
 import json
 import sys
@@ -107,11 +98,8 @@ class MQTTAdapter(BaseAdapter):
     def _parse_payload(self, topic: str, payload_str: str) -> Optional[UnifiedMessage]:
         raw = json.loads(payload_str)
         parts = topic.split("/")
-        # Guard: skip control topics so they don't enter the sensor data pipeline
         if len(parts) < 4 or "control" in topic:
             return None
-
-        # Derive subsystem and device_id from MQTT topic hierarchy
         subsystem = parts[1]
         device_id = parts[3]
 

@@ -14,11 +14,20 @@ import SparqlPanel from '../components/SparqlPanel.vue'
 import KnowledgeGraph from '../components/KnowledgeGraph.vue'
 import CrossAlertBanner from '../components/CrossAlertBanner.vue'
 import DeviceDrawer from '../components/DeviceDrawer.vue'
+import EmptyState from '../components/EmptyState.vue'
 
 useSubsystemDevices()
 const devices = devicesBySubsystem()
 const clock = useClock()
 const drawerDev = ref<string | null>(null)
+
+const anyData = computed(() =>
+  Object.keys(devices.value ?? {}).length > 0,
+)
+
+function reload() {
+  window.location.reload()
+}
 
 function reading(subsystem: string, type: string) {
   return measurementFor(subsystem, type)
@@ -67,7 +76,16 @@ const countRate = computed(() => {
 </script>
 
 <template>
-  <div class="grid">
+  <EmptyState
+    v-if="!anyData"
+    kind="offline"
+    title="未检测到任何设备接入"
+    detail="平台已启动，但尚未收到传感器数据。请确认后端服务、MQTT broker 与设备侧程序均在运行。"
+    hint="curl http://localhost:8000/api/v1/devices"
+    @retry="reload"
+  />
+
+  <div v-else class="grid">
     <div class="banner">
       <CrossAlertBanner />
     </div>
@@ -196,8 +214,8 @@ const countRate = computed(() => {
 .banner { grid-column: 1 / -1; }
 
 .p-temp { grid-column: span 3; }
-.p-gas { grid-column: span 6; grid-row: span 2; }
-.p-agv { grid-column: span 3; grid-row: span 2; }
+.p-gas { grid-column: span 6; grid-row: span 3; }
+.p-agv { grid-column: span 3; grid-row: span 3; }
 .p-light { grid-column: span 3; }
 .p-count { grid-column: span 3; }
 .p-alerts { grid-column: span 3; grid-row: span 2; }
@@ -207,8 +225,11 @@ const countRate = computed(() => {
 .gauges {
   display: flex;
   gap: 8px;
+  align-items: center;
   justify-content: center;
   flex-wrap: wrap;
+  height: 100%;
+  min-height: 0;
 }
 
 .kv {

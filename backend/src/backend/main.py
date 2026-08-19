@@ -30,6 +30,7 @@ from backend.api.ontology_api import router as ontology_router
 from backend.api.federation_api import router as federation_router
 from backend.api.ops import router as ops_router
 from backend.api.assistant_api import router as assistant_router
+from backend.api.innovation_api import router as innovation_router, load_bindings
 from backend.middleware import RequestContextMiddleware
 from backend.runtime_state import assert_single_worker
 
@@ -47,6 +48,10 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     assert_single_worker()
     init_db()
+    from analytics.thresholds import autobind
+
+    autobind()
+    load_bindings()
     seeded = await write_aas_to_fuseki(config.FUSEKI_ENDPOINT)
     if seeded:
         logger.info("AAS descriptors seeded into Fuseki")
@@ -96,6 +101,7 @@ app.include_router(ontology_router)
 app.include_router(federation_router)
 app.include_router(ops_router)
 app.include_router(assistant_router)
+app.include_router(innovation_router)
 app.add_middleware(RequestContextMiddleware)
 
 

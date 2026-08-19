@@ -136,8 +136,8 @@ onUnmounted(() => {
   <div class="gas">
     <div v-if="error" class="msg">{{ error }}</div>
     <div v-else-if="loading" class="msg">读取中…</div>
-    <div ref="chartRef" class="chart"></div>
-    <p class="note">
+    <div v-show="!error && !loading" ref="chartRef" class="chart"></div>
+    <p v-if="!error && !loading" class="note">
       左轴为一氧化碳，右轴为烟雾与可燃气体。三者量程相差一个数量级，共用单轴会淹没小信号。
     </p>
   </div>

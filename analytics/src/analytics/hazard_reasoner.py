@@ -6,6 +6,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Optional
 
+from analytics.thresholds import resolver
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_WINDOW_S = 20.0
@@ -154,16 +156,27 @@ class HazardReasoner:
         rules: Optional[list[dict]] = None,
         window_s: float = DEFAULT_WINDOW_S,
         cooldown_s: float = DEFAULT_COOLDOWN_S,
+        use_ontology_thresholds: bool = True,
     ) -> None:
         self.rules = list(rules or HAZARD_RULES)
         self.window_s = window_s
         self.cooldown_s = cooldown_s
+        self.use_ontology_thresholds = use_ontology_thresholds
         self._facts: dict[str, Evidence] = {}
         self._last_fired: dict[str, float] = {}
 
     def reset(self) -> None:
         self._facts.clear()
         self._last_fired.clear()
+
+    def _resolve(
+        self, prop: str, declared: tuple[float, str]
+    ) -> tuple[float, str]:
+        if self.use_ontology_thresholds:
+            resolved = resolver.threshold_for(prop)
+            if resolved is not None:
+                return float(resolved[0]), declared[1]
+        return declared
 
     def _prune(self, now: float) -> None:
         stale = [k for k, e in self._facts.items() if now - e.observed_at > self.window_s]
@@ -209,7 +222,8 @@ class HazardReasoner:
             evidence: list[Evidence] = []
             satisfied = True
 
-            for prop, (threshold, direction) in conditions.items():
+            for prop, declared in conditions.items():
+                threshold, direction = self._resolve(prop, declared)
                 fact = self._facts.get(prop)
                 if fact is None or not _breached(fact.value, threshold, direction):
                     satisfied = False

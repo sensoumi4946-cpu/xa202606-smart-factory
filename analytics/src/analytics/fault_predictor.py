@@ -6,6 +6,8 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import Optional
 
+from analytics.thresholds import resolver
+
 logger = logging.getLogger(__name__)
 
 MIN_POINTS = 4
@@ -28,14 +30,8 @@ class Prediction:
     message: str
 
 
-THRESHOLDS: dict[str, tuple[float, str]] = {
-    "temperature": (38.0, "above"),
-    "co": (35.0, "above"),
-    "smoke": (8.0, "above"),
-    "combustible_gas": (3.0, "above"),
-    "humidity": (85.0, "above"),
-    "distance": (30.0, "below"),
-}
+def THRESHOLDS() -> dict[str, tuple[float, str]]:
+    return resolver.thresholds()
 
 
 def _linear_fit(points: list[tuple[float, float]]) -> tuple[float, float, float]:
@@ -76,7 +72,7 @@ class FaultPredictor:
         max_horizon_s: float = MAX_HORIZON_S,
         min_r_squared: float = MIN_R_SQUARED,
     ) -> None:
-        self.thresholds = dict(thresholds or THRESHOLDS)
+        self._override = dict(thresholds) if thresholds else None
         self.max_points = max_points
         self.max_horizon_s = max_horizon_s
         self.min_r_squared = min_r_squared
@@ -95,7 +91,8 @@ class FaultPredictor:
         timestamp: Optional[float] = None,
     ) -> Optional[Prediction]:
         prop = property_name.lower()
-        if prop not in self.thresholds:
+        table = self._override if self._override is not None else resolver.thresholds()
+        if prop not in table:
             return None
 
         ts = time.time() if timestamp is None else float(timestamp)
@@ -106,7 +103,7 @@ class FaultPredictor:
         if len(points) < MIN_POINTS:
             return None
 
-        threshold, direction = self.thresholds[prop]
+        threshold, direction = table[prop]
         slope, intercept, r_squared = _linear_fit(points)
         current = points[-1][1]
 

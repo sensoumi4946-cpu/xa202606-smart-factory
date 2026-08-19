@@ -5,6 +5,7 @@
 #include <time.h>
 #include <mbedtls/md.h>
 #include <ArduinoJson.h>
+#include "sensor_dht22.h"
 
 static const char* WIFI_SSID = "FACTORY_AP";
 static const char* WIFI_PASS = "changeme";
@@ -12,7 +13,7 @@ static const char* MQTT_HOST = "192.168.1.50";
 static const uint16_t MQTT_PORT = 1883;
 static const char* DEVICE_ID = "ESP32_001_dht22";
 static const char* SUBSYSTEM = "temp_humidity";
-static const char* SIGNING_KEY = "ce30c115aec4ca7be413779292ea725c0f323afff4ab9d70e4e946e46a6a4460";
+static const char* SIGNING_KEY = "changeme-must-match-backend";
 
 static const char* NTP_1 = "ntp.aliyun.com";
 static const char* NTP_2 = "cn.pool.ntp.org";

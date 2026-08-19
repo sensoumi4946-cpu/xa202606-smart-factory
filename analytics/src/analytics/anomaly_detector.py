@@ -1,3 +1,7 @@
+"""
+Statistical anomaly detection for individual sensor streams.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -6,6 +10,8 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Optional
+
+from analytics.thresholds import resolver
 
 logger = logging.getLogger(__name__)
 
@@ -57,17 +63,10 @@ class SensorWindow:
         if len(self.values) < 5:
             return None
         m = self.mean
-        # A perfectly flat baseline has std == 0, which used to short-circuit
-        # to z = 0.0 and made every spike invisible. Floor the denominator so
-        # a constant sensor that jumps is still caught: 1% of the signal
-        # magnitude, or an absolute epsilon for signals centred on zero.
         s = max(self.std, MIN_STD_FRACTION * abs(m), MIN_STD_ABSOLUTE)
         return (value - m) / s
 
 
-# Some call sites and older tests use different names for the same physical
-# quantity. Normalise before any lookup so "co_level" and "co" cannot end up
-# with different limits.
 PROPERTY_ALIASES: dict[str, str] = {
     "co_level": "co",
     "co_concentration": "co",
@@ -86,20 +85,8 @@ def canonical_property(name: str) -> str:
     return PROPERTY_ALIASES.get(key, key)
 
 
-# Physical limits per measurement type. These are sensor datasheet ranges,
-# not alarm thresholds — anything outside them is a fault or a wiring error,
-# never a real reading. Keys match smart_factory_contracts.MeasurementType.
-_HARD_LIMITS: dict[str, tuple[float, float]] = {
-    "temperature": (-40.0, 80.0),        # DHT22 datasheet range, °C
-    "humidity": (0.0, 100.0),            # %RH
-    "co": (0.0, 1000.0),                 # MQ-7 ppm
-    "smoke": (0.0, 1000.0),              # MQ-2 ppm
-    "combustible_gas": (0.0, 1000.0),    # MQ-2 ppm
-    "distance": (0.0, 450.0),            # HC-SR04 max range, cm
-    "count": (0.0, 1_000_000.0),         # monotonic tally
-    "occupancy": (0.0, 1.0),             # boolean
-    "light_state": (0.0, 1.0),           # boolean
-}
+def _hard_limits() -> dict[str, tuple[float, float]]:
+    return resolver.limits()
 
 
 def _severity_from_z(z: float) -> str:
@@ -141,7 +128,7 @@ class AnomalyDetector:
         window = self._get_window(sensor_id)
 
         prop = canonical_property(property_name)
-        limits = _HARD_LIMITS.get(prop)
+        limits = resolver.limit_for(prop)
         if limits is not None:
             lo, hi = limits
             if not (lo <= value <= hi):

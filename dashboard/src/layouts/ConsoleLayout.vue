@@ -23,10 +23,12 @@ onMounted(() => {
 onUnmounted(() => {
   if (timer) clearInterval(timer)
 })
+import BackendBanner from '../components/BackendBanner.vue'
 </script>
 
 <template>
   <div class="console">
+    <BackendBanner />
     <header class="top-bar">
       <span class="brand">
         <span class="mark" aria-hidden="true"></span>

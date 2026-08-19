@@ -1,47 +1,34 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-import {
-  fetchLatestDeduped,
-  rawRequest,
-  type LatestDevice,
-} from '../api'
-import {
-  DEVICE_META,
-  protoLabel,
-  subsystemLabel,
-  refreshDeviceMeta,
-} from '../deviceMeta'
+import { fetchLatestDeduped, rawRequest, type LatestDevice } from '../api'
+import { DEVICE_META, protoLabel, subsystemLabel, refreshDeviceMeta } from '../deviceMeta'
+import { useClock, ageMs, shortAge, uptimeLabel } from '../freshness'
 import { FRESH_MS } from '../constants'
 import DeviceDrawer from '../components/DeviceDrawer.vue'
+import EmptyState from '../components/EmptyState.vue'
+
+interface DeviceExtra {
+  firmware?: string
+  mac?: string
+  first_seen?: string
+  message_count?: number
+}
 
 const latest = ref<LatestDevice[]>([])
+const extras = ref<Record<string, DeviceExtra>>({})
 const error = ref('')
 const drawerDev = ref<string | null>(null)
-const now = ref(Date.now())
 const busy = ref<string | null>(null)
 const controlMsg = ref('')
-let tick: ReturnType<typeof setInterval> | undefined
+const clock = useClock()
+
+const search = ref('')
+const subsystemFilter = ref('all')
+const statusFilter = ref('all')
+const sortKey = ref<'id' | 'subsystem' | 'protocol' | 'age' | 'messages'>('subsystem')
+const sortAsc = ref(true)
+
 let poll: ReturnType<typeof setInterval> | undefined
-
-function freshness(ts: string | undefined): number | null {
-  if (!ts) return null
-  const t = new Date(ts).getTime()
-  if (Number.isNaN(t)) return null
-  return now.value - t
-}
-
-function isFresh(ts: string | undefined): boolean {
-  const age = freshness(ts)
-  return age !== null && age < FRESH_MS
-}
-
-function ageLabel(ms: number | null): string {
-  if (ms === null) return '--'
-  if (ms < 0) return '0s'
-  if (ms < 60_000) return `${Math.floor(ms / 1000)}s`
-  if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m`
-  return `${Math.floor(ms / 3_600_000)}h`
-}
 
 const latestMap = computed(() => {
   const map = new Map<string, LatestDevice>()
@@ -49,40 +36,88 @@ const latestMap = computed(() => {
   return map
 })
 
-// Drive the table from the registry, not from a separate device-id list.
-// The registry is the only source that carries protocol and subsystem, so
-// a device present in one list but not the other used to render as "--".
 const rows = computed(() => {
   const ids = new Set<string>([
     ...Object.keys(DEVICE_META),
     ...latest.value.map((d) => d.device_id),
   ])
-  return [...ids]
-    .map((id) => {
-      const meta = DEVICE_META[id]
-      const dev = latestMap.value.get(id)
-      const newest = dev
-        ? dev.measurements.reduce<string | undefined>((acc, m) => {
-            if (!acc) return m.timestamp
-            return new Date(m.timestamp) > new Date(acc) ? m.timestamp : acc
-          }, undefined)
-        : meta?.lastSeen
-      const age = freshness(newest)
-      return {
-        id,
-        protocol: protoLabel(meta?.protocol),
-        subsystem: subsystemLabel(meta?.subsystem),
-        online: isFresh(newest),
-        age: ageLabel(age),
-        summary: dev
-          ? dev.measurements.map((m) => `${m.type}=${m.value}`).join(', ')
-          : '--',
-      }
-    })
-    .sort((a, b) => a.subsystem.localeCompare(b.subsystem) || a.id.localeCompare(b.id))
+  return [...ids].map((id) => {
+    const meta = DEVICE_META[id]
+    const dev = latestMap.value.get(id)
+    const extra = extras.value[id] ?? {}
+    const newest = dev
+      ? dev.measurements.reduce<string | undefined>((acc, m) => {
+          if (!acc) return m.timestamp
+          return new Date(m.timestamp) > new Date(acc) ? m.timestamp : acc
+        }, undefined)
+      : meta?.lastSeen
+    const age = ageMs(newest, clock.value)
+    return {
+      id,
+      protocol: protoLabel(meta?.protocol),
+      protocolKey: meta?.protocol ?? '',
+      subsystem: subsystemLabel(meta?.subsystem),
+      subsystemKey: meta?.subsystem ?? '',
+      online: age !== null && age < FRESH_MS,
+      age,
+      ageText: shortAge(age),
+      firmware: extra.firmware ?? '--',
+      mac: extra.mac ?? '--',
+      uptime: uptimeLabel(extra.first_seen, clock.value),
+      messages: extra.message_count ?? 0,
+      summary: dev
+        ? dev.measurements.map((m) => `${m.type}=${m.value}`).join('  ')
+        : '--',
+    }
+  })
+})
+
+const subsystems = computed(() => {
+  const set = new Set(rows.value.map((r) => r.subsystemKey).filter(Boolean))
+  return [...set].sort()
+})
+
+const visible = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  let out = rows.value.filter((r) => {
+    if (q && !r.id.toLowerCase().includes(q) && !r.subsystem.includes(q)) return false
+    if (subsystemFilter.value !== 'all' && r.subsystemKey !== subsystemFilter.value) return false
+    if (statusFilter.value === 'online' && !r.online) return false
+    if (statusFilter.value === 'offline' && r.online) return false
+    return true
+  })
+  const dir = sortAsc.value ? 1 : -1
+  out = [...out].sort((a, b) => {
+    switch (sortKey.value) {
+      case 'age':
+        return ((a.age ?? Infinity) - (b.age ?? Infinity)) * dir
+      case 'messages':
+        return (a.messages - b.messages) * dir
+      case 'protocol':
+        return a.protocol.localeCompare(b.protocol) * dir
+      case 'subsystem':
+        return (a.subsystem.localeCompare(b.subsystem) || a.id.localeCompare(b.id)) * dir
+      default:
+        return a.id.localeCompare(b.id) * dir
+    }
+  })
+  return out
 })
 
 const onlineCount = computed(() => rows.value.filter((r) => r.online).length)
+
+function sortBy(key: typeof sortKey.value) {
+  if (sortKey.value === key) sortAsc.value = !sortAsc.value
+  else {
+    sortKey.value = key
+    sortAsc.value = true
+  }
+}
+
+function arrow(key: typeof sortKey.value): string {
+  if (sortKey.value !== key) return ''
+  return sortAsc.value ? ' ↑' : ' ↓'
+}
 
 async function sendControl(deviceId: string, action: string) {
   busy.value = `${deviceId}:${action}`
@@ -95,12 +130,25 @@ async function sendControl(deviceId: string, action: string) {
     })
     const body = res.body as { command_id?: string; status?: string } | null
     controlMsg.value = res.ok
-      ? `已下发 ${action} · ${body?.status ?? ''} · ${body?.command_id?.slice(0, 8) ?? ''}`
+      ? `${deviceId} ${action} 已下发 · ${body?.status ?? ''} · ${body?.command_id?.slice(0, 8) ?? ''}`
       : `下发失败 HTTP ${res.status}`
   } catch {
     controlMsg.value = '下发失败：无法连接后端'
   } finally {
     busy.value = null
+  }
+}
+
+async function loadExtras() {
+  try {
+    const res = await rawRequest('GET', '/api/v1/devices/detail')
+    if (!res.ok) return
+    const body = res.body as { items?: (DeviceExtra & { device_id: string })[] } | null
+    const map: Record<string, DeviceExtra> = {}
+    for (const item of body?.items ?? []) map[item.device_id] = item
+    extras.value = map
+  } catch {
+    // endpoint is optional; columns fall back to '--'
   }
 }
 
@@ -112,64 +160,84 @@ async function load() {
   } catch {
     error.value = '设备列表加载失败'
   }
+  loadExtras()
 }
 
 onMounted(() => {
   load()
-  tick = setInterval(() => (now.value = Date.now()), 1000)
   poll = setInterval(load, 5000)
 })
 onUnmounted(() => {
-  if (tick) clearInterval(tick)
   if (poll) clearInterval(poll)
 })
 </script>
 
 <template>
   <div class="dm">
-    <div v-if="error" class="err">{{ error }}</div>
-    <div class="bar">
-      <span class="count">{{ onlineCount }} / {{ rows.length }} 在线</span>
-      <span v-if="controlMsg" class="ctrl-msg">{{ controlMsg }}</span>
-    </div>
-    <table>
+    <header class="bar">
+      <input v-model="search" class="search" type="search" placeholder="搜索设备号或子系统" />
+      <select v-model="subsystemFilter" class="sel">
+        <option value="all">全部子系统</option>
+        <option v-for="s in subsystems" :key="s" :value="s">{{ subsystemLabel(s) }}</option>
+      </select>
+      <select v-model="statusFilter" class="sel">
+        <option value="all">全部状态</option>
+        <option value="online">仅在线</option>
+        <option value="offline">仅离线</option>
+      </select>
+      <span class="count mono">{{ visible.length }} / {{ rows.length }} 台 · {{ onlineCount }} 在线</span>
+      <span v-if="controlMsg" class="ctrl mono">{{ controlMsg }}</span>
+    </header>
+
+    <EmptyState
+      v-if="error || !rows.length"
+      :kind="error ? 'error' : 'empty'"
+      :title="error ? '设备列表加载失败' : '暂无设备接入'"
+      :detail="error ? '无法连接后端服务，请确认 backend 已在 8000 端口运行。' : '平台已就绪，等待设备上报数据。'"
+      hint="curl http://localhost:8000/api/v1/devices"
+      @retry="load"
+    />
+
+    <table v-else>
       <thead>
         <tr>
-          <th>名称</th>
-          <th>子系统</th>
-          <th>协议</th>
-          <th>状态</th>
+          <th class="s" @click="sortBy('id')">设备号{{ arrow('id') }}</th>
+          <th class="s c-sub" @click="sortBy('subsystem')">子系统{{ arrow('subsystem') }}</th>
+          <th class="s c-proto" @click="sortBy('protocol')">协议{{ arrow('protocol') }}</th>
+          <th class="c-state">状态</th>
+          <th class="s c-age" @click="sortBy('age')">最后上报{{ arrow('age') }}</th>
+          <th class="c-fw">固件</th>
+          <th class="c-mac">MAC</th>
+          <th class="c-up">运行时长</th>
+          <th class="s c-msg" @click="sortBy('messages')">报文数{{ arrow('messages') }}</th>
           <th>最近数据</th>
-          <th>操作</th>
+          <th class="c-ops">操作</th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="r in rows" :key="r.id">
-          <td class="dev">{{ r.id }}</td>
-          <td class="sub">{{ r.subsystem }}</td>
-          <td class="proto">{{ r.protocol }}</td>
-          <td>
-            <span class="dot" :class="{ on: r.online }"></span>
-            {{ r.online ? '在线' : '离线' }}
-            <span class="age">{{ r.age }}</span>
+        <tr v-for="r in visible" :key="r.id" :class="{ off: !r.online }">
+          <td class="mono dev">{{ r.id }}</td>
+          <td class="c-sub">{{ r.subsystem }}</td>
+          <td class="c-proto mono">{{ r.protocol }}</td>
+          <td class="c-state">
+            <span class="dot" :class="{ on: r.online }"></span>{{ r.online ? '在线' : '离线' }}
           </td>
-          <td class="summary">{{ r.summary }}</td>
-          <td class="ops">
-            <button
-              class="op on"
-              :disabled="busy === `${r.id}:on`"
-              @click="sendControl(r.id, 'on')"
-            >开启</button>
-            <button
-              class="op off"
-              :disabled="busy === `${r.id}:off`"
-              @click="sendControl(r.id, 'off')"
-            >关闭</button>
-            <button class="detail" @click="drawerDev = r.id">详情</button>
+          <td class="c-age mono">{{ r.ageText }}</td>
+          <td class="c-fw mono">{{ r.firmware }}</td>
+          <td class="c-mac mono">{{ r.mac }}</td>
+          <td class="c-up mono">{{ r.uptime }}</td>
+          <td class="c-msg mono">{{ r.messages || '--' }}</td>
+          <td class="mono sum">{{ r.summary }}</td>
+          <td class="c-ops">
+            <button :disabled="busy === `${r.id}:on`" @click="sendControl(r.id, 'on')">开启</button>
+            <button :disabled="busy === `${r.id}:off`" @click="sendControl(r.id, 'off')">关闭</button>
+            <button @click="drawerDev = r.id">详情</button>
           </td>
         </tr>
-        <tr v-if="!rows.length">
-          <td colspan="6" class="empty">暂无设备</td>
+        <tr v-if="!visible.length">
+          <td colspan="11" class="empty">
+            {{ rows.length ? '没有符合筛选条件的设备' : '暂无设备接入' }}
+          </td>
         </tr>
       </tbody>
     </table>
@@ -179,139 +247,73 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.dm {
-  background: rgba(30, 41, 59, 0.6);
-  border: 1px solid #334155;
-  border-radius: 10px;
-  padding: 16px;
-}
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.82rem;
-}
-th,
-td {
-  padding: 8px 10px;
-  text-align: left;
-  border-bottom: 1px solid #334155;
-  color: #e2e8f0;
-}
-th {
-  color: #94a3b8;
-  font-weight: 600;
-}
-.dev {
-  font-family: monospace;
-  color: #7dd3fc;
-}
-.proto {
-  color: #fbbf24;
-  text-transform: uppercase;
-  font-size: 0.74rem;
-}
-.summary {
-  color: #cbd5e1;
-  font-family: monospace;
-  font-size: 0.76rem;
-}
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #475569;
-  display: inline-block;
-  margin-right: 5px;
-}
-.dot.on {
-  background: #34d399;
-  box-shadow: 0 0 6px #34d399;
-}
-.detail {
-  background: #334155;
-  color: #e2e8f0;
-  border: none;
-  padding: 4px 12px;
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 0.78rem;
-}
-.detail:hover {
-  background: #475569;
-}
-.empty {
-  color: #64748b;
-  text-align: center;
-  padding: 20px;
-}
-.err {
-  color: #ef4444;
-  font-size: 0.85rem;
-  margin-bottom: 10px;
-}
-.control {
-  border-top: 1px solid #334155;
-  margin-top: 12px;
-  padding-top: 12px;
-}
-.control h4 {
-  color: #38bdf8;
-  font-size: 0.85rem;
-  margin: 0 0 8px;
-}
-.sim {
-  color: #94a3b8;
-  font-size: 0.7rem;
-  font-weight: 400;
-}
-.btns {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-.btns button {
-  background: #334155;
-  color: #64748b;
-  border: none;
-  padding: 6px 18px;
-  border-radius: 6px;
-  cursor: not-allowed;
-  font-size: 0.8rem;
-}
-.pending {
-  font-size: 0.78rem;
-  color: #94a3b8;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.pending .k {
-  display: inline-block;
-  width: 72px;
-  color: #64748b;
-}
-
+.dm { padding: 12px 16px 20px; }
 .bar {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
-  font-size: 0.78rem;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 8px;
+  flex-wrap: wrap;
 }
-.count { color: #94a3b8; }
-.ctrl-msg { color: #34d399; font-family: monospace; font-size: 0.74rem; }
-.sub { color: #cbd5e1; font-size: 0.78rem; }
-.age { color: #64748b; font-size: 0.7rem; margin-left: 6px; }
-.ops { display: flex; gap: 6px; }
-.op {
-  border: none;
-  padding: 4px 12px;
-  border-radius: 5px;
+.search, .sel {
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  font-size: 12px;
+  padding: 4px 8px;
+}
+.search { width: 220px; }
+.count { font-size: 11px; color: var(--text-faint); margin-left: auto; }
+.ctrl { font-size: 11px; color: var(--ok); }
+.err { color: var(--danger); font-size: 12px; margin-bottom: 8px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th {
+  text-align: left;
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--text-faint);
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+th.s { cursor: pointer; user-select: none; }
+th.s:hover { color: var(--text); }
+td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-dim);
+}
+tr.off td { color: var(--text-faint); }
+.dev { color: var(--text); }
+.c-sub { width: 90px; }
+.c-proto { width: 74px; }
+.c-state { width: 74px; }
+.c-age, .c-up, .c-msg { width: 78px; }
+.c-fw { width: 78px; }
+.c-mac { width: 130px; }
+.c-ops { width: 150px; white-space: nowrap; }
+.sum { color: var(--text-faint); }
+.dot {
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--line-strong);
+  margin-right: 6px;
+}
+.dot.on { background: var(--ok); }
+.c-ops button {
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  color: var(--text-dim);
+  font-size: 11px;
+  padding: 2px 8px;
+  margin-right: 4px;
   cursor: pointer;
-  font-size: 0.78rem;
-  color: #0f172a;
 }
-.op.on { background: #34d399; }
-.op.off { background: #f87171; }
-.op:disabled { opacity: 0.45; cursor: wait; }
+.c-ops button:hover { color: var(--text); }
+.c-ops button:disabled { opacity: 0.4; cursor: wait; }
+.empty { color: var(--text-faint); padding: 20px 8px; text-align: center; }
 </style>

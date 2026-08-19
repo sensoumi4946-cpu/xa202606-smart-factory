@@ -78,7 +78,7 @@ onUnmounted(() => {
     <div class="counts">
       <span>backend :8000</span>
       <span>{{ deviceCount }} devices</span>
-      <span class="alerts">{{ alertCount }} alerts</span>
+      <span class="alerts" :class="{ zero: alertCount === 0 }">{{ alertCount }} alerts</span>
     </div>
   </footer>
 </template>
@@ -124,4 +124,6 @@ onUnmounted(() => {
 .alerts {
   color: #fbbf24;
 }
+
+.zero { color: var(--text-faint) !important; }
 </style>

@@ -10,7 +10,7 @@ const mockChart = {
 }
 vi.mock('echarts', () => ({ init: vi.fn(() => mockChart) }))
 
-vi.mock('../src/api', () => ({
+vi.mock('../api', () => ({
   fetchLatest: vi.fn().mockResolvedValue([]),
   fetchHistory: vi.fn().mockResolvedValue({ items: [], total: 0 }),
   fetchAlerts: vi.fn().mockResolvedValue({ items: [], total: 0 }),
@@ -35,14 +35,14 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-import TempGauge from '../src/components/TempGauge.vue'
-import GasMonitor from '../src/components/GasMonitor.vue'
-import AgvTrack from '../src/components/AgvTrack.vue'
-import CountBar from '../src/components/CountBar.vue'
-import LightingPanel from '../src/components/LightingPanel.vue'
-import AlertsPanel from '../src/components/AlertsPanel.vue'
-import HistoryTable from '../src/components/HistoryTable.vue'
-import SemanticPanel from '../src/components/SemanticPanel.vue'
+import TempGauge from '../components/TempGauge.vue'
+import GasMonitor from '../components/GasMonitor.vue'
+import AgvTrack from '../components/AgvTrack.vue'
+import CountBar from '../components/CountBar.vue'
+import LightingPanel from '../components/LightingPanel.vue'
+import AlertsPanel from '../components/AlertsPanel.vue'
+import HistoryTable from '../components/HistoryTable.vue'
+import SemanticPanel from '../components/SemanticPanel.vue'
 
 describe('component smoke tests', () => {
   it('TempGauge renders title and chart container', () => {

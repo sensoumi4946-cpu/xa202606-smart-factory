@@ -10,7 +10,7 @@ const mockChart = {
 }
 vi.mock('echarts', () => ({ init: vi.fn(() => mockChart) }))
 
-vi.mock('../src/api', () => ({
+vi.mock('../api', () => ({
   fetchDeviceData: vi.fn().mockResolvedValue([
     {
       id: 'r1',
@@ -35,9 +35,9 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-import DeviceCard from '../src/components/DeviceCard.vue'
-import MiniChart from '../src/components/MiniChart.vue'
-import DeviceDrawer from '../src/components/DeviceDrawer.vue'
+import DeviceCard from '../components/DeviceCard.vue'
+import MiniChart from '../components/MiniChart.vue'
+import DeviceDrawer from '../components/DeviceDrawer.vue'
 
 describe('DeviceCard', () => {
   it('renders a protocol badge and emits open with the device id', async () => {

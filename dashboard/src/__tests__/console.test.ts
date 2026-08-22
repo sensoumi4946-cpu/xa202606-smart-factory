@@ -10,7 +10,7 @@ const mockChart = {
 }
 vi.mock('echarts', () => ({ init: vi.fn(() => mockChart) }))
 
-vi.mock('../src/api', () => ({
+vi.mock('../api', () => ({
   fetchLatest: vi.fn().mockResolvedValue([]),
   fetchLatestDeduped: vi.fn().mockResolvedValue([]),
   fetchHistory: vi.fn().mockResolvedValue({ items: [], total: 0 }),
@@ -41,12 +41,12 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-import ConsoleLayout from '../src/layouts/ConsoleLayout.vue'
-import StatusBar from '../src/components/StatusBar.vue'
-import DashboardView from '../src/views/DashboardView.vue'
-import ApiConsoleView from '../src/views/ApiConsoleView.vue'
-import DeviceManagerView from '../src/views/DeviceManagerView.vue'
-import SystemStatusView from '../src/views/SystemStatusView.vue'
+import ConsoleLayout from '../layouts/ConsoleLayout.vue'
+import StatusBar from '../components/StatusBar.vue'
+import DashboardView from '../views/DashboardView.vue'
+import ApiConsoleView from '../views/ApiConsoleView.vue'
+import DeviceManagerView from '../views/DeviceManagerView.vue'
+import SystemStatusView from '../views/SystemStatusView.vue'
 
 describe('ConsoleLayout', () => {
   it('renders four tabs and switches the active tab on click', async () => {

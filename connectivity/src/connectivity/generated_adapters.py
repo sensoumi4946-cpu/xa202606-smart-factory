@@ -5,15 +5,17 @@ import os
 from pathlib import Path
 from typing import Any, Optional
 
+from connectivity.binding_source import find_bindings_file
 from semantic_layer.protocol_binding import (
     BindingRegistry,
     ProtocolBinding,
+    canonical_subsystem,
     decode_registers,
 )
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_BINDINGS = os.getenv("BINDINGS_TTL", "bindings.ttl")
+DEFAULT_BINDINGS = os.getenv("BINDINGS_TTL") or find_bindings_file() or "bindings.ttl"
 
 UNIT_BY_PROPERTY = {
     "temperature": "celsius",
@@ -27,20 +29,14 @@ UNIT_BY_PROPERTY = {
     "light_state": "boolean",
     "vibration": "mm_per_sec",
     "pressure": "kpa",
-}
-
-SUBSYSTEM_ALIAS = {
-    "temp_humidity_subsystem": "temp_humidity",
-    "gas_subsystem": "gas",
-    "agv_subsystem": "agv",
-    "counting_subsystem": "counting",
-    "lighting_subsystem": "lighting",
-    "vibration_subsystem": "vibration",
+    "device_status": "status",
+    "error_code": "status",
+    "sensor_status": "status",
 }
 
 
 def _subsystem(binding: ProtocolBinding) -> str:
-    return SUBSYSTEM_ALIAS.get(binding.subsystem, binding.subsystem)
+    return canonical_subsystem(binding.subsystem)
 
 
 def _unit(property_name: str) -> str:
@@ -69,8 +65,12 @@ class GeneratedAdapterSet:
                     "device_id": binding.device_id,
                     "property_name": binding.property_name,
                     "subsystem": _subsystem(binding),
+                    "canonical_subsystem": _subsystem(binding),
                     "unit": _unit(binding.property_name),
-                    "address": binding.register_address,
+                    "address": binding.wire_address,
+                    "register_address": binding.register_address,
+                    "register_base": binding.register_base,
+                    "function_code": binding.function_code,
                     "count": binding.register_count,
                     "register_type": binding.register_type,
                     "word_order": binding.word_order,
@@ -156,6 +156,7 @@ class GeneratedAdapterSet:
                 "device_id": b.device_id,
                 "property_name": b.property_name,
                 "subsystem": _subsystem(b),
+                "canonical_subsystem": _subsystem(b),
                 "unit": _unit(b.property_name),
                 "node_id": f"ns={b.namespace_index};s={b.node_id}",
                 "scale_factor": b.scale_factor,
@@ -204,6 +205,7 @@ class GeneratedAdapterSet:
                 "device_id": b.device_id,
                 "property_name": b.property_name,
                 "subsystem": _subsystem(b),
+                "canonical_subsystem": _subsystem(b),
                 "path": b.path or "/adapter/rest/ingest",
                 "method": b.method,
             }

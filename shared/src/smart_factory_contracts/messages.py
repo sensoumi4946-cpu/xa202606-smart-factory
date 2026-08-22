@@ -43,6 +43,9 @@ class MeasurementType(str, Enum):
     CO = "co"
     DISTANCE = "distance"
     COUNT = "count"
+    DEVICE_STATUS = "device_status"
+    ERROR_CODE = "error_code"
+    SENSOR_STATUS = "sensor_status"
 
 
 class Unit(str, Enum):
@@ -52,6 +55,7 @@ class Unit(str, Enum):
     PPM = "ppm"
     CM = "cm"
     COUNT = "count"
+    STATUS = "status"
 
 
 class Measurement(BaseModel):

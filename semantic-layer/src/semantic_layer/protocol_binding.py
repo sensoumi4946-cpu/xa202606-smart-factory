@@ -18,6 +18,10 @@ SUPPORTED_PROTOCOLS = ("modbus", "opcua", "mqtt", "rest")
 WORD_ORDERS = ("big", "little")
 BYTE_ORDERS = ("big", "little")
 
+SUBSYSTEM_SUFFIX = "_subsystem"
+
+DEFAULT_FUNCTION_CODE = 3
+
 REGISTER_TYPES = {
     "int16": (1, "h"),
     "uint16": (1, "H"),
@@ -26,7 +30,7 @@ REGISTER_TYPES = {
     "float32": (2, "f"),
 }
 
-BINDING_SHAPE_TTL = """
+BINDING_SHAPE_TTL = '''
 @prefix sh:   <http://www.w3.org/ns/shacl#> .
 @prefix sf:   <http://example.org/smart-factory#> .
 @prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
@@ -50,6 +54,11 @@ sf:ProtocolBindingShape a sh:NodeShape ;
         sh:message "binding must declare exactly one sf:deviceId" ;
     ] ;
     sh:property [
+        sh:path sf:deviceAlias ;
+        sh:datatype xsd:string ;
+        sh:message "deviceAlias must be an xsd:string" ;
+    ] ;
+    sh:property [
         sh:path sf:pollIntervalMs ;
         sh:maxCount 1 ; sh:datatype xsd:integer ;
         sh:minInclusive 50 ;
@@ -67,6 +76,18 @@ sf:ProtocolBindingShape a sh:NodeShape ;
         sh:message "registerAddress must be a non-negative integer" ;
     ] ;
     sh:property [
+        sh:path sf:registerBase ;
+        sh:maxCount 1 ; sh:datatype xsd:integer ;
+        sh:minInclusive 0 ;
+        sh:message "registerBase must be a non-negative integer" ;
+    ] ;
+    sh:property [
+        sh:path sf:functionCode ;
+        sh:maxCount 1 ; sh:datatype xsd:integer ;
+        sh:minInclusive 1 ; sh:maxInclusive 4 ;
+        sh:message "functionCode must be a modbus read code between 1 and 4" ;
+    ] ;
+    sh:property [
         sh:path sf:wordOrder ;
         sh:maxCount 1 ; sh:in ( "big" "little" ) ;
         sh:message "wordOrder must be big or little" ;
@@ -76,7 +97,66 @@ sf:ProtocolBindingShape a sh:NodeShape ;
         sh:maxCount 1 ; sh:in ( "big" "little" ) ;
         sh:message "byteOrder must be big or little" ;
     ] .
-"""
+
+sf:ModbusBindingShape a sh:NodeShape ;
+    sh:targetClass sf:ProtocolBinding ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "modbus binding must declare sf:registerAddress" ;
+        sh:select """
+            SELECT $this
+            WHERE {
+                $this <http://example.org/smart-factory#transportProtocol> "modbus" .
+                FILTER NOT EXISTS {
+                    $this <http://example.org/smart-factory#registerAddress> ?address .
+                }
+            }
+        """ ;
+    ] .
+
+sf:OpcuaBindingShape a sh:NodeShape ;
+    sh:targetClass sf:ProtocolBinding ;
+    sh:sparql [
+        a sh:SPARQLConstraint ;
+        sh:message "opcua binding must declare sf:nodeId" ;
+        sh:select """
+            SELECT $this
+            WHERE {
+                $this <http://example.org/smart-factory#transportProtocol> "opcua" .
+                FILTER NOT EXISTS {
+                    $this <http://example.org/smart-factory#nodeId> ?node .
+                }
+            }
+        """ ;
+    ] .
+'''
+
+
+def _local(uri: Any) -> str:
+    text = str(uri)
+    if "#" in text:
+        text = text.rsplit("#", 1)[-1]
+    elif "/" in text:
+        text = text.rsplit("/", 1)[-1]
+    if text.startswith("measures"):
+        text = text[len("measures") :]
+    out = []
+    for i, ch in enumerate(text):
+        if ch.isupper() and i > 0:
+            out.append("_")
+        out.append(ch.lower())
+    return "".join(out)
+
+
+def canonical_subsystem(value: Any) -> str:
+    text = str(value or "")
+    if not text:
+        return ""
+    if "#" in text or "/" in text or any(ch.isupper() for ch in text):
+        text = _local(text)
+    if text.endswith(SUBSYSTEM_SUFFIX):
+        text = text[: -len(SUBSYSTEM_SUFFIX)]
+    return text
 
 
 @dataclass
@@ -91,8 +171,10 @@ class ProtocolBinding:
     scale_factor: float = 1.0
     offset: float = 0.0
     register_address: Optional[int] = None
+    register_base: int = 0
     register_count: int = 1
     register_type: str = "uint16"
+    function_code: int = DEFAULT_FUNCTION_CODE
     word_order: str = "big"
     byte_order: str = "big"
     slave_id: int = 1
@@ -102,21 +184,45 @@ class ProtocolBinding:
     qos: int = 1
     path: str = ""
     method: str = "POST"
+    device_aliases: list[str] = field(default_factory=list)
+
+    @property
+    def wire_address(self) -> Optional[int]:
+        if self.register_address is None:
+            return None
+        return self.register_base + self.register_address
+
+    @property
+    def canonical_subsystem(self) -> str:
+        return canonical_subsystem(self.subsystem)
+
+    def matches_device(self, candidate: Any) -> bool:
+        target = str(candidate or "").strip().lower()
+        if not target:
+            return False
+        if target == self.device_id.strip().lower():
+            return True
+        return any(target == str(a).strip().lower() for a in self.device_aliases)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "binding_id": self.binding_id,
             "device_id": self.device_id,
+            "device_aliases": list(self.device_aliases),
             "property_name": self.property_name,
             "protocol": self.protocol,
             "subsystem": self.subsystem,
+            "canonical_subsystem": self.canonical_subsystem,
             "unit": self.unit,
             "poll_interval_ms": self.poll_interval_ms,
             "scale_factor": self.scale_factor,
             "offset": self.offset,
             "register_address": self.register_address,
+            "register_base": self.register_base,
+            "wire_address": self.wire_address,
             "register_count": self.register_count,
             "register_type": self.register_type,
+            "function_code": self.function_code,
             "word_order": self.word_order,
             "byte_order": self.byte_order,
             "slave_id": self.slave_id,
@@ -141,22 +247,6 @@ class BindingLoadResult:
             "bindings_added": self.bindings_added,
             "violations": self.violations,
         }
-
-
-def _local(uri: Any) -> str:
-    text = str(uri)
-    if "#" in text:
-        text = text.rsplit("#", 1)[-1]
-    elif "/" in text:
-        text = text.rsplit("/", 1)[-1]
-    if text.startswith("measures"):
-        text = text[len("measures") :]
-    out = []
-    for i, ch in enumerate(text):
-        if ch.isupper() and i > 0:
-            out.append("_")
-        out.append(ch.lower())
-    return "".join(out)
 
 
 def _val(graph: Graph, subject: URIRef, predicate: URIRef, default=None):
@@ -234,7 +324,11 @@ def validate_bindings(turtle: str) -> tuple[bool, list[str], Graph]:
     shapes = Graph()
     shapes.parse(data=BINDING_SHAPE_TTL, format="turtle")
     conforms, results, _ = pyshacl.validate(
-        graph, shacl_graph=shapes, inference="none", abort_on_first=False
+        graph,
+        shacl_graph=shapes,
+        inference="none",
+        abort_on_first=False,
+        advanced=True,
     )
     if conforms:
         return True, [], graph
@@ -263,8 +357,12 @@ def parse_bindings(graph: Graph) -> list[ProtocolBinding]:
             poll_interval_ms=int(_val(graph, subject, SF.pollIntervalMs, 2000)),
             scale_factor=float(_val(graph, subject, SF.scaleFactor, 1.0)),
             offset=float(_val(graph, subject, SF.valueOffset, 0.0)),
+            register_base=int(_val(graph, subject, SF.registerBase, 0)),
             register_count=int(_val(graph, subject, SF.registerCount, 1)),
             register_type=str(_val(graph, subject, SF.registerType, "uint16")),
+            function_code=int(
+                _val(graph, subject, SF.functionCode, DEFAULT_FUNCTION_CODE)
+            ),
             word_order=str(_val(graph, subject, SF.wordOrder, "big")),
             byte_order=str(_val(graph, subject, SF.byteOrder, "big")),
             slave_id=int(_val(graph, subject, SF.slaveId, 1)),
@@ -274,6 +372,9 @@ def parse_bindings(graph: Graph) -> list[ProtocolBinding]:
             qos=int(_val(graph, subject, SF.mqttQos, 1)),
             path=str(_val(graph, subject, SF.restPath, "")),
             method=str(_val(graph, subject, SF.restMethod, "POST")),
+            device_aliases=sorted(
+                str(a) for a in graph.objects(subject, SF.deviceAlias)
+            ),
         )
         address = _val(graph, subject, SF.registerAddress)
         binding.register_address = int(address) if address is not None else None
@@ -316,10 +417,27 @@ class BindingRegistry:
         return [b for b in self.all() if b.protocol == protocol]
 
     def for_device(self, device_id: str) -> list[ProtocolBinding]:
-        return [b for b in self.all() if b.device_id == device_id]
+        resolved = self.resolve_device_id(device_id) or device_id
+        return [b for b in self.all() if b.device_id == resolved]
 
     def devices(self) -> list[str]:
         return sorted({b.device_id for b in self._bindings.values()})
+
+    def resolve_device_id(self, candidate: Any) -> Optional[str]:
+        for binding in self.all():
+            if binding.matches_device(candidate):
+                return binding.device_id
+        return None
+
+    def aliases(self) -> dict[str, str]:
+        out: dict[str, str] = {}
+        for binding in self.all():
+            for alias in binding.device_aliases:
+                out[str(alias)] = binding.device_id
+        return out
+
+    def graph(self) -> Graph:
+        return self._graph
 
     def __len__(self) -> int:
         return len(self._bindings)
@@ -332,8 +450,11 @@ def generate_modbus_adapter(bindings: list[ProtocolBinding]) -> str:
             "    {"
             f'"device_id": "{b.device_id}", '
             f'"property_name": "{b.property_name}", '
-            f'"subsystem": "{b.subsystem}", '
+            f'"canonical_subsystem": "{b.canonical_subsystem}", '
             f'"address": {b.register_address}, '
+            f'"register_base": {b.register_base}, '
+            f'"wire_address": {b.wire_address}, '
+            f'"function_code": {b.function_code}, '
             f'"count": {b.register_count}, '
             f'"register_type": "{b.register_type}", '
             f'"word_order": "{b.word_order}", '
@@ -360,6 +481,35 @@ def poll_groups():
     return groups
 
 
+def read_plan():
+    groups = {{}}
+    for entry in REGISTER_MAP:
+        key = (
+            entry["slave_id"],
+            entry["function_code"],
+            entry["poll_interval_ms"],
+        )
+        groups.setdefault(key, []).append(entry)
+
+    plan = []
+    for key in sorted(groups):
+        slave_id, function_code, poll_interval_ms = key
+        entries = sorted(groups[key], key=lambda e: e["wire_address"])
+        start = min(e["wire_address"] for e in entries)
+        end = max(e["wire_address"] + e["count"] for e in entries)
+        plan.append(
+            {{
+                "slave_id": slave_id,
+                "function_code": function_code,
+                "poll_interval_ms": poll_interval_ms,
+                "start_address": start,
+                "count": end - start,
+                "entries": entries,
+            }}
+        )
+    return plan
+
+
 def decode_entry(entry, words):
     return decode_registers(
         words,
@@ -375,7 +525,7 @@ def build_message(entry, words, unit=""):
     return {{
         "schema_version": "v1",
         "device_id": entry["device_id"],
-        "subsystem": entry["subsystem"],
+        "subsystem": entry["canonical_subsystem"],
         "protocol": "modbus",
         "measurements": [
             {{
@@ -395,7 +545,7 @@ def generate_opcua_adapter(bindings: list[ProtocolBinding]) -> str:
             "    {"
             f'"device_id": "{b.device_id}", '
             f'"property_name": "{b.property_name}", '
-            f'"subsystem": "{b.subsystem}", '
+            f'"canonical_subsystem": "{b.canonical_subsystem}", '
             f'"node_id": "ns={b.namespace_index};s={b.node_id}", '
             f'"scale_factor": {b.scale_factor}, '
             f'"offset": {b.offset}, '
@@ -412,6 +562,13 @@ def node_ids():
     return [entry["node_id"] for entry in NODE_MAP]
 
 
+def entry_for_node(node_id):
+    for entry in NODE_MAP:
+        if entry["node_id"] == node_id:
+            return entry
+    return None
+
+
 def scale(entry, raw_value):
     return float(raw_value) * entry["scale_factor"] + entry["offset"]
 
@@ -420,7 +577,7 @@ def build_message(entry, raw_value, unit=""):
     return {{
         "schema_version": "v1",
         "device_id": entry["device_id"],
-        "subsystem": entry["subsystem"],
+        "subsystem": entry["canonical_subsystem"],
         "protocol": "opcua",
         "measurements": [
             {{
@@ -436,12 +593,13 @@ def build_message(entry, raw_value, unit=""):
 def generate_mqtt_adapter(bindings: list[ProtocolBinding]) -> str:
     rows = []
     for b in bindings:
-        topic = b.topic or f"factory/{b.subsystem}/sensors/{b.device_id}/{b.property_name}"
+        subsystem = b.canonical_subsystem
+        topic = b.topic or f"factory/{subsystem}/sensors/{b.device_id}/{b.property_name}"
         rows.append(
             "    {"
             f'"device_id": "{b.device_id}", '
             f'"property_name": "{b.property_name}", '
-            f'"subsystem": "{b.subsystem}", '
+            f'"canonical_subsystem": "{subsystem}", '
             f'"topic": "{topic}", '
             f'"qos": {b.qos}, '
             f'"scale_factor": {b.scale_factor}, '
@@ -467,6 +625,80 @@ def entry_for_topic(topic):
 
 def scale(entry, raw_value):
     return float(raw_value) * entry["scale_factor"] + entry["offset"]
+
+
+def build_message(entry, raw_value, unit=""):
+    return {{
+        "schema_version": "v1",
+        "device_id": entry["device_id"],
+        "subsystem": entry["canonical_subsystem"],
+        "protocol": "mqtt",
+        "measurements": [
+            {{
+                "type": entry["property_name"],
+                "value": scale(entry, raw_value),
+                "unit": unit,
+            }}
+        ],
+    }}
+'''
+
+
+def generate_rest_adapter(bindings: list[ProtocolBinding]) -> str:
+    rows = []
+    for b in bindings:
+        rows.append(
+            "    {"
+            f'"device_id": "{b.device_id}", '
+            f'"property_name": "{b.property_name}", '
+            f'"canonical_subsystem": "{b.canonical_subsystem}", '
+            f'"path": "{b.path or "/adapter/rest/ingest"}", '
+            f'"method": "{b.method}", '
+            f'"scale_factor": {b.scale_factor}, '
+            f'"offset": {b.offset}'
+            "},"
+        )
+    table = "\n".join(rows)
+    return f'''ROUTE_MAP = [
+{table}
+]
+
+
+def routes():
+    return sorted({{(entry["path"], entry["method"]) for entry in ROUTE_MAP}})
+
+
+def entries_for_path(path):
+    return [entry for entry in ROUTE_MAP if entry["path"] == path]
+
+
+def entry_for_device(device_id, property_name=None):
+    for entry in ROUTE_MAP:
+        if entry["device_id"] != device_id:
+            continue
+        if property_name is None or entry["property_name"] == property_name:
+            return entry
+    return None
+
+
+def scale(entry, raw_value):
+    return float(raw_value) * entry["scale_factor"] + entry["offset"]
+
+
+def build_message(entry, raw_value, unit=""):
+    return {{
+        "schema_version": "v1",
+        "device_id": entry["device_id"],
+        "subsystem": entry["canonical_subsystem"],
+        "protocol": "rest",
+        "measurements": [
+            {{
+                "type": entry["property_name"],
+                "value": scale(entry, raw_value),
+                "unit": unit,
+            }}
+        ],
+    }}
 '''
 
 
@@ -474,6 +706,7 @@ GENERATORS = {
     "modbus": generate_modbus_adapter,
     "opcua": generate_opcua_adapter,
     "mqtt": generate_mqtt_adapter,
+    "rest": generate_rest_adapter,
 }
 
 

@@ -22,6 +22,7 @@ from smart_factory_contracts.messages import (
 )
 from backend.store import insert_sensor_data
 from backend.api.prediction import process_reading as run_prediction_pipeline
+from semantic_layer.mapping import TYPE_TO_PROPERTY
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ingest", tags=["ingest"])
@@ -30,6 +31,35 @@ _MTYPE = {m.value: m for m in MeasurementType}
 _UNIT  = {u.value: u for u in Unit}
 _PROTO = {p.value: p for p in Protocol}
 _SUB   = {s.value: s for s in Subsystem}
+
+_PROPERTY_BY_TYPE = {
+    mtype.value: str(uri).rsplit("#", 1)[-1] for mtype, uri in TYPE_TO_PROPERTY.items()
+}
+
+
+def _observable_property(property_name: str) -> str:
+    key = str(property_name or "").strip()
+    known = _PROPERTY_BY_TYPE.get(key.lower())
+    if known:
+        return known
+    parts = [p for p in key.replace("-", "_").split("_") if p]
+    if not parts:
+        return "measures"
+    return "measures" + "".join(p[:1].upper() + p[1:] for p in parts)
+
+
+def _canonical_device_id(device_id: str) -> str:
+    raw = str(device_id or "")
+    try:
+        from backend.api.innovation_api import binding_registry, load_bindings
+
+        if len(binding_registry) == 0:
+            load_bindings()
+        resolved = binding_registry.resolve_device_id(raw)
+    except Exception as exc:
+        logger.debug("device id resolution unavailable for %s: %s", raw, exc)
+        return raw
+    return resolved or raw
 
 
 class SensorReading(BaseModel):
@@ -59,7 +89,7 @@ def _to_unified(reading: SensorReading) -> UnifiedMessage:
 
     return UnifiedMessage(
         schema_version="v1",
-        device_id=reading.sensor_id,
+        device_id=_canonical_device_id(reading.sensor_id),
         subsystem=sub,
         protocol=proto,
         timestamp=datetime.now(timezone.utc),
@@ -108,7 +138,7 @@ async def ingest_reading(
     if gate.graph is not None:
         ctx_alerts = evaluate_with_context(
             device_id=reading.sensor_id,
-            observable_property=f"measures{reading.property_name.capitalize()}",
+            observable_property=_observable_property(reading.property_name),
             value=reading.value,
             graph=gate.graph,
         )
@@ -169,6 +199,13 @@ async def ingest_unified_data(
     background_tasks: BackgroundTasks,
 ) -> dict[str, Any]:
     ingest_id = str(uuid.uuid4())
+    canonical_id = _canonical_device_id(msg.device_id)
+    if canonical_id != msg.device_id:
+        msg = msg.model_copy(update={"device_id": canonical_id})
+
+    protocol_name = msg.protocol.value if hasattr(msg.protocol, "value") else str(msg.protocol)
+    subsystem_name = msg.subsystem.value if hasattr(msg.subsystem, "value") else str(msg.subsystem)
+
     gate = check_and_prepare(msg)
     gate_status_tracker.record(
         gate.accepted,
@@ -179,7 +216,7 @@ async def ingest_unified_data(
         provenance_audit.record_attempt(
             ingest_id=ingest_id,
             device_id=msg.device_id,
-            protocol=msg.protocol.value if hasattr(msg.protocol, "value") else str(msg.protocol),
+            protocol=protocol_name,
             observation_timestamp=datetime.now(timezone.utc),
             kg_written=False,
             error="SHACL gate rejected: " + "; ".join(gate.report.violations),
@@ -191,37 +228,75 @@ async def ingest_unified_data(
 
     record_id = insert_sensor_data(msg)
 
+    flattened = [
+        {
+            "type": m.type.value if hasattr(m.type, "value") else str(m.type),
+            "value": m.value,
+            "unit": m.unit.value if hasattr(m.unit, "value") else str(m.unit),
+        }
+        for m in msg.measurements
+    ]
+
     if msg.measurements:
         first_m = msg.measurements[0]
         device = LiveDevice(
             device_id=msg.device_id,
-            subsystem=msg.subsystem.value if hasattr(msg.subsystem, "value") else str(msg.subsystem),
-            protocol=msg.protocol.value if hasattr(msg.protocol, "value") else str(msg.protocol),
+            subsystem=subsystem_name,
+            protocol=protocol_name,
             measurement_types=[first_m.type.value if hasattr(first_m.type, "value") else str(first_m.type)],
         )
         if aas_registry.observe(device):
             background_tasks.add_task(register_device_in_fuseki, device, config.FUSEKI_ENDPOINT)
 
+    fired_alerts = analyse_after_ingest(
+        device_id=msg.device_id,
+        subsystem=subsystem_name,
+        protocol=protocol_name,
+        measurements=flattened,
+    )
+
+    ctx_alerts = []
+    if gate.graph is not None:
+        for entry in flattened:
+            ctx_alerts.extend(
+                evaluate_with_context(
+                    device_id=msg.device_id,
+                    observable_property=_observable_property(entry["type"]),
+                    value=entry["value"],
+                    graph=gate.graph,
+                )
+            )
+        for a in ctx_alerts:
+            logger.warning("Context alert: %s", a.message)
+
     analytics_result = run_prediction_pipeline(
         device_id=msg.device_id,
-        subsystem=msg.subsystem.value if hasattr(msg.subsystem, "value") else str(msg.subsystem),
-        protocol=msg.protocol.value if hasattr(msg.protocol, "value") else str(msg.protocol),
+        subsystem=subsystem_name,
+        protocol=protocol_name,
         measurements=[
-            {
-                "type": m.type.value if hasattr(m.type, "value") else str(m.type),
-                "value": m.value,
-            }
-            for m in msg.measurements
+            {"type": entry["type"], "value": entry["value"]} for entry in flattened
         ],
     )
 
     kg_written = await write_to_fuseki(msg, config.FUSEKI_ENDPOINT)
 
+    provenance_audit.record_attempt(
+        ingest_id=ingest_id,
+        device_id=msg.device_id,
+        protocol=protocol_name,
+        observation_timestamp=datetime.now(timezone.utc),
+        kg_written=kg_written,
+        error=None if kg_written else "Fuseki unreachable",
+    )
+
     return {
         "status": "ok",
         "record_id": record_id,
         "ingest_id": ingest_id,
+        "device_id": msg.device_id,
         "kg_written": kg_written,
+        "anomaly_alerts": len(fired_alerts),
+        "semantic_alerts": len(ctx_alerts),
         "predictions": analytics_result["predictions"],
         "hazards": analytics_result["hazards"],
         "agv": analytics_result["agv"],

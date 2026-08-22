@@ -21,6 +21,9 @@ TYPE_TO_PROPERTY: dict[MeasurementType, URIRef] = {
     MeasurementType.COUNT: URIRef(f"{SF}measuresCount"),
     MeasurementType.OCCUPANCY: URIRef(f"{SF}measuresOccupancy"),
     MeasurementType.LIGHT_STATE: URIRef(f"{SF}measuresLightState"),
+    MeasurementType.DEVICE_STATUS: URIRef(f"{SF}measuresDeviceStatus"),
+    MeasurementType.ERROR_CODE: URIRef(f"{SF}measuresErrorCode"),
+    MeasurementType.SENSOR_STATUS: URIRef(f"{SF}measuresSensorStatus"),
 }
 
 TYPE_TO_SENSOR_CLASS: dict[MeasurementType, URIRef] = {

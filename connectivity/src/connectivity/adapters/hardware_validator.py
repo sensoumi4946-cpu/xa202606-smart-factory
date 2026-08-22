@@ -1,10 +1,14 @@
-# Pre-connection hardware validation
 from __future__ import annotations
 
 import asyncio
 import logging
 import socket
 from dataclasses import dataclass
+from typing import Optional
+from urllib.parse import urlparse
+
+import connectivity.models as connectivity_models
+from connectivity.binding_source import BindingSource, binding_source
 
 logger = logging.getLogger(__name__)
 
@@ -14,10 +18,20 @@ class ValidationResult:
     device: str
     ok: bool
     message: str
+    protocol: str = ""
+    device_ids: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict:
+        return {
+            "device": self.device,
+            "ok": self.ok,
+            "message": self.message,
+            "protocol": self.protocol,
+            "device_ids": list(self.device_ids),
+        }
 
 
 def _tcp_reachable(host: str, port: int, timeout: float = 3.0) -> bool:
-    # works for Modbus (502) and MQTT (1883)
     try:
         with socket.create_connection((host, port), timeout=timeout):
             return True
@@ -25,14 +39,10 @@ def _tcp_reachable(host: str, port: int, timeout: float = 3.0) -> bool:
         return False
 
 
-async def _opcua_reachable(endpoint_url: str) -> bool:
-    
+async def _tcp_reachable_async(host: str, port: int, timeout: float = 3.0) -> bool:
     try:
-        parts = endpoint_url.replace("opc.tcp://", "").split(":")
-        host = parts[0]
-        port = int(parts[1]) if len(parts) > 1 else 4840
-        reader, writer = await asyncio.wait_for(
-            asyncio.open_connection(host, port), timeout=3.0
+        _, writer = await asyncio.wait_for(
+            asyncio.open_connection(host, port), timeout=timeout
         )
         writer.close()
         await writer.wait_closed()
@@ -41,62 +51,137 @@ async def _opcua_reachable(endpoint_url: str) -> bool:
         return False
 
 
-async def validate_profile(profile_name: str = "mock") -> list[ValidationResult]:
-    
-    # Returns a list of ValidationResult — one per device
+def _split_endpoint(url: str, default_port: int) -> tuple[str, int]:
+    parsed = urlparse(url if "://" in url else f"//{url}")
+    host = parsed.hostname or "localhost"
+    port = parsed.port or default_port
+    return host, port
 
-    from connectivity.hardware_profiles import get_profile
-    profile = get_profile(profile_name)
+
+def _result(label: str, protocol: str, ok: bool, device_ids) -> ValidationResult:
+    return ValidationResult(
+        device=label,
+        ok=ok,
+        message="reachable" if ok else "TCP connection refused or timed out",
+        protocol=protocol,
+        device_ids=tuple(sorted(set(device_ids))),
+    )
+
+
+async def validate_endpoints(
+    source: Optional[BindingSource] = None,
+) -> list[ValidationResult]:
+    source = source or binding_source
     results: list[ValidationResult] = []
 
-    # Modbus devices
-    for dev in profile.modbus_devices:
-        ok = _tcp_reachable(dev.host, dev.port)
-        results.append(ValidationResult(
-            device=f"Modbus {dev.host}:{dev.port}",
-            ok=ok,
-            message="reachable" if ok else f"TCP connection refused or timed out",
-        ))
+    modbus = source.modbus_entries()
+    if modbus:
+        host, port = connectivity_models.MODBUS_HOST, connectivity_models.MODBUS_PORT
+        ok = await _tcp_reachable_async(host, port)
+        results.append(
+            _result(
+                f"Modbus {host}:{port}",
+                "modbus",
+                ok,
+                (b.device_id for b in modbus),
+            )
+        )
 
-    for dev in profile.opcua_devices:
-        ok = await _opcua_reachable(dev.endpoint_url)
-        results.append(ValidationResult(
-            device=f"OPC-UA {dev.endpoint_url}",
-            ok=ok,
-            message="reachable" if ok else "TCP connection refused or timed out",
-        ))
+    opcua = source.opcua_nodes()
+    if opcua:
+        host, port = _split_endpoint(connectivity_models.OPCUA_ENDPOINT, 4840)
+        ok = await _tcp_reachable_async(host, port)
+        results.append(
+            _result(
+                f"OPC-UA {connectivity_models.OPCUA_ENDPOINT}",
+                "opcua",
+                ok,
+                (n["device_id"] for n in opcua),
+            )
+        )
 
-    if profile.mqtt_config:
-        ok = _tcp_reachable(profile.mqtt_config.broker_host, profile.mqtt_config.broker_port)
-        results.append(ValidationResult(
-            device=f"MQTT {profile.mqtt_config.broker_host}:{profile.mqtt_config.broker_port}",
-            ok=ok,
-            message="reachable" if ok else "TCP connection refused or timed out",
-        ))
+    mqtt = source.for_protocol("mqtt")
+    if mqtt:
+        host = connectivity_models.MQTT_BROKER_HOST
+        port = connectivity_models.MQTT_BROKER_PORT
+        ok = await _tcp_reachable_async(host, port)
+        results.append(
+            _result(
+                f"MQTT {host}:{port}",
+                "mqtt",
+                ok,
+                (b.device_id for b in mqtt),
+            )
+        )
+
+    rest = source.for_protocol("rest")
+    if rest:
+        host, port = _split_endpoint(connectivity_models.BACKEND_URL, 8000)
+        ok = await _tcp_reachable_async(host, port)
+        results.append(
+            _result(
+                f"Backend {connectivity_models.BACKEND_URL}",
+                "rest",
+                ok,
+                (b.device_id for b in rest),
+            )
+        )
 
     return results
 
 
+def undeclared_bindings(source: Optional[BindingSource] = None) -> list[str]:
+    source = source or binding_source
+    problems = []
+    for binding in source.for_protocol("modbus"):
+        if binding.register_address is None:
+            problems.append(
+                f"{binding.binding_id}: modbus binding without sf:registerAddress"
+            )
+    for binding in source.for_protocol("opcua"):
+        if not binding.node_id:
+            problems.append(f"{binding.binding_id}: opcua binding without sf:nodeId")
+    for binding in source.registry.all():
+        if not binding.canonical_subsystem:
+            problems.append(
+                f"{binding.binding_id}: binding without sf:belongsToSubsystem"
+            )
+    return problems
+
+
 async def _main():
     import argparse
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--profile", default="mock")
+    parser.add_argument("--bindings", default=None)
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    print(f"\nValidating hardware profile: {args.profile}\n{'='*40}")
-    results = await validate_profile(args.profile)
-    all_ok = True
+    source = BindingSource(args.bindings) if args.bindings else binding_source
+
+    print(f"\nValidating bindings: {source.path}\n{'=' * 40}")
+    if source.empty:
+        print("  no protocol bindings declared — nothing to validate")
+        raise SystemExit(1)
+
+    problems = undeclared_bindings(source)
+    for problem in problems:
+        print(f"  !  {problem}")
+
+    results = await validate_endpoints(source)
+    all_ok = not problems
     for r in results:
-        status = "✓" if r.ok else "✗"
-        print(f"  {status}  {r.device}: {r.message}")
+        status = "OK " if r.ok else "FAIL"
+        devices = ", ".join(r.device_ids)
+        print(f"  {status}  {r.device}: {r.message} [{devices}]")
         if not r.ok:
             all_ok = False
     print()
+
     if all_ok:
-        print("All devices reachable. Safe to start adapters.")
+        print("All declared endpoints reachable. Safe to start adapters.")
     else:
-        print("Some devices unreachable. Fix connectivity before running hardware tests.")
+        print("Fix the reported bindings or connectivity before hardware tests.")
         raise SystemExit(1)
 
 

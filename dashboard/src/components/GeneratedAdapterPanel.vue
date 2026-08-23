@@ -1,62 +1,64 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import {
-  fetchAdapterAudit,
-  fetchAdapterSource,
-  fetchDeviceTriples,
-  type AdapterAudit,
-  type DeviceTriples,
-} from '../api'
 
-const audit = ref<AdapterAudit | null>(null)
-const triples = ref<DeviceTriples | null>(null)
+const BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/'
+const KEY = import.meta.env.VITE_API_KEY || ''
+
+async function get(path: string) {
+  const resp = await fetch(`${BASE}${path}`, { headers: { 'X-API-Key': KEY } })
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  return resp.json()
+}
+
+const audit = ref<any>(null)
+const triples = ref<any>(null)
 const source = ref('')
 const activeDevice = ref('')
 const activeProtocol = ref('')
 const error = ref('')
 const loading = ref(true)
 
-const protocols = computed(() => audit.value?.protocols ?? [])
-const devices = computed(() => audit.value?.devices ?? [])
+const protocols = computed<string[]>(() => audit.value?.protocols ?? [])
+const devices = computed<string[]>(() => audit.value?.devices ?? [])
 const aliasPairs = computed(() => Object.entries(audit.value?.device_aliases ?? {}))
 
 const ratio = computed(() => {
   const a = audit.value
-  if (!a || a.transport_plumbing_lines === 0) return null
+  if (!a || !a.transport_plumbing_lines) return null
   return (a.generated_lines_total / a.transport_plumbing_lines).toFixed(2)
 })
 
 async function selectDevice(deviceId: string) {
   activeDevice.value = deviceId
   try {
-    triples.value = await fetchDeviceTriples(deviceId)
+    triples.value = await get(
+      `api/v1/innovation/bindings/${encodeURIComponent(deviceId)}/triples`,
+    )
   } catch (e) {
     triples.value = null
-    error.value = String(e)
   }
 }
 
 async function selectProtocol(protocol: string) {
   activeProtocol.value = protocol
   try {
-    source.value = (await fetchAdapterSource(protocol)).source
+    source.value = (await get(`api/v1/innovation/adapters/${protocol}`)).source
   } catch (e) {
     source.value = ''
-    error.value = String(e)
   }
 }
 
-function shortValue(value: string | number | boolean | string[]): string {
+function shortValue(value: any): string {
   return Array.isArray(value) ? value.join(', ') : String(value)
 }
 
 onMounted(async () => {
   try {
-    audit.value = await fetchAdapterAudit()
+    audit.value = await get('api/v1/innovation/adapters')
     if (devices.value.length) await selectDevice(devices.value[0])
     if (protocols.value.length) await selectProtocol(protocols.value[0])
   } catch (e) {
-    error.value = '无法读取本体适配信息，请确认后端已启动。'
+    error.value = `无法读取本体适配信息：${e}`
   } finally {
     loading.value = false
   }

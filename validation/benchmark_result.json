@@ -1,0 +1,29 @@
+{
+  "manual": {
+    "python_lines": 85,
+    "config_entries": 11,
+    "files_touched": 3,
+    "source": "本项目 2026-07 版本手写 modbus_adapter.py 接入一台 DHT22 的实测值"
+  },
+  "ontology_driven": {
+    "python_lines": 0,
+    "config_entries": 16,
+    "files_touched": 1,
+    "onboard_ms": 51.3,
+    "generated_lines": 160,
+    "protocols": [
+      "modbus",
+      "mqtt",
+      "opcua",
+      "rest"
+    ]
+  },
+  "hardcoded_binding_constants": [
+    "connectivity/src/connectivity/adapters/modbus_adapter.py:20",
+    "connectivity/src/connectivity/adapters/modbus_adapter.py:21",
+    "connectivity/src/connectivity/adapters/modbus_adapter.py:40",
+    "connectivity/src/connectivity/adapters/modbus_adapter.py:66",
+    "connectivity/src/connectivity/adapters/modbus_adapter.py:67",
+    "connectivity/src/connectivity/adapters/modbus_adapter.py:129"
+  ]
+}

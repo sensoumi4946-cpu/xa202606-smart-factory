@@ -30,7 +30,8 @@ const emit = defineEmits<{ retry: [] }>()
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: calc(100vh - 140px);
+  flex: 1 1 auto;
+  min-height: 360px;
   width: 100%;
   padding: 24px;
   box-sizing: border-box;

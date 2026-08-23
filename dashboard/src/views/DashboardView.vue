@@ -125,7 +125,7 @@ const countRate = computed(() => {
 
     <PanelFrame
       class="p-gas"
-      title="危险气体"
+      title="危险气体（本体已声明，硬件未接入）"
       :protocol="protoOf('gas')"
       :timestamp="tsOf('gas', 'co')"
       :state="level(reading('gas', 'co')?.value ?? null, 20, 35)"
@@ -135,7 +135,7 @@ const countRate = computed(() => {
 
     <PanelFrame
       class="p-agv"
-      title="AGV 避障距离"
+      title="AGV 避障（本体已声明，硬件未接入）"
       :protocol="protoOf('agv')"
       :timestamp="tsOf('agv', 'distance')"
       :state="distState"

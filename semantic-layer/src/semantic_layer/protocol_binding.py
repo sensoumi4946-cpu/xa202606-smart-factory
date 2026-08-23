@@ -91,6 +91,12 @@ sf:ProtocolBindingShape a sh:NodeShape ;
         sh:minInclusive 0 ;
         sh:message "registerAddress must be a non-negative integer" ;
     ] ;
+        sh:property [
+        sh:path sf:registerType ;
+        sh:maxCount 1 ;
+        sh:in ( "int16" "uint16" "int32" "uint32" "float32" ) ;
+        sh:message "registerType must be int16, uint16, int32, uint32 or float32" ;
+    ] ;
     sh:property [
         sh:path sf:wordOrder ;
         sh:maxCount 1 ; sh:in ( "big" "little" ) ;

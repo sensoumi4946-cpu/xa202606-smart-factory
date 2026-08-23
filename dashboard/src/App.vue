@@ -1,9 +1,8 @@
-import { ensureDeviceMetaLoaded } from './deviceMeta'
-ensureDeviceMetaLoaded()
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import ConsoleLayout from './layouts/ConsoleLayout.vue'
 import DashboardView from './views/DashboardView.vue'
+import OntologyLabView from './views/OntologyLabView.vue'
 import ApiConsoleView from './views/ApiConsoleView.vue'
 import DeviceManagerView from './views/DeviceManagerView.vue'
 import SystemStatusView from './views/SystemStatusView.vue'
@@ -20,6 +19,7 @@ const wall = ref(
 
 const VIEWS: Record<string, unknown> = {
   monitor: DashboardView,
+  lab: OntologyLabView,
   console: ApiConsoleView,
   devices: DeviceManagerView,
   system: SystemStatusView,

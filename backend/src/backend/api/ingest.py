@@ -1,6 +1,3 @@
-# receives UnifiedMessage from connectivity adapters
-# runs semantic gate, writes to SQLite and Fuseki.
-
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -18,7 +15,12 @@ from semantic_layer.observation_gate import check_and_prepare
 from semantic_layer.semantic_context_rules import evaluate_with_context
 from semantic_layer.aas_live_sync import LiveDevice, register_device_in_fuseki
 from smart_factory_contracts.messages import (
-    Measurement, MeasurementType, Protocol, Subsystem, Unit, UnifiedMessage,
+    Measurement,
+    MeasurementType,
+    Protocol,
+    Subsystem,
+    Unit,
+    UnifiedMessage,
 )
 from backend.store import insert_sensor_data
 from backend.api.prediction import process_reading as run_prediction_pipeline
@@ -27,9 +29,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ingest", tags=["ingest"])
 
 _MTYPE = {m.value: m for m in MeasurementType}
-_UNIT  = {u.value: u for u in Unit}
+_UNIT = {u.value: u for u in Unit}
 _PROTO = {p.value: p for p in Protocol}
-_SUB   = {s.value: s for s in Subsystem}
+_SUB = {s.value: s for s in Subsystem}
 
 
 class SensorReading(BaseModel):
@@ -40,6 +42,7 @@ class SensorReading(BaseModel):
     value: float
     unit: str
     timestamp: str
+
 
 def _observable_property(property_name: str) -> str:
     parts = [p for p in property_name.split("_") if p]
@@ -54,24 +57,35 @@ def _canonical_device_id(device_id: str) -> str:
     except Exception:
         return device_id
 
+
+def _enum_value(field: Any) -> str:
+    return field.value if hasattr(field, "value") else str(field)
+
+
 def _to_unified(reading: SensorReading) -> UnifiedMessage:
-    mtype  = _MTYPE.get(reading.property_name.lower())
-    unit   = _UNIT.get(reading.unit.lower())
-    proto  = _PROTO.get(reading.protocol.lower())
-    sub    = _SUB.get(reading.subsystem.lower())
+    mtype = _MTYPE.get(reading.property_name.lower())
+    unit = _UNIT.get(reading.unit.lower())
+    proto = _PROTO.get(reading.protocol.lower())
+    sub = _SUB.get(reading.subsystem.lower())
 
     if mtype is None:
-        raise ValueError(f"Unknown property_name '{reading.property_name}'. Valid: {list(_MTYPE)}")
+        raise ValueError(
+            f"Unknown property_name '{reading.property_name}'. Valid: {list(_MTYPE)}"
+        )
     if unit is None:
         raise ValueError(f"Unknown unit '{reading.unit}'. Valid: {list(_UNIT)}")
     if proto is None:
-        raise ValueError(f"Unknown protocol '{reading.protocol}'. Valid: {list(_PROTO)}")
+        raise ValueError(
+            f"Unknown protocol '{reading.protocol}'. Valid: {list(_PROTO)}"
+        )
     if sub is None:
-        raise ValueError(f"Unknown subsystem '{reading.subsystem}'. Valid: {list(_SUB)}")
+        raise ValueError(
+            f"Unknown subsystem '{reading.subsystem}'. Valid: {list(_SUB)}"
+        )
 
     return UnifiedMessage(
         schema_version="v1",
-        device_id=reading.sensor_id,
+        device_id=_canonical_device_id(reading.sensor_id),
         subsystem=sub,
         protocol=proto,
         timestamp=datetime.now(timezone.utc),
@@ -91,12 +105,16 @@ async def ingest_reading(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    # SHACL + QUDT + provenance
     gate = check_and_prepare(msg)
+    gate_status_tracker.record(
+        gate.accepted,
+        msg.device_id,
+        None if gate.accepted else "; ".join(gate.report.violations),
+    )
     if not gate.accepted:
         provenance_audit.record_attempt(
             ingest_id=ingest_id,
-            device_id=reading.sensor_id,
+            device_id=msg.device_id,
             protocol=reading.protocol,
             observation_timestamp=datetime.now(timezone.utc),
             kg_written=False,
@@ -104,23 +122,32 @@ async def ingest_reading(
         )
         raise HTTPException(
             status_code=422,
-            detail={"error": "Semantic validation failed", "violations": gate.report.violations},
+            detail={
+                "error": "Semantic validation failed",
+                "violations": gate.report.violations,
+            },
         )
 
     record_id = insert_sensor_data(msg)
 
     fired_alerts = analyse_after_ingest(
-        device_id=reading.sensor_id,
+        device_id=msg.device_id,
         subsystem=reading.subsystem,
         protocol=reading.protocol,
-        measurements=[{"type": reading.property_name, "value": reading.value, "unit": reading.unit}],
+        measurements=[
+            {
+                "type": reading.property_name,
+                "value": reading.value,
+                "unit": reading.unit,
+            }
+        ],
     )
 
     ctx_alerts = []
     if gate.graph is not None:
         ctx_alerts = evaluate_with_context(
-            device_id=reading.sensor_id,
-            observable_property=f"measures{reading.property_name.capitalize()}",
+            device_id=msg.device_id,
+            observable_property=_observable_property(reading.property_name),
             value=reading.value,
             graph=gate.graph,
         )
@@ -128,18 +155,20 @@ async def ingest_reading(
             logger.warning("Context alert: %s", a.message)
 
     device = LiveDevice(
-        device_id=reading.sensor_id,
+        device_id=msg.device_id,
         subsystem=reading.subsystem,
         protocol=reading.protocol.lower(),
         measurement_types=[reading.property_name],
     )
     if aas_registry.observe(device):
-        background_tasks.add_task(register_device_in_fuseki, device, config.FUSEKI_ENDPOINT)
-        
+        background_tasks.add_task(
+            register_device_in_fuseki, device, config.FUSEKI_ENDPOINT
+        )
+
     kg_written = await write_to_fuseki(msg, config.FUSEKI_ENDPOINT)
     provenance_audit.record_attempt(
         ingest_id=ingest_id,
-        device_id=reading.sensor_id,
+        device_id=msg.device_id,
         protocol=reading.protocol,
         observation_timestamp=datetime.now(timezone.utc),
         kg_written=kg_written,
@@ -150,6 +179,8 @@ async def ingest_reading(
         "status": "ok",
         "record_id": record_id,
         "ingest_id": ingest_id,
+        "device_id": msg.device_id,
+        "reported_device_id": reading.sensor_id,
         "kg_written": kg_written,
         "anomaly_alerts": len(fired_alerts),
         "semantic_alerts": len(ctx_alerts),
@@ -164,7 +195,7 @@ async def ingest_batch(
     accepted, rejected = [], []
     for r in readings:
         try:
-            result = await ingest_reading(r, background_tasks)
+            await ingest_reading(r, background_tasks)
             accepted.append(r.sensor_id)
         except HTTPException as exc:
             rejected.append({"sensor_id": r.sensor_id, "reason": str(exc.detail)})
@@ -174,6 +205,7 @@ async def ingest_batch(
         "rejected": len(rejected),
         "rejected_detail": rejected,
     }
+
 
 @router.post("/api/v1/data")
 async def ingest_unified_data(
@@ -192,6 +224,9 @@ async def ingest_unified_data(
             canonical,
         )
 
+    subsystem_value = _enum_value(msg.subsystem)
+    protocol_value = _enum_value(msg.protocol)
+
     gate = check_and_prepare(msg)
     gate_status_tracker.record(
         gate.accepted,
@@ -202,14 +237,17 @@ async def ingest_unified_data(
         provenance_audit.record_attempt(
             ingest_id=ingest_id,
             device_id=msg.device_id,
-            protocol=msg.protocol.value if hasattr(msg.protocol, "value") else str(msg.protocol),
+            protocol=protocol_value,
             observation_timestamp=datetime.now(timezone.utc),
             kg_written=False,
             error="SHACL gate rejected: " + "; ".join(gate.report.violations),
         )
         raise HTTPException(
             status_code=422,
-            detail={"error": "Semantic validation failed", "violations": gate.report.violations},
+            detail={
+                "error": "Semantic validation failed",
+                "violations": gate.report.violations,
+            },
         )
 
     record_id = insert_sensor_data(msg)
@@ -218,33 +256,74 @@ async def ingest_unified_data(
         first_m = msg.measurements[0]
         device = LiveDevice(
             device_id=msg.device_id,
-            subsystem=msg.subsystem.value if hasattr(msg.subsystem, "value") else str(msg.subsystem),
-            protocol=msg.protocol.value if hasattr(msg.protocol, "value") else str(msg.protocol),
-            measurement_types=[first_m.type.value if hasattr(first_m.type, "value") else str(first_m.type)],
+            subsystem=subsystem_value,
+            protocol=protocol_value,
+            measurement_types=[_enum_value(first_m.type)],
         )
         if aas_registry.observe(device):
-            background_tasks.add_task(register_device_in_fuseki, device, config.FUSEKI_ENDPOINT)
+            background_tasks.add_task(
+                register_device_in_fuseki, device, config.FUSEKI_ENDPOINT
+            )
+
+    measurement_dicts = [
+        {
+            "type": _enum_value(m.type),
+            "value": m.value,
+            "unit": _enum_value(m.unit),
+        }
+        for m in msg.measurements
+    ]
 
     analytics_result = run_prediction_pipeline(
         device_id=msg.device_id,
-        subsystem=msg.subsystem.value if hasattr(msg.subsystem, "value") else str(msg.subsystem),
-        protocol=msg.protocol.value if hasattr(msg.protocol, "value") else str(msg.protocol),
+        subsystem=subsystem_value,
+        protocol=protocol_value,
         measurements=[
-            {
-                "type": m.type.value if hasattr(m.type, "value") else str(m.type),
-                "value": m.value,
-            }
-            for m in msg.measurements
+            {"type": m["type"], "value": m["value"]} for m in measurement_dicts
         ],
     )
 
+    fired_alerts = analyse_after_ingest(
+        device_id=msg.device_id,
+        subsystem=subsystem_value,
+        protocol=protocol_value,
+        measurements=measurement_dicts,
+    )
+
+    ctx_alerts = []
+    if gate.graph is not None:
+        for m in measurement_dicts:
+            ctx_alerts.extend(
+                evaluate_with_context(
+                    device_id=msg.device_id,
+                    observable_property=_observable_property(m["type"]),
+                    value=m["value"],
+                    graph=gate.graph,
+                )
+            )
+        for a in ctx_alerts:
+            logger.warning("Context alert: %s", a.message)
+
     kg_written = await write_to_fuseki(msg, config.FUSEKI_ENDPOINT)
+
+    provenance_audit.record_attempt(
+        ingest_id=ingest_id,
+        device_id=msg.device_id,
+        protocol=protocol_value,
+        observation_timestamp=datetime.now(timezone.utc),
+        kg_written=kg_written,
+        error=None if kg_written else "Fuseki unreachable",
+    )
 
     return {
         "status": "ok",
         "record_id": record_id,
         "ingest_id": ingest_id,
+        "device_id": msg.device_id,
+        "reported_device_id": reported_device_id,
         "kg_written": kg_written,
+        "anomaly_alerts": len(fired_alerts),
+        "semantic_alerts": len(ctx_alerts),
         "predictions": analytics_result["predictions"],
         "hazards": analytics_result["hazards"],
         "agv": analytics_result["agv"],

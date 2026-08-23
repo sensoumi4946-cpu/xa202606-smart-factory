@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import StatusBar from '../components/StatusBar.vue'
+import BackendBanner from '../components/BackendBanner.vue'
 
 const TABS = [
   { key: 'monitor', label: '监控' },
+  { key: 'lab', label: '验证' },
   { key: 'console', label: '调试' },
   { key: 'devices', label: '设备' },
   { key: 'system', label: '系统' },
@@ -23,7 +25,6 @@ onMounted(() => {
 onUnmounted(() => {
   if (timer) clearInterval(timer)
 })
-import BackendBanner from '../components/BackendBanner.vue'
 </script>
 
 <template>
@@ -80,7 +81,6 @@ import BackendBanner from '../components/BackendBanner.vue'
   align-items: center;
   gap: 10px;
 }
-/* Hazard-stripe brand mark */
 .mark {
   width: 14px;
   height: 22px;
@@ -168,11 +168,7 @@ import BackendBanner from '../components/BackendBanner.vue'
     display: none;
   }
   .content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  padding: var(--gap) 24px;
-  min-height: 0;
-}
+    padding: 12px 14px;
+  }
 }
 </style>

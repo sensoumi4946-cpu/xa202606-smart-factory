@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from analytics.thresholds import resolver
 from semantic_layer.conformance_kit import render as render_kit
+from semantic_layer.protocol_binding import BindingRegistry, generate_all
 from semantic_layer.conformance_kit import run_kit, to_json as kit_json
 from semantic_layer.meta_model import registry as meta_registry
 from semantic_layer.ontology_migration import plan_migration
@@ -132,3 +133,26 @@ async def migration_preview(req: MigrationRequest) -> dict[str, str]:
         req.old_turtle, req.new_turtle, req.from_version, req.to_version, True
     )
     return {"report": render_plan(plan)}
+
+
+
+class ValidateRequest(BaseModel):
+    turtle: str
+@router.post("/validate")
+async def validate_turtle(payload: ValidateRequest) -> dict[str, Any]:
+    scratch = BindingRegistry()
+    result = scratch.load_turtle(payload.turtle)
+    if not result.accepted:
+        return {
+            "accepted": False,
+            "violations": result.violations,
+            "bindings_added": [],
+            "generated_source": "",
+        }
+    adapters = generate_all(scratch)
+    return {
+        "accepted": True,
+        "violations": [],
+        "bindings_added": result.bindings_added,
+        "generated_source": "\n\n".join(adapters.values()),
+    }

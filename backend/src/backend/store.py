@@ -14,10 +14,6 @@ from smart_factory_contracts.messages import UnifiedMessage
 from backend import config
 from backend.config import LATEST_WINDOW_MINUTES
 from backend.db import connection, ensure_schema, reset_pools
-
-# Kept so existing tests can monkeypatch backend.store.DATABASE_PATH. The
-# value the pool actually uses is backend.config.DATABASE_PATH, resolved on
-# every call; this name is an alias for compatibility only.
 DATABASE_PATH = config.DATABASE_PATH
 from backend.rules import evaluate
 

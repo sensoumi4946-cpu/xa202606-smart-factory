@@ -1,9 +1,29 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { fetchGateStatus, type GateStatus } from '../api'
 
 const status = ref<GateStatus | null>(null)
 let timer: ReturnType<typeof setInterval> | undefined
+
+const passed = computed(() => status.value?.passed_count ?? 0)
+const rejected = computed(() => status.value?.rejected_count ?? 0)
+
+const state = computed(() => {
+  if (!status.value || passed.value + rejected.value === 0) return 'pending'
+  return 'active'
+})
+
+const label = computed(() => {
+  if (state.value === 'pending') return '待接入'
+  return `${passed.value} 通过 / ${rejected.value} 拦截`
+})
+
+const hint = computed(() => {
+  if (state.value === 'pending') return '尚无入库记录'
+  const last = status.value?.last_device ?? ''
+  const reason = status.value?.reason
+  return reason ? `最近一次：${last} — ${reason}` : `最近一次：${last} 通过`
+})
 
 async function refresh() {
   try {
@@ -23,25 +43,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <span
-    class="badge"
-    :class="status?.status ?? 'pending'"
-    :title="
-      status
-        ? `${status.passed_count ?? 0} 通过 / ${status.rejected_count ?? 0} 拒绝` +
-          (status.status === 'rejected' && status.reason ? ' — ' + status.reason : '')
-        : '尚无入库记录'
-    "
-  >
+  <span class="badge" :class="state" :title="hint">
     <span class="dot"></span>
-    SHACL ·
-    {{
-      status?.status === 'passed'
-        ? '通过'
-        : status?.status === 'rejected'
-          ? '拒绝'
-          : '待接入'
-    }}
+    SHACL · {{ label }}
   </span>
 </template>
 
@@ -64,18 +68,11 @@ onUnmounted(() => {
   border-radius: 50%;
   background: #64748b;
 }
-.badge.passed {
+.badge.active {
   border-color: #34d399;
   color: #34d399;
 }
-.badge.passed .dot {
+.badge.active .dot {
   background: #34d399;
-}
-.badge.rejected {
-  border-color: var(--danger, #ef4444);
-  color: var(--danger, #ef4444);
-}
-.badge.rejected .dot {
-  background: var(--danger, #ef4444);
 }
 </style>

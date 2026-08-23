@@ -11,7 +11,11 @@ router = APIRouter()
 async def gate_status():
     snap = gate_status_tracker.snapshot()
     if snap["status"] is None:
-        raise HTTPException(status_code=404, detail="no ingest activity yet")
+        return {
+            **snap,
+            "status": "waiting",
+            "reason": "no ingest activity yet",
+        }
     return snap
 
 

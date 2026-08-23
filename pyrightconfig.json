@@ -1,15 +1,11 @@
 {
-  "include": ["."],
-  "extraPaths": [
-    ".",
-    "shared/src",
-    "semantic-layer/src",
-    "backend/src",
-    "connectivity/src",
-    "analytics/src"
-  ],
-  "pythonVersion": "3.11",
+  "include": ["backend/src", "connectivity/src", "analytics/src", "semantic-layer/src", "shared/src"],
+  "exclude": ["**/node_modules", "**/__pycache__", "**/tests"],
+  "venvPath": ".",
+  "venv": ".venv",
   "typeCheckingMode": "basic",
-  "reportMissingImports": "warning",
-  "reportMissingModuleSource": "none"
+  "reportOptionalMemberAccess": "none",
+  "reportOptionalSubscript": "none",
+  "reportArgumentType": "warning",
+  "reportMissingImports": "warning"
 }

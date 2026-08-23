@@ -158,14 +158,21 @@ import BackendBanner from '../components/BackendBanner.vue'
 }
 .content {
   flex: 1;
+  display: flex;
+  flex-direction: column;
   padding: var(--gap) 24px;
+  min-height: 0;
 }
 @media (max-width: 700px) {
   .title {
     display: none;
   }
   .content {
-    padding: 12px 14px;
-  }
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: var(--gap) 24px;
+  min-height: 0;
+}
 }
 </style>

@@ -41,6 +41,18 @@ class SensorReading(BaseModel):
     unit: str
     timestamp: str
 
+def _observable_property(property_name: str) -> str:
+    parts = [p for p in property_name.split("_") if p]
+    return "measures" + "".join(p.capitalize() for p in parts)
+
+
+def _canonical_device_id(device_id: str) -> str:
+    try:
+        from backend.api.innovation_api import binding_registry
+
+        return binding_registry.resolve_device_id(device_id)
+    except Exception:
+        return device_id
 
 def _to_unified(reading: SensorReading) -> UnifiedMessage:
     mtype  = _MTYPE.get(reading.property_name.lower())
@@ -169,6 +181,17 @@ async def ingest_unified_data(
     background_tasks: BackgroundTasks,
 ) -> dict[str, Any]:
     ingest_id = str(uuid.uuid4())
+
+    reported_device_id = msg.device_id
+    canonical = _canonical_device_id(reported_device_id)
+    if canonical != reported_device_id:
+        msg = msg.model_copy(update={"device_id": canonical})
+        logger.info(
+            "device alias resolved via ontology: %s -> %s",
+            reported_device_id,
+            canonical,
+        )
+
     gate = check_and_prepare(msg)
     gate_status_tracker.record(
         gate.accepted,

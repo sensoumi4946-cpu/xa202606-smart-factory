@@ -9,7 +9,7 @@ from semantic_layer.mapping import SUBSYSTEM_TO_RESOURCE, TYPE_TO_PROPERTY
 
 router = APIRouter()
 
-_TIMEOUT = 5.0
+_TIMEOUT = 10.0
 
 _PREFIX = (
     "PREFIX sosa: <http://www.w3.org/ns/sosa/> "
@@ -122,12 +122,16 @@ async def semantic(view: Optional[str] = Query(None)):
     try:
         bindings = await _run_sparql(VIEWS[view])
     except httpx.HTTPError:
-        return JSONResponse(
-            status_code=503,
-            content={"error": "semantic service unavailable"},
-        )
+        return {
+            "view": view,
+            "description": DESCRIPTIONS[view],
+            "results": [],
+            "degraded": True,
+            "reason": "Fuseki 未启动，知识图谱查询暂不可用",
+        }
     return {
-        "view":        view,
+        "view": view,
         "description": DESCRIPTIONS[view],
-        "results":     _aggregate(bindings),
+        "results": _aggregate(bindings),
+        "degraded": False,
     }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import GeneratedAdapterPanel from '../components/GeneratedAdapterPanel.vue'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import {
   devicesBySubsystem,
@@ -75,7 +76,8 @@ const countRate = computed(() => {
 })
 </script>
 
-<template>
+  <template>
+
   <EmptyState
     v-if="!anyData"
     kind="offline"
@@ -209,6 +211,10 @@ const countRate = computed(() => {
   gap: 10px;
   padding: 12px 16px 20px;
   align-items: stretch;
+}
+
+.innovation-always {
+  padding: 12px 16px 0;
 }
 
 .banner { grid-column: 1 / -1; }

@@ -273,6 +273,11 @@ async def ingest_unified_data(
         }
         for m in msg.measurements
     ]
+    
+    from analytics import trend_forecast
+
+    for m in measurement_dicts:
+        trend_forecast.record(msg.device_id, m["type"], m["value"])
 
     analytics_result = run_prediction_pipeline(
         device_id=msg.device_id,

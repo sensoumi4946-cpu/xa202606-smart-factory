@@ -10,6 +10,8 @@ from fastapi import APIRouter, HTTPException
 
 from analytics.anomaly_detector import AnomalyDetector
 from analytics.cross_subsystem_correlator import CrossSubsystemCorrelator
+from analytics import trend_forecast
+from analytics.thresholds import resolver
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -114,6 +116,21 @@ async def pending_anomalies() -> dict[str, Any]:
         "pending_count": len(pending),
         "items": pending,
     }
+@router.get("/api/v1/trend/{device_id}/{property_name}")
+async def trend(device_id: str, property_name: str, horizon_minutes: float = 10.0):
+    threshold = resolver.threshold_for(property_name)
+    return trend_forecast.forecast(
+        device_id,
+        property_name,
+        horizon_minutes=horizon_minutes,
+        threshold=threshold[0] if threshold else None,
+    ).to_dict()
+
+
+@router.get("/api/v1/trend")
+async def trends():
+    return {"series": trend_forecast.tracked_series()}
+
 # Public aliases
 detector = _detector
 correlator = _correlator

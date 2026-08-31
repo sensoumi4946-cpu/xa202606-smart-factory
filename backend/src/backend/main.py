@@ -3,6 +3,7 @@ import json
 import logging
 import sys
 import traceback
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -67,6 +68,17 @@ app = FastAPI(
     title="XA-202606 Smart Factory Backend",
     version="0.1.0",
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["X-API-Key", "Content-Type"],
 )
 app.middleware("http")(api_key_middleware)
 app.include_router(api_router)

@@ -1,12 +1,43 @@
 const BASE_URL = '/'
 
+const _inflight = new Map<string, Promise<Response>>()
+const _cache = new Map<string, { at: number; body: string; status: number }>()
+const COALESCE_MS = 900
+
+function _cacheable(url: string, init?: RequestInit): boolean {
+  return !init?.method || init.method.toUpperCase() === 'GET'
+}
+
+export async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
+  const headers = { 'X-API-Key': API_KEY, ...(init?.headers || {}) }
+  const opts = { ...init, headers }
+
+  if (!_cacheable(url, init)) return fetch(url, opts)
+
+  const hit = _cache.get(url)
+  if (hit && Date.now() - hit.at < COALESCE_MS) {
+    return new Response(hit.body, { status: hit.status })
+  }
+
+  const pending = _inflight.get(url)
+  if (pending) return (await pending).clone()
+
+  const p = fetch(url, opts)
+  _inflight.set(url, p)
+  try {
+    const resp = await p
+    if (resp.ok) {
+      const body = await resp.clone().text()
+      _cache.set(url, { at: Date.now(), body, status: resp.status })
+    }
+    return resp
+  } finally {
+    _inflight.delete(url)
+  }
+}
+
 const API_KEY = import.meta.env.VITE_API_KEY ?? ''
 
-async function apiFetch(url: string, init: RequestInit = {}): Promise<Response> {
-  const headers = new Headers(init.headers)
-  if (API_KEY) headers.set('X-API-Key', API_KEY)
-  return fetch(url, { ...init, headers })
-}
 
 export interface SensorRecord {
   id: string

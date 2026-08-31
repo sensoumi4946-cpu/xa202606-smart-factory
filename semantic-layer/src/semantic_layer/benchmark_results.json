@@ -1,0 +1,50 @@
+[
+  {
+    "benchmark": "BM1_mapping",
+    "runs": 200,
+    "mean_ms": 1.178,
+    "median_ms": 0.906,
+    "p95_ms": 2.577,
+    "std_ms": 0.763
+  },
+  {
+    "benchmark": "BM2_shacl_structural",
+    "runs": 200,
+    "mean_ms": 11.593,
+    "median_ms": 8.24,
+    "p95_ms": 13.097,
+    "std_ms": 46.583
+  },
+  {
+    "benchmark": "BM3_shacl_domain",
+    "runs": 200,
+    "mean_ms": 45.229,
+    "median_ms": 44.383,
+    "p95_ms": 57.576,
+    "std_ms": 10.694
+  },
+  {
+    "benchmark": "BM4_unit_harmonizer",
+    "runs": 200,
+    "mean_ms": 7.396,
+    "median_ms": 7.208,
+    "p95_ms": 11.008,
+    "std_ms": 1.958
+  },
+  {
+    "benchmark": "BM5_full_gate",
+    "runs": 200,
+    "mean_ms": 68.632,
+    "median_ms": 66.772,
+    "p95_ms": 88.993,
+    "std_ms": 12.497
+  },
+  {
+    "benchmark": "BM8_rdfs_inference",
+    "runs": 200,
+    "mean_ms": 4.91,
+    "median_ms": 4.049,
+    "p95_ms": 9.243,
+    "std_ms": 2.775
+  }
+]

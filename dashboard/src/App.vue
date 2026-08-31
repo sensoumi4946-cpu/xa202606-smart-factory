@@ -8,6 +8,7 @@ import DeviceManagerView from './views/DeviceManagerView.vue'
 import SystemStatusView from './views/SystemStatusView.vue'
 import WallboardView from './views/WallboardView.vue'
 import { ensureDeviceMetaLoaded } from './deviceMeta'
+import { refreshAll } from './usePoll'
 
 const active = ref('monitor')
 const refreshKey = ref(0)

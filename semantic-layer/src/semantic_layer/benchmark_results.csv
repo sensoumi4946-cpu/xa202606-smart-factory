@@ -1,0 +1,7 @@
+benchmark,runs,mean_ms,median_ms,p95_ms,std_ms
+BM1_mapping,200,1.178,0.906,2.577,0.763
+BM2_shacl_structural,200,11.593,8.24,13.097,46.583
+BM3_shacl_domain,200,45.229,44.383,57.576,10.694
+BM4_unit_harmonizer,200,7.396,7.208,11.008,1.958
+BM5_full_gate,200,68.632,66.772,88.993,12.497
+BM8_rdfs_inference,200,4.91,4.049,9.243,2.775

@@ -1,0 +1,12 @@
+[Unit]
+Description=XA-202606 semantic binding service socket
+PartOf=xa202606-bindingd.service
+
+[Socket]
+ListenStream=/run/xa202606/bindings.sock
+SocketMode=0660
+SocketUser=xa202606
+SocketGroup=xa202606
+
+[Install]
+WantedBy=sockets.target

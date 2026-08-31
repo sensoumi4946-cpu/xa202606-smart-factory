@@ -10,6 +10,7 @@ from backend import config
 from backend.services.registry_singleton import aas_registry, provenance_audit
 from backend.services import gate_status_tracker
 from backend.services.analytics_ingest_bridge import analyse_after_ingest
+from analytics import trend_forecast
 from semantic_layer.fuseki import write_to_fuseki
 from semantic_layer.observation_gate import check_and_prepare
 from semantic_layer.semantic_context_rules import evaluate_with_context
@@ -62,6 +63,31 @@ def _enum_value(field: Any) -> str:
     return field.value if hasattr(field, "value") else str(field)
 
 
+async def _write_kg_and_audit(
+    msg: UnifiedMessage,
+    ingest_id: str,
+    protocol_value: str,
+    observed_at: datetime,
+) -> None:
+    kg_written = False
+    error = None
+    try:
+        kg_written = await write_to_fuseki(msg, config.FUSEKI_ENDPOINT)
+        if not kg_written:
+            error = "Fuseki write returned false"
+    except Exception as exc:
+        error = f"Fuseki write failed: {exc}"
+        logger.warning("KG write failed for %s: %s", msg.device_id, exc)
+    provenance_audit.record_attempt(
+        ingest_id=ingest_id,
+        device_id=msg.device_id,
+        protocol=protocol_value,
+        observation_timestamp=observed_at,
+        kg_written=kg_written,
+        error=error,
+    )
+
+
 def _to_unified(reading: SensorReading) -> UnifiedMessage:
     mtype = _MTYPE.get(reading.property_name.lower())
     unit = _UNIT.get(reading.unit.lower())
@@ -75,13 +101,9 @@ def _to_unified(reading: SensorReading) -> UnifiedMessage:
     if unit is None:
         raise ValueError(f"Unknown unit '{reading.unit}'. Valid: {list(_UNIT)}")
     if proto is None:
-        raise ValueError(
-            f"Unknown protocol '{reading.protocol}'. Valid: {list(_PROTO)}"
-        )
+        raise ValueError(f"Unknown protocol '{reading.protocol}'. Valid: {list(_PROTO)}")
     if sub is None:
-        raise ValueError(
-            f"Unknown subsystem '{reading.subsystem}'. Valid: {list(_SUB)}"
-        )
+        raise ValueError(f"Unknown subsystem '{reading.subsystem}'. Valid: {list(_SUB)}")
 
     return UnifiedMessage(
         schema_version="v1",
@@ -105,6 +127,7 @@ async def ingest_reading(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
+    observed_at = datetime.now(timezone.utc)
     gate = check_and_prepare(msg)
     gate_status_tracker.record(
         gate.accepted,
@@ -116,7 +139,7 @@ async def ingest_reading(
             ingest_id=ingest_id,
             device_id=msg.device_id,
             protocol=reading.protocol,
-            observation_timestamp=datetime.now(timezone.utc),
+            observation_timestamp=observed_at,
             kg_written=False,
             error="SHACL gate rejected: " + "; ".join(gate.report.violations),
         )
@@ -129,6 +152,7 @@ async def ingest_reading(
         )
 
     record_id = insert_sensor_data(msg)
+    trend_forecast.record(msg.device_id, reading.property_name, reading.value)
 
     fired_alerts = analyse_after_ingest(
         device_id=msg.device_id,
@@ -165,14 +189,8 @@ async def ingest_reading(
             register_device_in_fuseki, device, config.FUSEKI_ENDPOINT
         )
 
-    kg_written = await write_to_fuseki(msg, config.FUSEKI_ENDPOINT)
-    provenance_audit.record_attempt(
-        ingest_id=ingest_id,
-        device_id=msg.device_id,
-        protocol=reading.protocol,
-        observation_timestamp=datetime.now(timezone.utc),
-        kg_written=kg_written,
-        error=None if kg_written else "Fuseki unreachable",
+    background_tasks.add_task(
+        _write_kg_and_audit, msg, ingest_id, reading.protocol, observed_at
     )
 
     return {
@@ -181,7 +199,7 @@ async def ingest_reading(
         "ingest_id": ingest_id,
         "device_id": msg.device_id,
         "reported_device_id": reading.sensor_id,
-        "kg_written": kg_written,
+        "kg_write": "queued",
         "anomaly_alerts": len(fired_alerts),
         "semantic_alerts": len(ctx_alerts),
     }
@@ -213,6 +231,7 @@ async def ingest_unified_data(
     background_tasks: BackgroundTasks,
 ) -> dict[str, Any]:
     ingest_id = str(uuid.uuid4())
+    observed_at = datetime.now(timezone.utc)
 
     reported_device_id = msg.device_id
     canonical = _canonical_device_id(reported_device_id)
@@ -238,7 +257,7 @@ async def ingest_unified_data(
             ingest_id=ingest_id,
             device_id=msg.device_id,
             protocol=protocol_value,
-            observation_timestamp=datetime.now(timezone.utc),
+            observation_timestamp=observed_at,
             kg_written=False,
             error="SHACL gate rejected: " + "; ".join(gate.report.violations),
         )
@@ -273,8 +292,6 @@ async def ingest_unified_data(
         }
         for m in msg.measurements
     ]
-    
-    from analytics import trend_forecast
 
     for m in measurement_dicts:
         trend_forecast.record(msg.device_id, m["type"], m["value"])
@@ -309,15 +326,8 @@ async def ingest_unified_data(
         for a in ctx_alerts:
             logger.warning("Context alert: %s", a.message)
 
-    kg_written = await write_to_fuseki(msg, config.FUSEKI_ENDPOINT)
-
-    provenance_audit.record_attempt(
-        ingest_id=ingest_id,
-        device_id=msg.device_id,
-        protocol=protocol_value,
-        observation_timestamp=datetime.now(timezone.utc),
-        kg_written=kg_written,
-        error=None if kg_written else "Fuseki unreachable",
+    background_tasks.add_task(
+        _write_kg_and_audit, msg, ingest_id, protocol_value, observed_at
     )
 
     return {
@@ -326,7 +336,7 @@ async def ingest_unified_data(
         "ingest_id": ingest_id,
         "device_id": msg.device_id,
         "reported_device_id": reported_device_id,
-        "kg_written": kg_written,
+        "kg_write": "queued",
         "anomaly_alerts": len(fired_alerts),
         "semantic_alerts": len(ctx_alerts),
         "predictions": analytics_result["predictions"],

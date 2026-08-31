@@ -1,14 +1,18 @@
 <script setup lang="ts">
-// Live alert feed. Cross-subsystem correlation alerts get their own
-// stronger row treatment so single-sensor warnings and correlated events
-// read as different severities at a glance.
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed } from 'vue'
+import { usePoll } from '../usePoll'
 import { fetchAlerts, type AlertItem } from '../api'
 
-const alerts = ref<AlertItem[]>([])
-const error = ref('')
 const filterLevel = ref('')
-let timer: ReturnType<typeof setInterval> | undefined
+
+const { data, error: pollError } = usePoll<{ items: AlertItem[] }>(
+  'alerts:20',
+  () => fetchAlerts({ limit: 20 }),
+  3000,
+)
+
+const alerts = computed<AlertItem[]>(() => data.value?.items ?? [])
+const error = computed(() => (pollError.value ? '告警数据加载失败' : ''))
 
 const filtered = computed(() => {
   if (!filterLevel.value) return alerts.value
@@ -18,25 +22,6 @@ const filtered = computed(() => {
 function isCross(a: AlertItem): boolean {
   return a.subsystem === 'cross_subsystem'
 }
-
-async function refresh() {
-  try {
-    const data = await fetchAlerts({ limit: 20 })
-    alerts.value = data.items
-    error.value = ''
-  } catch {
-    error.value = '告警数据加载失败'
-  }
-}
-
-onMounted(() => {
-  refresh()
-  timer = setInterval(refresh, 3000)
-})
-
-onUnmounted(() => {
-  if (timer) clearInterval(timer)
-})
 </script>
 
 <template>

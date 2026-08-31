@@ -1,5 +1,3 @@
-# API key authentication for the backend.
-
 from __future__ import annotations
 
 import hashlib
@@ -17,19 +15,12 @@ logger = logging.getLogger(__name__)
 
 _API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
 
+
 def _hash_key(key: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()
 
 
 def _load_valid_hashes() -> set[str]:
-    """Accept keys from either env var.
-
-    API_KEYS  comma-separated sha256 hashes (preferred in production)
-    API_KEY   a single plaintext key, hashed here
-
-    The deploy files and .env only ever set API_KEY, so reading API_KEYS
-    alone silently disabled authentication on every deployment.
-    """
     hashes = {h.strip() for h in os.environ.get("API_KEYS", "").split(",") if h.strip()}
     plain = os.environ.get("API_KEY", "").strip()
     if plain and plain != "changeme":
@@ -77,6 +68,9 @@ async def api_key_middleware(
     request: Request,
     call_next: Callable,
 ):
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
     if request.url.path in _PUBLIC_PATHS:
         return await call_next(request)
 
@@ -99,7 +93,6 @@ async def api_key_middleware(
 
 
 class AuditLogger:
-
     def __init__(self) -> None:
         self._log = logging.getLogger("audit")
 

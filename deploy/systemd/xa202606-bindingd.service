@@ -1,0 +1,33 @@
+[Unit]
+Description=XA-202606 semantic binding service
+Documentation=https://github.com/sensoumi4946-cpu/xa202606-smart-factory
+After=network.target
+Requires=xa202606-bindingd.socket
+
+[Service]
+Type=simple
+User=xa202606
+Group=xa202606
+WorkingDirectory=/opt/xa202606
+Environment=BINDINGS_TTL=/etc/xa202606/bindings.ttl
+Environment=SF_BINDING_SOCKET=/run/xa202606/bindings.sock
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/xa202606/venv/bin/sf-bindingd
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=3s
+RuntimeDirectory=xa202606
+RuntimeDirectoryMode=0750
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/xa202606
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

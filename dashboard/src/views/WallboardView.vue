@@ -1,145 +1,142 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { rawRequest, fetchLatestDeduped, fetchAlerts, type AlertItem, type LatestDevice } from '../api'
-import { DEVICE_META, protoLabel, refreshDeviceMeta } from '../deviceMeta'
-import { FRESH_MS } from '../constants'
-import KnowledgeGraph from '../components/KnowledgeGraph.vue'
-
-const emit = defineEmits<{ exit: [] }>()
-
-const latest = ref<LatestDevice[]>([])
-const alerts = ref<AlertItem[]>([])
-const hazards = ref<any[]>([])
-const predictions = ref<any[]>([])
-const agv = ref<any[]>([])
-const clock = ref('')
-const now = ref(Date.now())
-const connected = ref(true)
-
-let poll: ReturnType<typeof setInterval> | undefined
-let tick: ReturnType<typeof setInterval> | undefined
-
+import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { rawRequest, fetchLatestDeduped, fetchAlerts, type AlertItem, type LatestDevice } from '../api';
+import { DEVICE_META, protoLabel, refreshDeviceMeta } from '../deviceMeta';
+import { FRESH_MS } from '../constants';
+import KnowledgeGraph from '../components/KnowledgeGraph.vue';
+const emit = defineEmits<{
+    exit: [
+    ];
+}>();
+const latest = ref<LatestDevice[]>([]);
+const alerts = ref<AlertItem[]>([]);
+const hazards = ref<any[]>([]);
+const predictions = ref<any[]>([]);
+const agv = ref<any[]>([]);
+const clock = ref('');
+const now = ref(Date.now());
+const connected = ref(true);
+let poll: ReturnType<typeof setInterval> | undefined;
+let tick: ReturnType<typeof setInterval> | undefined;
 const SUBSYSTEMS = [
-  { key: 'temp_humidity', label: '温湿度监控', props: ['temperature', 'humidity'], units: ['°C', '%'] },
-  { key: 'lighting', label: '红外感应照明', props: ['occupancy', 'light_state'], units: ['', ''] },
-  { key: 'gas', label: '危险气体监测', props: ['co', 'smoke'], units: ['ppm', 'ppm'] },
-  { key: 'agv', label: 'AGV 避障', props: ['distance'], units: ['cm'] },
-  { key: 'counting', label: '货物感应计数', props: ['count'], units: ['件'] },
-]
-
-function valueOf(subsystem: string, prop: string): { v: number | null; ts: string | null } {
-  for (const d of latest.value) {
-    const meta = DEVICE_META[d.device_id]
-    const sub = meta?.subsystem ?? d.subsystem
-    if (sub !== subsystem) continue
-    const m = d.measurements.find((x) => x.type === prop)
-    if (m) return { v: m.value, ts: m.timestamp }
-  }
-  return { v: null, ts: null }
+    { key: 'temp_humidity', label: '温湿度监控', props: ['temperature', 'humidity'], units: ['°C', '%'] },
+    { key: 'lighting', label: '红外感应照明', props: ['occupancy', 'light_state'], units: ['', ''] },
+    { key: 'gas', label: '危险气体监测', props: ['co', 'smoke', 'combustible_gas'], units: ['ppm', 'ppm', 'ppm'] },
+    { key: 'agv', label: 'AGV 避障', props: ['distance'], units: ['cm'] },
+    { key: 'counting', label: '货物感应计数', props: ['count'], units: ['件'] },
+];
+function valueOf(subsystem: string, prop: string): {
+    v: number | null;
+    ts: string | null;
+} {
+    for (const d of latest.value) {
+        const meta = DEVICE_META[d.device_id];
+        const sub = meta?.subsystem ?? d.subsystem;
+        if (sub !== subsystem)
+            continue;
+        const m = d.measurements.find((x) => x.type === prop);
+        if (m)
+            return { v: m.value, ts: m.timestamp };
+    }
+    return { v: null, ts: null };
 }
-
 function fmt(v: number | null, prop: string): string {
-  if (v === null) return '--'
-  if (prop === 'occupancy') return v > 0.5 ? '有人' : '无人'
-  if (prop === 'light_state') return v > 0.5 ? '开' : '关'
-  if (prop === 'count') return String(Math.round(v))
-  return v.toFixed(1)
+    if (v === null)
+        return '--';
+    if (prop === 'occupancy')
+        return v > 0.5 ? '有人' : '无人';
+    if (prop === 'light_state')
+        return v > 0.5 ? '开' : '关';
+    if (prop === 'count')
+        return String(Math.round(v));
+    return v.toFixed(1);
 }
-
-const tiles = computed(() =>
-  SUBSYSTEMS.map((s) => {
+const tiles = computed(() => SUBSYSTEMS.map((s) => {
     const readings = s.props.map((p, i) => {
-      const { v, ts } = valueOf(s.key, p)
-      return { prop: p, text: fmt(v, p), unit: s.units[i], ts }
-    })
+        const { v, ts } = valueOf(s.key, p);
+        return { prop: p, text: fmt(v, p), unit: s.units[i], ts };
+    });
     const freshest = readings
-      .map((r) => (r.ts ? now.value - new Date(r.ts).getTime() : Infinity))
-      .sort((a, b) => a - b)[0]
-    const online = freshest < FRESH_MS
-    const device = latest.value.find(
-      (d) => (DEVICE_META[d.device_id]?.subsystem ?? d.subsystem) === s.key,
-    )
-    const proto = device ? protoLabel(DEVICE_META[device.device_id]?.protocol) : '--'
-    const alarming = alerts.value.some(
-      (a) => a.subsystem === s.key && now.value - new Date(a.triggered_at).getTime() < 30_000,
-    )
-    return { ...s, readings, online, proto, alarming }
-  }),
-)
-
-const criticalHazard = computed(() => hazards.value[0] ?? null)
-
+        .map((r) => (r.ts ? now.value - new Date(r.ts).getTime() : Infinity))
+        .sort((a, b) => a - b)[0];
+    const online = freshest < FRESH_MS;
+    const device = latest.value.find((d) => (DEVICE_META[d.device_id]?.subsystem ?? d.subsystem) === s.key);
+    const proto = device ? protoLabel(DEVICE_META[device.device_id]?.protocol) : '--';
+    const alarming = alerts.value.some((a) => a.subsystem === s.key && now.value - new Date(a.triggered_at).getTime() < 30000);
+    return { ...s, readings, online, proto, alarming };
+}));
+const criticalHazard = computed(() => hazards.value[0] ?? null);
 const kpis = computed(() => {
-  const online = tiles.value.filter((t) => t.online).length
-  const protos = new Set(
-    latest.value.map((d) => DEVICE_META[d.device_id]?.protocol).filter(Boolean),
-  )
-  const critical = alerts.value.filter((a) => a.level === 'critical').length
-  const soonest = predictions.value[0]
-  return {
-    online,
-    total: SUBSYSTEMS.length,
-    protocols: protos.size,
-    critical,
-    prediction: soonest
-      ? `${soonest.property_name} ${Math.round(soonest.seconds_to_threshold)}s`
-      : '正常',
-  }
-})
-
-const ticker = computed(() => alerts.value.slice(0, 12))
-
+    const online = tiles.value.filter((t) => t.online).length;
+    const protos = new Set(latest.value.map((d) => DEVICE_META[d.device_id]?.protocol).filter(Boolean));
+    const critical = alerts.value.filter((a) => a.level === 'critical').length;
+    const soonest = predictions.value[0];
+    return {
+        online,
+        total: SUBSYSTEMS.length,
+        protocols: protos.size,
+        critical,
+        prediction: soonest
+            ? `${soonest.property_name} ${Math.round(soonest.seconds_to_threshold)}s`
+            : '正常',
+    };
+});
+const ticker = computed(() => alerts.value.slice(0, 12));
 function timeOf(iso: string): string {
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? '--' : d.toLocaleTimeString()
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? '--' : d.toLocaleTimeString();
 }
-
 async function safeGet(path: string): Promise<any[]> {
-  try {
-    const res = await rawRequest('GET', path)
-    if (!res.ok) return []
-    const body = res.body as { items?: any[] } | null
-    return body?.items ?? []
-  } catch {
-    return []
-  }
+    try {
+        const res = await rawRequest('GET', path);
+        if (!res.ok)
+            return [];
+        const body = res.body as {
+            items?: any[];
+        } | null;
+        return body?.items ?? [];
+    }
+    catch {
+        return [];
+    }
 }
-
 async function load() {
-  try {
-    const [l, a] = await Promise.all([
-      fetchLatestDeduped(),
-      fetchAlerts({ limit: 20 }),
-    ])
-    latest.value = l
-    alerts.value = a.items
-    connected.value = true
-  } catch {
-    connected.value = false
-  }
-  const [h, p, g] = await Promise.all([
-    safeGet('/api/v1/hazards?limit=5'),
-    safeGet('/api/v1/predictions'),
-    safeGet('/api/v1/agv'),
-  ])
-  hazards.value = h
-  predictions.value = p
-  agv.value = g
-  refreshDeviceMeta()
+    try {
+        const [l, a] = await Promise.all([
+            fetchLatestDeduped(),
+            fetchAlerts({ limit: 20 }),
+        ]);
+        latest.value = l;
+        alerts.value = a.items;
+        connected.value = true;
+    }
+    catch {
+        connected.value = false;
+    }
+    const [h, p, g] = await Promise.all([
+        safeGet('/api/v1/hazards?limit=5'),
+        safeGet('/api/v1/predictions'),
+        safeGet('/api/v1/agv'),
+    ]);
+    hazards.value = h;
+    predictions.value = p;
+    agv.value = g;
+    refreshDeviceMeta();
 }
-
 onMounted(() => {
-  load()
-  poll = setInterval(load, 2000)
-  tick = setInterval(() => {
-    now.value = Date.now()
-    clock.value = new Date().toLocaleTimeString('zh-CN', { hour12: false })
-  }, 1000)
-})
+    load();
+    poll = setInterval(load, 2000);
+    tick = setInterval(() => {
+        now.value = Date.now();
+        clock.value = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+    }, 1000);
+});
 onUnmounted(() => {
-  if (poll) clearInterval(poll)
-  if (tick) clearInterval(tick)
-})
+    if (poll)
+        clearInterval(poll);
+    if (tick)
+        clearInterval(tick);
+});
 </script>
 
 <template>

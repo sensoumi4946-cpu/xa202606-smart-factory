@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate or verify checked-in protocol adapters from bindings.ttl."""
+
 
 from __future__ import annotations
 

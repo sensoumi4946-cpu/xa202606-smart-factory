@@ -1,8 +1,9 @@
-# Deep health check endpoint
+
 
 from __future__ import annotations
 
 import sqlite3
+from urllib.parse import urlsplit
 import time
 import logging
 from typing import Any
@@ -22,7 +23,7 @@ async def _check_fuseki() -> dict:
     try:
         async with httpx.AsyncClient(timeout=3.0, trust_env=False) as client:
             resp = await client.get(
-                config.FUSEKI_QUERY_URL.replace("/sparql", "/$/ping")
+                urlsplit(config.FUSEKI_QUERY_URL)._replace(path="/$/ping", query="", fragment="").geturl()
             )
         ok = resp.status_code == 200
     except httpx.HTTPError as exc:
@@ -59,16 +60,16 @@ async def _check_mqtt() -> dict:
 
 @router.get("/health/live")
 async def liveness():
-    # Always 200 if the process is running.
+    
     return {"status": "alive"}
 
 
 @router.get("/health/ready")
 async def readiness() -> JSONResponse:
-    # Returns 200 if all services reachable, 503 otherwise
+    
 
     checks: dict[str, Any] = {
-        "fuseki": await _check_fuseki(),
+        "fuseki": await _check_fuseki() if config.SEMANTIC_WRITE_ENABLED else {"ok": True, "disabled": True},
         "sqlite": _check_sqlite(),
         "mqtt": await _check_mqtt(),
     }

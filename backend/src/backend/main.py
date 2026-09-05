@@ -28,6 +28,9 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     assert_single_worker()
+    from backend.security.auth import validate_configuration
+
+    validate_configuration()
     init_db()
     from analytics.thresholds import autobind
 
@@ -103,7 +106,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=list(config.CORS_ORIGINS),
     allow_credentials=False,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["X-API-Key", "Content-Type"],
 )
 app.middleware("http")(api_key_middleware)

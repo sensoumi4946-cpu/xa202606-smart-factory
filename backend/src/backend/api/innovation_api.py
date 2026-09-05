@@ -97,8 +97,8 @@ def load_bindings(path: Optional[str] = None) -> int:
     fresh, _, _ = _prepare_bindings(path)
     if fresh is None:
         return 0
-    # Replace only after complete validation, so a bad reload preserves the
-    # active registry. Module consumers resolve this global at request time.
+    
+    
     binding_registry = fresh
     return len(binding_registry)
 
@@ -181,7 +181,7 @@ async def threshold_sources() -> dict[str, Any]:
 
 @router.post("/reload")
 async def reload_runtime_configuration() -> dict[str, Any]:
-    """Validate and atomically replace backend bindings and thresholds."""
+    pass
     global binding_registry
     fresh_bindings, _, binding_errors = _prepare_bindings()
     fresh_thresholds, threshold_path, threshold_errors = _prepare_thresholds()
@@ -201,8 +201,8 @@ async def reload_runtime_configuration() -> dict[str, Any]:
                 "violations": threshold_errors,
             },
         )
-    # No await occurs between validation and replacement. With the enforced
-    # single backend worker, requests cannot observe a partially applied pair.
+    
+    
     binding_registry = fresh_bindings
     meta_registry.replace_with(fresh_thresholds)
     resolver.bind(meta_registry)

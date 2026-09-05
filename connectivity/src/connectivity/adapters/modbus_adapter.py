@@ -1,4 +1,4 @@
-"""Ontology-driven Modbus TCP adapter."""
+
 
 from __future__ import annotations
 
@@ -86,7 +86,7 @@ class ModbusAdapter(BaseAdapter):
 
     def _ensure_queue(self) -> asyncio.Queue[UnifiedMessage]:
         if self._queue is None:
-            self._queue = asyncio.Queue()
+            self._queue = asyncio.Queue(maxsize=1)
         return self._queue
 
     @staticmethod
@@ -155,7 +155,10 @@ class ModbusAdapter(BaseAdapter):
             )
             for payload in payloads:
                 message = UnifiedMessage.model_validate(payload)
-                self._ensure_queue().put_nowait(message)
+                queue = self._ensure_queue()
+                if queue.full():
+                    queue.get_nowait()
+                queue.put_nowait(message)
                 await forward_to_backend(message)
                 emitted.append(message)
                 log_json(

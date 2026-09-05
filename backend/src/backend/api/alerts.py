@@ -1,7 +1,7 @@
-# GET /api/v1/alerts — alert query endpoint with filtering and pagination.
-#
-# Supports optional device_id and level filters. level must be one of
-# "warning" or "critical" — any other value returns 422.
+
+
+
+
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query

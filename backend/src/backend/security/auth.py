@@ -16,6 +16,17 @@ logger = logging.getLogger(__name__)
 _API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
+def validate_configuration() -> None:
+    if os.getenv("HARDWARE_PROFILE", "mock").lower() != "real":
+        return
+    for name in ("API_KEY", "COMMAND_SIGNING_KEY"):
+        value = os.getenv(name, "").strip()
+        if len(value) < 32 or "change" in value.lower():
+            raise RuntimeError(f"{name} must be an independent random secret of at least 32 characters")
+    if os.environ["API_KEY"] == os.environ["COMMAND_SIGNING_KEY"]:
+        raise RuntimeError("API_KEY and COMMAND_SIGNING_KEY must differ")
+
+
 def _hash_key(key: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()
 
@@ -49,7 +60,7 @@ async def require_api_key(key: str | None = Depends(_API_KEY_HEADER)) -> str:
                 "API_KEYS env var is not set — authentication is DISABLED. "
                 "Set API_KEYS=<sha256 hash> before deploying."
             )
-            require_api_key._warned = True  # type: ignore[attr-defined]
+            require_api_key._warned = True  
         return "unauthenticated"
 
     if not _is_valid(key):
@@ -58,7 +69,7 @@ async def require_api_key(key: str | None = Depends(_API_KEY_HEADER)) -> str:
             detail="Invalid or missing API key",
             headers={"WWW-Authenticate": "ApiKey"},
         )
-    return key  # type: ignore[return-value]
+    return key  
 
 
 _PUBLIC_PATHS = {"/", "/health", "/docs", "/openapi.json", "/redoc"}
@@ -79,17 +90,48 @@ async def api_key_middleware(
 
     key = request.headers.get("X-API-Key")
     if not _is_valid(key):
-        logger.warning(
-            "Unauthorized request to %s from %s",
-            request.url.path,
-            request.client.host if request.client else "unknown",
-        )
-        return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            content={"detail": "Invalid or missing API key"},
-        )
+        from backend.security import device_keys
+        identity = device_keys.resolve_key(key) if key else None
+        if identity is None:
+            return JSONResponse(status_code=401, content={"detail": "Invalid or missing API key"})
+        request.state.device_identity = identity
+        if not await _device_request_allowed(request, identity):
+            return JSONResponse(status_code=403, content={"detail": "Device key does not permit this operation"})
 
     return await call_next(request)
+
+
+async def _device_request_allowed(request: Request, identity: dict) -> bool:
+    from backend.api.innovation_api import binding_registry
+    from backend.store import get_control_status
+    scopes = set(identity["scopes"])
+    if "admin" in scopes:
+        return True
+    path = request.url.path
+    if path == "/api/v1/security/whoami" and request.method == "GET":
+        return True
+    expected = binding_registry.resolve_device_id(identity["device_id"])
+    def own(value):
+        return isinstance(value, str) and binding_registry.resolve_device_id(value) == expected
+    if request.method != "POST":
+        return False
+    if path in ("/ingest/api/v1/data", "/ingest/reading", "/ingest/batch") and "ingest" in scopes:
+        try:
+            body = await request.json()
+        except ValueError:
+            return False
+        records = body if isinstance(body, list) else [body]
+        return bool(records) and all(isinstance(r, dict) and own(r.get("device_id", r.get("sensor_id"))) for r in records)
+    if "control" in scopes and path == "/api/v1/control":
+        try:
+            body = await request.json()
+        except ValueError:
+            return False
+        return isinstance(body, dict) and own(body.get("device_id"))
+    if "control" in scopes and path.startswith("/api/v1/control/") and path.endswith("/ack"):
+        command = get_control_status(path.split("/")[-2])
+        return command is not None and own(command["device_id"])
+    return False
 
 
 class AuditLogger:

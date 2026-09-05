@@ -9,6 +9,7 @@ from typing import Deque, Optional
 WINDOW_SIZE = 30
 MIN_SAMPLES = 8
 T_95 = {
+    1: 12.707, 2: 4.303, 3: 3.183, 4: 2.777, 5: 2.571,
     6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262, 10: 2.228,
     12: 2.179, 15: 2.145, 20: 2.086, 25: 2.060, 30: 2.042,
 }
@@ -17,10 +18,8 @@ T_95 = {
 def _t_critical(dof: int) -> float:
     if dof <= 0:
         return float("inf")
-    for k in sorted(T_95):
-        if dof <= k:
-            return T_95[k]
-    return 1.96
+    eligible = [k for k in T_95 if k <= dof]
+    return T_95[max(eligible)]
 
 @dataclass
 class Fit:

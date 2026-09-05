@@ -1,4 +1,4 @@
-"""Alert evaluation backed by the shared threshold resolver."""
+
 
 from analytics.thresholds import resolver
 from smart_factory_contracts.messages import Measurement, MeasurementType

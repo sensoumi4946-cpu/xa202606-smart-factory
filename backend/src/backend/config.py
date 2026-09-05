@@ -27,7 +27,7 @@ def _load_dotenv() -> None:
 _load_dotenv()
 
 
-DATA_DIR: Path = REPO_ROOT / "data"
+DATA_DIR: Path = Path(os.getenv("DATA_DIR", str(Path(os.environ["DATABASE_PATH"]).parent) if os.getenv("DATABASE_PATH") else str(REPO_ROOT / "data")))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 BACKEND_HOST: str = os.getenv("BACKEND_HOST", "0.0.0.0")

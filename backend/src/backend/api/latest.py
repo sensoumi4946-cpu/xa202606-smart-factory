@@ -1,8 +1,8 @@
-# GET /api/v1/latest — latest measurement aggregation endpoint.
-#
-# Aggregates measurements across sensor_data records: for each
-# (device_id, measurement.type) pair the value from the record with the
-# newest timestamp is returned, grouped by device_id.
+
+
+
+
+
 from typing import Optional
 
 from fastapi import APIRouter, Query

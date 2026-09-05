@@ -1,5 +1,5 @@
-# GET /api/v1/data and GET /api/v1/devices — sensor data query endpoints.
-# Supports filtering by device_id, limiting rows, and time-since cutoff.
+
+
 from typing import Optional
 
 from fastapi import APIRouter, Query

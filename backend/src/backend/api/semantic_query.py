@@ -1,4 +1,4 @@
-# Extended semantic query endpoints.
+
 
 from typing import Any, Optional
 

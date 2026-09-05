@@ -6,13 +6,13 @@ This file is the single registry for local development and Docker Compose ports.
 
 | Port | Service | Directory | Protocol | Status | Notes |
 |---:|---|---|---|---|---|
-| 1883 | Mosquitto MQTT broker | `deploy/` | MQTT | Active | Mock generator publishes here; connectivity subscribes here |
+| 1883 | Mosquitto MQTT broker | `deploy/` | MQTT | Active | Physical sensors publish; connectivity subscribes |
 | 1502 | External Modbus endpoint | hardware | Modbus | Optional | Configure `MODBUS_HOST`; no simulator is committed |
 | 4840 | HC-SR04 serial gateway or external endpoint | `connectivity/` / hardware | OPC UA | Optional | Configure `OPCUA_ENDPOINT`; openEuler gateway is `sf-opcua-serial-gateway` |
 | 5173 | Dashboard dev server | `dashboard/` | HTTP | Active | Vite dev server |
 | 8000 | Backend API | `backend/` | HTTP | Active | FastAPI, `/health`, `/api/v1/*` |
-| 8100 | REST adapter | `connectivity/` | HTTP | Active | FastAPI server; rest-pusher POSTs vendor payloads here |
-| 3030 | Apache Jena Fuseki | `deploy/` | HTTP/SPARQL | Active | Knowledge graph; backend writes triples and runs SPARQL views |
+| 8100 | REST adapter | `connectivity/` | HTTP | Active | FastAPI server; Authenticated vendor or unified observations |
+| 3030 | Apache Jena Fuseki | `deploy/` | HTTP/SPARQL | Internal | Knowledge graph; backend writes triples and runs SPARQL views |
 
 ## Reserved Future Ports
 

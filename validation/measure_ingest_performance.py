@@ -1,4 +1,4 @@
-"""Measure authenticated ingest latency and throughput against a running backend."""
+
 
 from __future__ import annotations
 

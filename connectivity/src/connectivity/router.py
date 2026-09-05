@@ -1,5 +1,5 @@
-# Message router — receives UnifiedMessage objects from any adapter
-# and forwards them to the backend API with retry logic.
+
+
 
 import json
 import logging
@@ -35,9 +35,9 @@ async def forward_to_backend(msg: UnifiedMessage) -> bool:
     payload = msg.model_dump(mode="json")
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            # The backend is a service-to-service endpoint.  Ignoring ambient
-            # desktop proxy variables prevents loopback/container traffic from
-            # being sent through an unrelated SOCKS/HTTP proxy.
+            
+            
+            
             async with httpx.AsyncClient(timeout=10.0, trust_env=False) as client:
                 headers = (
                     {"X-API-Key": connectivity_models.BACKEND_API_KEY}

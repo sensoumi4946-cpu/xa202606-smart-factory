@@ -4,7 +4,7 @@ static const char* WIFI_SSID = "your-factory-ap";
 static const char* WIFI_PASS = "replace-with-device-secret";
 static const char* MQTT_HOST = "192.0.2.10";
 static const uint16_t MQTT_PORT = 1883;
-static const char* DEVICE_ID = "ESP32_001_dht22";
+static const char* DEVICE_ID = "ESP32_001";
 static const char* SUBSYSTEM = "temp_humidity";
 static const char* SIGNING_KEY = "replace-with-command-signing-key";
 

@@ -1,3 +1,4 @@
+import hashlib
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
@@ -38,7 +39,7 @@ def _to_status_response(cmd: dict) -> ControlStatusResponse:
 
 def _actor(request: Request) -> tuple[str, Optional[str]]:
     key = request.headers.get("X-API-Key")
-    return ("api-key" if key else "anonymous", key[:8] if key else None)
+    return ("api-key" if key else "anonymous", hashlib.sha256(key.encode()).hexdigest()[:12] if key else None)
 
 
 def _source_ip(request: Request) -> Optional[str]:

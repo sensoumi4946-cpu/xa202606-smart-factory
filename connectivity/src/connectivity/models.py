@@ -1,7 +1,3 @@
-# Connectivity-layer configuration — read from environment variables.
-# MQTT_BROKER_* control the broker connection; BACKEND_URL is the
-# target for forwarding UnifiedMessages after protocol normalisation.
-# MODBUS_* / REST_* / OPCUA_* control each protocol adapter.
 import os
 
 MQTT_BROKER_HOST: str = os.getenv("MQTT_BROKER_HOST", "localhost")

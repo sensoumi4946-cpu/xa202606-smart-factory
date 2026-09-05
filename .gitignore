@@ -42,3 +42,7 @@ data/*.db
 data/*.db-shm
 data/*.db-wal
 benchmarks/
+backend.env
+connectivity.env
+pytest-cache/
+.pytest_cache/

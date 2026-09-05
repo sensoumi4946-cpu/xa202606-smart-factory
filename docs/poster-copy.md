@@ -29,7 +29,7 @@ A shared SOSA/SSN ontology plus Apache Jena Fuseki map every
 reading into a standardised Observation triple. Devices are
 queried by meaning (SPARQL), not by raw format. Cross-device
 correlation — e.g. gas concentration + temperature rise →
-fire risk — is a query, not custom code.
+fire risk — uses explicit rules in the analytics pipeline and semantic queries.
 
 ### AAS Digital Twin
 
@@ -56,5 +56,4 @@ Descriptor-ready for Eclipse BaSyx runtime.
 
 ## Repository
 
-gitee.com/sensoumi/xa202606-smart-factory
-[ QR code placeholder ]
+github.com/sensoumi4946-cpu/xa202606-smart-factory

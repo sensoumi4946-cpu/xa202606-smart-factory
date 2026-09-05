@@ -42,7 +42,7 @@ class SensorReading(BaseModel):
     property_name: str
     value: float
     unit: str
-    timestamp: str
+    timestamp: datetime
 
 
 def _observable_property(property_name: str) -> str:
@@ -50,13 +50,13 @@ def _observable_property(property_name: str) -> str:
     return "measures" + "".join(p.capitalize() for p in parts)
 
 
-def _canonical_device_id(device_id: str) -> str:
-    try:
-        from backend.api.innovation_api import binding_registry
-
-        return binding_registry.resolve_device_id(device_id)
-    except Exception:
-        return device_id
+def _canonical_device_id(device_id: str, subsystem: str | None = None) -> str:
+    from backend.api.innovation_api import binding_registry
+    canonical = binding_registry.resolve_device_id(device_id)
+    allowed = {b.canonical_subsystem for b in binding_registry.for_device(canonical)}
+    if subsystem is not None and allowed and subsystem not in allowed:
+        raise HTTPException(status_code=422, detail="device_id belongs to a different subsystem")
+    return canonical
 
 
 def _enum_value(field: Any) -> str:
@@ -114,10 +114,10 @@ def _to_unified(reading: SensorReading) -> UnifiedMessage:
 
     return UnifiedMessage(
         schema_version="v1",
-        device_id=_canonical_device_id(reading.sensor_id),
+        device_id=_canonical_device_id(reading.sensor_id, reading.subsystem),
         subsystem=sub,
         protocol=proto,
-        timestamp=datetime.now(timezone.utc),
+        timestamp=reading.timestamp,
         measurements=[Measurement(type=mtype, value=reading.value, unit=unit)],
     )
 
@@ -159,7 +159,14 @@ async def ingest_reading(
         )
 
     record_id = insert_sensor_data(msg)
-    trend_forecast.record(msg.device_id, reading.property_name, reading.value)
+    ingest_id = record_id
+    from backend.services.device_health import record_health
+    status_values = {_enum_value(m.type): m.value for m in msg.measurements}
+    names = ("device_status", "error_code", "sensor_status")
+    words = [int(status_values[n]) for n in names] if all(n in status_values for n in names) else None
+    record_health(msg.device_id, status_words=words)
+    trend_forecast.record(msg.device_id, reading.property_name, reading.value, at=msg.timestamp)
+    run_prediction_pipeline(msg.device_id, reading.subsystem, reading.protocol, [{"type": reading.property_name, "value": reading.value}], timestamp=msg.timestamp.timestamp())
 
     fired_alerts = analyse_after_ingest(
         device_id=msg.device_id,
@@ -206,7 +213,7 @@ async def ingest_reading(
         "ingest_id": ingest_id,
         "device_id": msg.device_id,
         "reported_device_id": reading.sensor_id,
-        "kg_write": "queued",
+        "kg_write": "queued" if config.SEMANTIC_WRITE_ENABLED else "disabled",
         "anomaly_alerts": len(fired_alerts),
         "semantic_alerts": len(ctx_alerts),
     }
@@ -241,7 +248,7 @@ async def ingest_unified_data(
     observed_at = datetime.now(timezone.utc)
 
     reported_device_id = msg.device_id
-    canonical = _canonical_device_id(reported_device_id)
+    canonical = _canonical_device_id(reported_device_id, _enum_value(msg.subsystem))
     if canonical != reported_device_id:
         msg = msg.model_copy(update={"device_id": canonical})
         logger.info(
@@ -277,6 +284,12 @@ async def ingest_unified_data(
         )
 
     record_id = insert_sensor_data(msg)
+    ingest_id = record_id
+    from backend.services.device_health import record_health
+    status_values = {_enum_value(m.type): m.value for m in msg.measurements}
+    names = ("device_status", "error_code", "sensor_status")
+    words = [int(status_values[n]) for n in names] if all(n in status_values for n in names) else None
+    record_health(msg.device_id, status_words=words)
 
     if msg.measurements:
         first_m = msg.measurements[0]
@@ -284,7 +297,7 @@ async def ingest_unified_data(
             device_id=msg.device_id,
             subsystem=subsystem_value,
             protocol=protocol_value,
-            measurement_types=[_enum_value(first_m.type)],
+            measurement_types=[_enum_value(m.type) for m in msg.measurements],
         )
         if config.SEMANTIC_WRITE_ENABLED and aas_registry.observe(device):
             background_tasks.add_task(
@@ -301,9 +314,10 @@ async def ingest_unified_data(
     ]
 
     for m in measurement_dicts:
-        trend_forecast.record(msg.device_id, m["type"], m["value"])
+        trend_forecast.record(msg.device_id, m["type"], m["value"], at=msg.timestamp)
 
     analytics_result = run_prediction_pipeline(
+        timestamp=msg.timestamp.timestamp(),
         device_id=msg.device_id,
         subsystem=subsystem_value,
         protocol=protocol_value,
@@ -343,7 +357,7 @@ async def ingest_unified_data(
         "ingest_id": ingest_id,
         "device_id": msg.device_id,
         "reported_device_id": reported_device_id,
-        "kg_write": "queued",
+        "kg_write": "queued" if config.SEMANTIC_WRITE_ENABLED else "disabled",
         "anomaly_alerts": len(fired_alerts),
         "semantic_alerts": len(ctx_alerts),
         "predictions": analytics_result["predictions"],

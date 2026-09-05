@@ -33,3 +33,6 @@ testpaths = ["tests"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/semantic_layer"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"aas" = "semantic_layer/aas"

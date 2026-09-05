@@ -18,7 +18,7 @@ DEFAULT_MIN_SOURCES = 2
 class CorrelatedAlert:
     alert_id: str
     triggered_at: float
-    sources: list[dict]        # list of {sensor_id, subsystem, protocol, value}
+    sources: list[dict]        
     hypothesis: str            
     confidence: str            
     subsystems_involved: list[str]
@@ -78,11 +78,11 @@ def _match_pattern(property_names: set[str]) -> Optional[dict]:
 
 
 class CrossSubsystemCorrelator:
-    """
-    It is fed AnomalyResult objects as they arrive.  It maintains a sliding
-    window and emits CorrelatedAlert objects when it detects multi-source
-    anomaly clusters.
-    """
+    pass
+
+
+
+
 
     def __init__(
         self,
@@ -91,7 +91,7 @@ class CrossSubsystemCorrelator:
     ) -> None:
         self.window_seconds = window_seconds
         self.min_sources = min_sources
-        # Each entry: {sensor_id, subsystem, protocol, property_name, value, ts}
+        
         self._recent: list[dict] = []
         self._emitted_ids: set[str] = set()
 

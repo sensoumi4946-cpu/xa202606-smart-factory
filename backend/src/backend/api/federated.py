@@ -7,7 +7,7 @@ from semantic_layer.sparql_federated_query import NodeRegistry, execute_federate
 router = APIRouter()
 _node_registry = NodeRegistry()
 
-# Populate registry from FEDERATED_NODES env var on import
+
 if config.FEDERATED_NODES:
     from semantic_layer.sparql_federated_query import FactoryNode
     for i, url in enumerate(config.FEDERATED_NODES.split(",")):

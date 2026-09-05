@@ -1,12 +1,19 @@
 {
   "dataset": "five_subsystems.jsonl",
-  "classification": "synthetic demonstration fixture",
-  "is_physical_sensor_data": false,
-  "purpose": "Contract, semantic-gate, binding-coverage, and UI demonstration",
+  "additional_dataset": "supplied_hardware_samples.jsonl",
+  "classification": "user-supplied hardware examples; acquisition not independently verified",
+  "is_physical_sensor_data": null,
+  "records_in_additional_dataset": 17,
+  "corrections": [
+    "temp_counting normalized to counting.",
+    "Removed the gas object trailing comma and stray closing parenthesis.",
+    "Separate objects serialized as JSON Lines.",
+    "The conflicting ESP32_001 lighting example assigned ESP32_003, consistent with the supplied lighting-device mapping; confirm this physical identity before use."
+  ],
   "limitations": [
-    "Values are hand-authored examples, not measurements captured from devices.",
-    "No device acquisition timestamps or raw ADC/register values are available.",
-    "No calibration instrument, uncertainty, repetition, packet-loss, or latency metadata is available.",
-    "These records must not be cited as accuracy or performance evidence."
+    "No original acquisition timestamps, calibrated reference measurements or capture files were supplied.",
+    "Repeated examples are preserved and do not constitute a time series or a 48-hour test.",
+    "Aliases resolve through bindings.ttl.",
+    "These examples do not establish accuracy, latency or fault-prediction performance."
   ]
 }

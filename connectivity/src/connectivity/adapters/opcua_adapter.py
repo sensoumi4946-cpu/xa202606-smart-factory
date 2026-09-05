@@ -1,4 +1,4 @@
-"""Ontology-driven OPC UA subscription adapter."""
+
 
 from __future__ import annotations
 
@@ -67,6 +67,9 @@ class SubscriptionHandler:
                 error=str(exc),
             )
             return
+        if self.queue.full():
+            log_json("opcua_queue_overflow", level="error", device_id=message.device_id)
+            return
         self.queue.put_nowait(message)
 
 
@@ -113,9 +116,13 @@ class OPCUAAdapter(BaseAdapter):
                 log_json("opcua_connection_lost", level="warning", error=str(exc))
                 await asyncio.sleep(connectivity_models.RECONNECT_INTERVAL)
             finally:
-                if subscription:
-                    await subscription.delete()
-                await self._disconnect(client)
+                try:
+                    if subscription:
+                        await subscription.delete()
+                except Exception as exc:
+                    log_json("opcua_cleanup_failed", level="warning", error=str(exc))
+                finally:
+                    await self._disconnect(client)
 
     async def stop(self) -> None:
         self._running = False
@@ -126,7 +133,7 @@ class OPCUAAdapter(BaseAdapter):
 
     def _ensure_queue(self) -> asyncio.Queue[UnifiedMessage]:
         if self._queue is None:
-            self._queue = asyncio.Queue()
+            self._queue = asyncio.Queue(maxsize=4096)
         return self._queue
 
     def _make_client(self):
@@ -135,7 +142,7 @@ class OPCUAAdapter(BaseAdapter):
         return Client(url=self.endpoint)
 
     async def _configure_client(self, client) -> None:
-        """Apply credentials and X.509 policy before opening the channel."""
+        pass
         if connectivity_models.OPCUA_USERNAME:
             client.set_user(connectivity_models.OPCUA_USERNAME)
         if connectivity_models.OPCUA_PASSWORD:

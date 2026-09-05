@@ -1,4 +1,4 @@
-# FastAPI request/response Pydantic models for the backend API.
+
 
 from typing import Optional
 
@@ -10,11 +10,11 @@ class IngestResponse(BaseModel):
 
 
 class ControlRequest(BaseModel):
-    device_id: str = Field(..., min_length=1)
+    device_id: str = Field(..., min_length=1, pattern=r"^[A-Za-z0-9_.:-]+$")
     action: str = Field(..., min_length=1)
     params: dict = Field(default_factory=dict)
-    # Used to build the MQTT topic: factory/{subsystem}/control/{device_id}
-    subsystem: str = Field(default="actuator", min_length=1)
+    
+    subsystem: str = Field(default="actuator", min_length=1, pattern=r"^[A-Za-z0-9_-]+$")
 
 
 class ControlResponse(BaseModel):

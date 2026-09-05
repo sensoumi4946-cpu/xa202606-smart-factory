@@ -1,4 +1,4 @@
-# Publishes control commands onto MQTT so a device can act on them.
+
 
 import asyncio
 import json
@@ -49,12 +49,12 @@ async def dispatch(
     subsystem: str = "actuator",
     payload: dict | None = None,
 ) -> bool:
-    """Push one command to the broker. Returns False if the broker is down.
+    pass
 
-    Never raises: a broker outage must not turn a button press into a 500.
-    The command stays 'pending' in the database and the retry loop or the
-    operator can deal with it.
-    """
+
+
+
+
     topic = control_topic(device_id, subsystem)
     outbound = payload or build_payload(command_id, device_id, action, params)
 

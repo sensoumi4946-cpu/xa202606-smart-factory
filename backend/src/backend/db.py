@@ -149,8 +149,9 @@ class ConnectionPool:
             pass
         with self._lock:
             if self._created < self.size:
+                conn = self._new_connection()
                 self._created += 1
-                return self._new_connection()
+                return conn
         return self._pool.get()
 
     def release(self, conn: sqlite3.Connection) -> None:
@@ -234,6 +235,8 @@ def connection() -> Iterator[sqlite3.Connection]:
     try:
         yield conn
     finally:
+        if conn.in_transaction:
+            conn.rollback()
         pool.release(conn)
 
 

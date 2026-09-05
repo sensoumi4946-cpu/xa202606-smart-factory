@@ -1,8 +1,8 @@
-"""Measure ontology-driven onboarding for a new device of a known type.
 
-The output intentionally contains only reproducible observations. It does not
-claim an unmeasured human configuration time or a no-restart runtime reload.
-"""
+
+
+
+
 
 from __future__ import annotations
 

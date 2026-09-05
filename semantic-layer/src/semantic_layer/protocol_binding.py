@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import io
+import tokenize
 import pprint
 import struct
 from dataclasses import dataclass, field
@@ -739,6 +741,9 @@ def generate_all(registry: BindingRegistry) -> dict[str, str]:
         selected = registry.for_protocol(protocol)
         if selected:
             out[protocol] = GENERATORS[protocol](selected)
+    for protocol, source in out.items():
+        tokens = [t for t in tokenize.generate_tokens(io.StringIO(source).readline) if t.type != tokenize.COMMENT]
+        out[protocol] = tokenize.untokenize(tokens)
     return out
 
 

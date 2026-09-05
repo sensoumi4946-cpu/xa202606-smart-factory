@@ -1,3 +1,5 @@
+Audit copy based only on master commit 2bc72f5. Read START_HERE.md and docs/master-audit.md before deployment.
+
 # XA-202606 Smart Factory Safety Platform
 
 This project normalises factory sensor data from MQTT, REST, Modbus TCP, and

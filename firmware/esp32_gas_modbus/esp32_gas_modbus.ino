@@ -1,9 +1,6 @@
 #include <WiFi.h>
 #include <ModbusIP_ESP8266.h>
 #include "device_config.h"
-
-// Zero-based offsets corresponding to declared addresses 40003, 40005, 40007,
-// and 40009 with registerBase=40001 in bindings.ttl.
 static const uint16_t REG_SMOKE = 2;
 static const uint16_t REG_COMBUSTIBLE_GAS = 4;
 static const uint16_t REG_CO = 6;
@@ -48,6 +45,10 @@ void setup() {
   for (uint16_t offset = REG_SMOKE; offset <= REG_STATUS; offset++) {
     modbus.addHreg(offset, 0);
   }
+  writeFloat32(REG_SMOKE, NAN);
+  writeFloat32(REG_COMBUSTIBLE_GAS, NAN);
+  writeFloat32(REG_CO, NAN);
+  modbus.Hreg(REG_STATUS, STATUS_CALIBRATION_REQUIRED);
 }
 
 void loop() {
@@ -58,6 +59,9 @@ void loop() {
   lastSampleMs = now;
 
   if (MQ2_R0_KOHM <= 0.0f || MQ7_R0_KOHM <= 0.0f) {
+    writeFloat32(REG_SMOKE, NAN);
+    writeFloat32(REG_COMBUSTIBLE_GAS, NAN);
+    writeFloat32(REG_CO, NAN);
     modbus.Hreg(REG_STATUS, STATUS_CALIBRATION_REQUIRED);
     return;
   }
@@ -68,6 +72,9 @@ void loop() {
   const float combustible = ppm(mq2Resistance, MQ2_R0_KOHM, MQ2_GAS_A, MQ2_GAS_B);
   const float co = ppm(mq7Resistance, MQ7_R0_KOHM, MQ7_CO_A, MQ7_CO_B);
   if (!isfinite(smoke) || !isfinite(combustible) || !isfinite(co)) {
+    writeFloat32(REG_SMOKE, NAN);
+    writeFloat32(REG_COMBUSTIBLE_GAS, NAN);
+    writeFloat32(REG_CO, NAN);
     modbus.Hreg(REG_STATUS, STATUS_CALIBRATION_REQUIRED);
     return;
   }

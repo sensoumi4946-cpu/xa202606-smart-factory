@@ -1,4 +1,4 @@
-# Audit log for every control command
+
 
 from __future__ import annotations
 
@@ -125,7 +125,7 @@ def record(
 
 
 def verify_chain() -> dict[str, Any]:
-    """Recompute every hash. Reports the first row that does not match."""
+    pass
     conn = _connection()
     rows = conn.execute("SELECT * FROM command_audit ORDER BY seq ASC").fetchall()
     conn.close()

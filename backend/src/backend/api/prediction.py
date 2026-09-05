@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import time
+import os
 from typing import Any, Optional
 
 from fastapi import APIRouter, Query
@@ -22,6 +24,8 @@ agv_guard = AgvGuard()
 safety = SafetyController()
 
 _predictions: dict[tuple[str, str], dict] = {}
+_prediction_times: dict[tuple[str, str], float] = {}
+PREDICTION_TTL_S = float(os.getenv("PREDICTION_TTL_S", "60"))
 _hazards: list[dict] = []
 _agv_state: dict[str, dict] = {}
 _control_queue: list[dict] = []
@@ -31,19 +35,7 @@ MAX_CONTROL_QUEUE = 50
 
 
 def _prediction_dict(p) -> dict:
-    return {
-        "device_id": p.device_id,
-        "property_name": p.property_name,
-        "current_value": round(p.current_value, 2),
-        "threshold": p.threshold,
-        "slope_per_s": round(p.slope_per_s, 3),
-        "seconds_to_threshold": (
-            None if p.seconds_to_threshold is None else round(p.seconds_to_threshold, 1)
-        ),
-        "r_squared": round(p.r_squared, 3),
-        "confidence": p.confidence,
-        "message": p.message,
-    }
+    return p.to_dict()
 
 
 def process_reading(
@@ -61,9 +53,14 @@ def process_reading(
         "safety_actions": [],
     }
 
+    for measurement in measurements:
+        key = (device_id, str(measurement.get("type", "")).lower())
+        _predictions.pop(key, None)
+        _prediction_times.pop(key, None)
     for p in predictor.push_measurements(device_id, measurements, timestamp):
         d = _prediction_dict(p)
         _predictions[(p.device_id, p.property_name)] = d
+        _prediction_times[(p.device_id, p.property_name)] = time.time() if timestamp is None else timestamp
         result["predictions"].append(d)
 
     for h in reasoner.observe(device_id, subsystem, protocol, measurements, timestamp):
@@ -119,7 +116,8 @@ def process_reading(
 
 @router.get("/api/v1/predictions")
 async def list_predictions(device_id: Optional[str] = None) -> dict[str, Any]:
-    items = list(_predictions.values())
+    cutoff = time.time() - PREDICTION_TTL_S
+    items = [value for key, value in _predictions.items() if _prediction_times.get(key, 0) >= cutoff]
     if device_id:
         items = [p for p in items if p["device_id"] == device_id]
     items.sort(key=lambda p: p["seconds_to_threshold"] or 0.0)
@@ -185,6 +183,12 @@ async def reset_analytics() -> dict[str, str]:
     safety.reset()
     ledger.reset()
     _predictions.clear()
+    _prediction_times.clear()
+    from backend.api.analytics_api import detector, alert_history
+    detector._windows.clear()
+    alert_history.clear()
+    from analytics import trend_forecast
+    trend_forecast.reset()
     _hazards.clear()
     _agv_state.clear()
     _control_queue.clear()

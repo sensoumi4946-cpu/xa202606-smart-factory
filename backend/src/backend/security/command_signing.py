@@ -63,8 +63,6 @@ def attach_signature(
 
 
 def _prune_nonces(now: float) -> None:
-    if len(_seen_nonces) <= NONCE_CACHE_SIZE:
-        return
     cutoff = now - MAX_CLOCK_SKEW_S * 2
     for nonce, seen in list(_seen_nonces.items()):
         if seen < cutoff:
@@ -96,7 +94,10 @@ def verify(
     try:
         from datetime import datetime
 
-        issued = datetime.fromisoformat(str(issued_at)).timestamp()
+        stamp = datetime.fromisoformat(str(issued_at))
+        if stamp.tzinfo is None:
+            return False, "issued_at requires timezone"
+        issued = stamp.timestamp()
     except (TypeError, ValueError):
         return False, "unparseable issued_at"
 
@@ -104,13 +105,15 @@ def verify(
         return False, f"stale command ({abs(current - issued):.0f}s skew)"
 
     nonce = command.get("nonce")
-    if not nonce:
+    if not isinstance(nonce, str) or not nonce:
         return False, "missing nonce"
     if nonce in _seen_nonces:
         return False, "nonce replay"
 
-    _seen_nonces[str(nonce)] = current
     _prune_nonces(current)
+    if len(_seen_nonces) >= NONCE_CACHE_SIZE:
+        return False, "nonce capacity exceeded"
+    _seen_nonces[str(nonce)] = current
     return True, "ok"
 
 

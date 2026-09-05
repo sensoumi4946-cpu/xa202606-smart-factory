@@ -1,4 +1,5 @@
 import json
+import hmac
 import sys
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -116,6 +117,9 @@ def create_app() -> FastAPI:
 
     @app.post("/adapter/rest/ingest")
     async def ingest(request: Request):
+        key = connectivity_models.BACKEND_API_KEY
+        if key and not hmac.compare_digest(request.headers.get("X-API-Key", ""), key):
+            raise HTTPException(status_code=401, detail="Invalid or missing API key")
         try:
             payload = await request.json()
             msg = parse_payload(payload)

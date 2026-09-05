@@ -1,4 +1,4 @@
-# GET /api/v1/history — time-range sensor data query with pagination.
+
 
 from datetime import datetime
 from typing import Optional

@@ -1,12 +1,13 @@
-"""Runtime views generated from the protocol-binding ontology.
 
-This module contains protocol plumbing only.  Device addresses, units,
-subsystems, scaling, topics, and node identifiers come from ``bindings.ttl``.
-"""
+
+
+
+
 
 from __future__ import annotations
 
 import logging
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -32,10 +33,20 @@ def _default_bindings_path() -> Path:
 
 
 class GeneratedAdapterSet:
-    """Typed protocol plans backed by one validated binding registry."""
+    pass
 
     def __init__(self, registry: BindingRegistry) -> None:
         self.registry = registry
+        self.active_devices = json.loads(os.getenv("ACTIVE_PROTOCOL_DEVICES", "{}"))
+        if not isinstance(self.active_devices, dict) or any(not isinstance(v, list) or any(not isinstance(d, str) for d in v) for v in self.active_devices.values()):
+            raise ValueError("ACTIVE_PROTOCOL_DEVICES must map protocol names to device-ID lists")
+
+    def _for_protocol(self, protocol: str):
+        bindings = self.registry.for_protocol(protocol)
+        if not self.active_devices:
+            return bindings
+        allowed = {self.registry.resolve_device_id(d) for d in self.active_devices.get(protocol, [])}
+        return [b for b in bindings if b.device_id in allowed]
 
     @property
     def empty(self) -> bool:
@@ -43,7 +54,7 @@ class GeneratedAdapterSet:
 
     def modbus_plan(self) -> list[dict[str, Any]]:
         plan: list[dict[str, Any]] = []
-        for binding in self.registry.for_protocol("modbus"):
+        for binding in self._for_protocol("modbus"):
             if binding.wire_address is None:
                 logger.warning(
                     "modbus binding %s has no register address; skipped",
@@ -196,7 +207,7 @@ class GeneratedAdapterSet:
                 "offset": binding.offset,
                 "poll_interval_ms": binding.poll_interval_ms,
             }
-            for binding in self.registry.for_protocol("opcua")
+            for binding in self._for_protocol("opcua")
             if binding.node_id
         ]
 
@@ -226,7 +237,7 @@ class GeneratedAdapterSet:
 
     def mqtt_entries(self) -> list[dict[str, Any]]:
         entries: list[dict[str, Any]] = []
-        for binding in self.registry.for_protocol("mqtt"):
+        for binding in self._for_protocol("mqtt"):
             topic = binding.topic or (
                 f"factory/{binding.canonical_subsystem}/sensors/"
                 f"{binding.device_id}/{binding.property_name}"
@@ -261,7 +272,7 @@ class GeneratedAdapterSet:
                 "path": binding.path or "/adapter/rest/ingest",
                 "method": binding.method,
             }
-            for binding in self.registry.for_protocol("rest")
+            for binding in self._for_protocol("rest")
         ]
 
     def summary(self) -> dict[str, Any]:

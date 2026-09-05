@@ -75,7 +75,9 @@ uint32_t lastHeartbeat = 0;
 bool timeSynced = false;
 bool failSafeEngaged = false;
 
-char lastNonce[24] = {0};
+char recentNonces[64][25] = {};
+uint32_t nonceTimes[64] = {};
+uint8_t nonceCursor = 0;
 
 static void applyFailSafe(const char* reason) {
   if (!failSafeEngaged) {
@@ -98,7 +100,7 @@ static uint32_t nowEpoch() {
 }
 
 static void syncTime() {
-  configTime(8 * 3600, 0, NTP_1, NTP_2);
+  configTime(0, 0, NTP_1, NTP_2);
   uint32_t deadline = millis() + 10000;
   while (millis() < deadline) {
     if (nowEpoch() > 0) {
@@ -143,9 +145,9 @@ static bool verifyCommand(JsonDocument& doc) {
     Serial.println("[cmd] rejected: unsigned");
     return false;
   }
-  if (strcmp(nonce, lastNonce) == 0) {
-    Serial.println("[cmd] rejected: nonce replay");
-    return false;
+  if (strcmp(doc["device_id"] | "", DEVICE_ID) != 0 || strlen(nonce) != 24 || !timeSynced) return false;
+  for (uint8_t i = 0; i < 64; i++) {
+    if (strcmp(nonce, recentNonces[i]) == 0) return false;
   }
 
   char paramsJson[192];
@@ -169,20 +171,19 @@ static bool verifyCommand(JsonDocument& doc) {
     return false;
   }
 
-  if (timeSynced && strlen(issuedAt) >= 19) {
-    struct tm tmv = {0};
-    if (strptime(issuedAt, "%Y-%m-%dT%H:%M:%S", &tmv) != nullptr) {
-      uint32_t issued = (uint32_t)mktime(&tmv);
-      uint32_t current = nowEpoch();
-      uint32_t skew = (current > issued) ? (current - issued) : (issued - current);
-      if (skew > MAX_CLOCK_SKEW_S) {
-        Serial.printf("[cmd] rejected: stale by %lus\n", (unsigned long)skew);
-        return false;
-      }
-    }
-  }
-
-  strncpy(lastNonce, nonce, sizeof(lastNonce) - 1);
+  if (strlen(issuedAt) < 20) return false;
+  struct tm tmv = {};
+  if (strptime(issuedAt, "%Y-%m-%dT%H:%M:%S", &tmv) == nullptr) return false;
+  const size_t stampLength = strlen(issuedAt);
+  if (issuedAt[stampLength - 1] != 'Z' && (stampLength < 6 || strcmp(issuedAt + stampLength - 6, "+00:00") != 0)) return false;
+  const time_t issued = mktime(&tmv);
+  const time_t current = nowEpoch();
+  if (llabs((long long)current - issued) > MAX_CLOCK_SKEW_S) return false;
+  if (recentNonces[nonceCursor][0] && current <= nonceTimes[nonceCursor] + MAX_CLOCK_SKEW_S * 2) return false;
+  strncpy(recentNonces[nonceCursor], nonce, 24);
+  recentNonces[nonceCursor][24] = '\0';
+  nonceTimes[nonceCursor] = current;
+  nonceCursor = (nonceCursor + 1) % 64;
   return true;
 }
 
@@ -215,15 +216,38 @@ static bool readSensor(Reading& out) {
 }
 
 static void buildPayload(const Reading& r, char* out, size_t len) {
-  snprintf(out, len,
-           "{\"schema_version\":\"v1\",\"device_id\":\"%s\",\"subsystem\":\"%s\","
-           "\"protocol\":\"mqtt\",\"measurements\":["
-           "{\"type\":\"temperature\",\"value\":%.1f,\"unit\":\"celsius\"},"
-           "{\"type\":\"humidity\",\"value\":%.1f,\"unit\":\"percent\"}],"
-           "\"device_status\":%u,\"error_code\":%u,\"sensor_status\":%u,"
-           "\"buffered\":%u}",
-           DEVICE_ID, SUBSYSTEM, r.temperature, r.humidity,
-           deviceStatus, errorCode, sensorStatus, buffer.size());
+  JsonDocument doc;
+  doc["schema_version"] = "v1";
+  doc["device_id"] = DEVICE_ID;
+  doc["subsystem"] = SUBSYSTEM;
+  doc["protocol"] = "mqtt";
+  if (r.epoch > 0) {
+    time_t epoch = r.epoch;
+    struct tm utc;
+    gmtime_r(&epoch, &utc);
+    char stamp[24];
+    strftime(stamp, sizeof(stamp), "%Y-%m-%dT%H:%M:%SZ", &utc);
+    doc["timestamp"] = stamp;
+  }
+  JsonArray values = doc["measurements"].to<JsonArray>();
+  JsonObject temperature = values.add<JsonObject>();
+  temperature["type"] = "temperature";
+  temperature["value"] = r.temperature;
+  temperature["unit"] = "celsius";
+  JsonObject humidity = values.add<JsonObject>();
+  humidity["type"] = "humidity";
+  humidity["value"] = r.humidity;
+  humidity["unit"] = "percent";
+  const char* names[] = {"device_status", "error_code", "sensor_status"};
+  uint16_t statuses[] = {deviceStatus, errorCode, sensorStatus};
+  for (uint8_t i = 0; i < 3; i++) {
+    JsonObject status = values.add<JsonObject>();
+    status["type"] = names[i];
+    status["value"] = statuses[i];
+    status["unit"] = "status";
+  }
+  doc["raw_payload"]["buffered"] = buffer.size();
+  serializeJson(doc, out, len);
 }
 
 static bool publish(const Reading& r) {
@@ -231,7 +255,7 @@ static bool publish(const Reading& r) {
   char topic[128];
   snprintf(topic, sizeof(topic), "factory/%s/sensors/%s/reading",
            SUBSYSTEM, DEVICE_ID);
-  char payload[512];
+  char payload[1024];
   buildPayload(r, payload, sizeof(payload));
   return mqtt.publish(topic, payload);
 }
@@ -254,17 +278,11 @@ static void onCommand(char* topic, byte* payload, unsigned int length) {
   StaticJsonDocument<512> doc;
   if (deserializeJson(doc, payload, length) != DeserializationError::Ok) return;
 
-  lastHeartbeat = millis();
-
-  const char* type = doc["type"] | "";
-  if (strcmp(type, "heartbeat") == 0) {
-    releaseFailSafe();
-    return;
-  }
-
   if (!verifyCommand(doc)) return;
-
+  lastHeartbeat = millis();
+  releaseFailSafe();
   const char* action = doc["action"] | "";
+  if (strcmp(action, "heartbeat") == 0) return;
   if (strcmp(action, "on") == 0) {
     digitalWrite(RELAY_PIN, HIGH);
   } else if (strcmp(action, "off") == 0 || strcmp(action, "close") == 0) {

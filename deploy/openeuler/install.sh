@@ -53,6 +53,7 @@ install -d -m 0755 "$APP_DIR"
 install -d -m 0750 -o xa202606 -g xa202606 /var/lib/xa202606 /run/xa202606
 install -d -m 0750 -o root -g xa202606 "$CONFIG_DIR" "$CONFIG_DIR/certificates"
 
+python3 -c 'import sys; assert sys.version_info >= (3, 11), "Python 3.11 or newer is required"'
 python3 -m venv "$APP_DIR/venv"
 PIP_ARGS=(--disable-pip-version-check)
 if [[ -n "$WHEELHOUSE" ]]; then

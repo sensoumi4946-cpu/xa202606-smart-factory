@@ -1,9 +1,3 @@
-"""
-
-SHACL as semantic interoperability enforcement layer.
-
-"""
-
 DOMAIN_SHAPES_TTL = """\
 @prefix sh:    <http://www.w3.org/ns/shacl#> .
 @prefix sosa:  <http://www.w3.org/ns/sosa/> .
@@ -153,6 +147,11 @@ sf:LightStateBranch
 
 # ── Dispatcher: every Observation must satisfy exactly one branch above ──
 
+sf:StatusBranch a sh:NodeShape ;
+    sh:property [ sh:path sosa:observedProperty ; sh:in ( sf:measuresDeviceStatus sf:measuresErrorCode sf:measuresSensorStatus ) ] ;
+    sh:property [ sh:path sosa:hasSimpleResult ; sh:minInclusive 0.0 ; sh:maxInclusive 65535.0 ] ;
+    sh:property [ sh:path sf:hasUnit ; sh:hasValue "status" ] .
+
 sf:ObservationDomainShape
     a sh:NodeShape ;
     sh:targetClass sosa:Observation ;
@@ -165,6 +164,7 @@ sf:ObservationDomainShape
         sf:CountBranch
         sf:OccupancyBranch
         sf:LightStateBranch
+        sf:StatusBranch
     ) ;
     sh:message "Observation does not satisfy the domain constraints for any known measurement type." ;
     sh:severity sh:Violation .
@@ -205,8 +205,6 @@ sf:QUDTEnrichmentShape
     ] .
 """
 
-
-# Python loader
 
 from pathlib import Path
 from rdflib import Graph

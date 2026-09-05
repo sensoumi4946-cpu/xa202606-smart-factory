@@ -7,8 +7,8 @@ router = APIRouter()
 
 @router.get("/api/v1/semantic/fire-risk")
 async def fire_risk():
-    """Check whether a cross-device fire risk condition exists in the knowledge graph.
-    """
+    pass
+
     result = await check_fire_risk(config.FUSEKI_QUERY_URL)
 
     if result is None:

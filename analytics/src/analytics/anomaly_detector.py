@@ -1,7 +1,3 @@
-"""
-Statistical anomaly detection for individual sensor streams.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -107,15 +103,13 @@ class AnomalyDetector:
     ) -> None:
         self.window_size = window_size
         self.z_threshold = z_threshold
-        self._windows: dict[str, SensorWindow] = {}
+        self._windows: dict[tuple[str, str], SensorWindow] = {}
 
-    def _get_window(self, sensor_id: str) -> SensorWindow:
-        if sensor_id not in self._windows:
-            self._windows[sensor_id] = SensorWindow(
-                sensor_id=sensor_id,
-                max_size=self.window_size,
-            )
-        return self._windows[sensor_id]
+    def _get_window(self, sensor_id: str, property_name: str = "") -> SensorWindow:
+        key = (sensor_id, canonical_property(property_name))
+        if key not in self._windows:
+            self._windows[key] = SensorWindow(sensor_id=sensor_id, max_size=self.window_size)
+        return self._windows[key]
 
     def push_reading(
         self,
@@ -124,8 +118,10 @@ class AnomalyDetector:
         property_name: str = "",
         timestamp: Optional[float] = None,
     ) -> AnomalyResult:
-        ts = timestamp or time.time()
-        window = self._get_window(sensor_id)
+        ts = time.time() if timestamp is None else timestamp
+        if not math.isfinite(value):
+            raise ValueError("reading must be finite")
+        window = self._get_window(sensor_id, property_name)
 
         prop = canonical_property(property_name)
         limits = resolver.limit_for(prop)
@@ -176,10 +172,16 @@ class AnomalyDetector:
             severity=_severity_from_z(z) if is_anomaly else "low",
         )
 
-    def sensor_stats(self, sensor_id: str) -> dict:
-        if sensor_id not in self._windows:
+    def sensor_stats(self, sensor_id: str, property_name: str = "") -> dict:
+        key = (sensor_id, canonical_property(property_name))
+        matches = [k for k in self._windows if k[0] == sensor_id]
+        if not property_name and len(matches) == 1:
+            key = matches[0]
+        elif not property_name and len(matches) > 1:
+            return {"sensor_id": sensor_id, "streams": [self.sensor_stats(sensor_id, k[1]) | {"property_name": k[1]} for k in matches]}
+        if key not in self._windows:
             return {"sensor_id": sensor_id, "samples": 0}
-        w = self._windows[sensor_id]
+        w = self._windows[key]
         return {
             "sensor_id": sensor_id,
             "samples": len(w.values),
@@ -189,4 +191,6 @@ class AnomalyDetector:
         }
 
     def reset_sensor(self, sensor_id: str) -> None:
-        self._windows.pop(sensor_id, None)
+        for key in list(self._windows):
+            if key[0] == sensor_id:
+                del self._windows[key]

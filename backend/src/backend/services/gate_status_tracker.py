@@ -31,11 +31,11 @@ def snapshot() -> dict:
 
 
 def reset() -> None:
-    """Restore the process-wide tracker to its initial state.
+    pass
 
-    Besides making tests independent, this is useful for an operator-initiated
-    reset after a maintenance window without replacing the tracker object.
-    """
+
+
+
     with _lock:
         _state.update(
             status=None,

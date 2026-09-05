@@ -1,9 +1,9 @@
-# Structured JSON-Lines logging for the backend.
-#
-# Emits one JSON object per line to stdout (or stderr for errors) so
-# container log collectors can parse events without a heavier framework.
-# Mirrors the connectivity log_event shape for a consistent log schema
-# across services.
+
+
+
+
+
+
 import json
 import sys
 from datetime import datetime, timezone

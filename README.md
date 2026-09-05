@@ -1,3 +1,5 @@
+审查版本：仅基于 master 提交 2bc72f5。运行前请先读 START_HERE.md 和 docs/master-audit.md。
+
 # XA-202606 智慧工厂安全监控平台
 
 浙江师范大学 · 第十五届挑战杯 · 揭榜挂帅赛道
@@ -57,14 +59,7 @@ API_KEY=你自己的密钥
 `http://localhost:3030/factory/data`，查询地址 `http://localhost:3030/factory/query`。
 设置 `SEMANTIC_WRITE_ENABLED=true` 才会启动知识图谱写入和同步任务。
 
-前端在 `dashboard/.env` 里写：
-
-```
-VITE_API_BASE_URL=http://localhost:8000/
-VITE_API_KEY=跟上面一样的密钥
-```
-
-Vite 只在启动时读 `.env`，改了要重启 `npm run dev`。
+前端打开后输入访问密钥。不要把密钥写进前端代码。详细步骤见 `START_HERE.md`。
 
 ## 跑起来
 

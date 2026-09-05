@@ -1,11 +1,7 @@
 .PHONY: up down test lint clean install-dev generate-adapters check-generated
 
 install-dev:
-	pip install -e shared/
-	pip install -e backend/[dev]
-	pip install -e connectivity/[dev]
-	pip install -e analytics/[dev]
-	pip install -e semantic-layer/[dev]
+	pip install -e shared/ -e semantic-layer/[dev] -e analytics/[dev] -e backend/[dev] -e connectivity/[dev]
 	cd dashboard && npm install
 
 generate-adapters:
@@ -21,11 +17,7 @@ down:
 	docker compose -f deploy/docker-compose.yml down
 
 test:
-	pip install -e shared/ 2>/dev/null
-	pip install -e backend/[dev] 2>/dev/null
-	pip install -e connectivity/[dev] 2>/dev/null
-	pip install -e analytics/[dev] 2>/dev/null
-	pip install -e semantic-layer/[dev] 2>/dev/null
+	pip install -e shared/ -e semantic-layer/[dev] -e analytics/[dev] -e backend/[dev] -e connectivity/[dev]
 	cd backend  && python -m pytest tests/ -v
 	cd connectivity && python -m pytest tests/ -v
 	cd analytics && python -m pytest tests/ -v

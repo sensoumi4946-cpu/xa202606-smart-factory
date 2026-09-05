@@ -1,4 +1,4 @@
-# retries failed Fuseki writes every N seconds
+
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 async def retry_loop(
-    audit,                          # ProvenanceAuditLog instance
+    audit,                          
     fuseki_data_endpoint: str,
     interval_seconds: float = 60.0,
     max_per_run: int = 20,
@@ -27,7 +27,7 @@ async def retry_loop(
 
             logger.info("Retry run: %d pending Fuseki writes", len(pending))
 
-            from backend.store import query_sensor_data
+            from backend.store import get_sensor_record
             from smart_factory_contracts.messages import UnifiedMessage
             from semantic_layer.fuseki import write_to_fuseki
             import json
@@ -37,13 +37,12 @@ async def retry_loop(
                 ingest_id = row["ingest_id"]
                 device_id  = row["device_id"]
                 try:
-                    records = query_sensor_data(device_id=device_id, limit=1)
-                    if not records:
+                    rec = get_sensor_record(ingest_id)
+                    if rec is None:
                         audit.increment_retry(ingest_id, error="record not found")
                         failed += 1
                         continue
 
-                    rec = records[0]
                     from smart_factory_contracts.messages import (
                         Measurement, MeasurementType, Protocol, Subsystem, Unit,
                     )
@@ -71,7 +70,7 @@ async def retry_loop(
                         device_id=rec["device_id"],
                         subsystem=Subsystem(rec["subsystem"]),
                         protocol=Protocol(rec["protocol"]),
-                        timestamp=datetime.now(timezone.utc),
+                        timestamp=datetime.fromisoformat(rec["timestamp"]),
                         measurements=measurements,
                     )
 

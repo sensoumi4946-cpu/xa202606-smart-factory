@@ -15,13 +15,15 @@ logger = logging.getLogger(__name__)
 
 _TIMEOUT = 8.0
 
+
 @dataclass
 class FactoryNode:
     """One C⁶ node in the distributed manufacturing OS."""
-    node_id: str               
-    sparql_endpoint: str       
-    data_endpoint: str         
-    role: str = "assistant"    
+
+    node_id: str
+    sparql_endpoint: str
+    data_endpoint: str
+    role: str = "assistant"
     online: bool = True
 
     @property
@@ -30,13 +32,17 @@ class FactoryNode:
 
 
 class NodeRegistry:
-
     def __init__(self) -> None:
         self._nodes: dict[str, FactoryNode] = {}
 
     def register(self, node: FactoryNode) -> None:
         self._nodes[node.node_id] = node
-        logger.info("Node registered: %s (%s) → %s", node.node_id, node.role, node.sparql_endpoint)
+        logger.info(
+            "Node registered: %s (%s) → %s",
+            node.node_id,
+            node.role,
+            node.sparql_endpoint,
+        )
 
     def unregister(self, node_id: str) -> None:
         self._nodes.pop(node_id, None)
@@ -57,6 +63,7 @@ class NodeRegistry:
     def __len__(self) -> int:
         return len(self._nodes)
 
+
 _PREFIXES = """\
 PREFIX sosa: <http://www.w3.org/ns/sosa/>
 PREFIX sf:   <http://example.org/smart-factory#>
@@ -71,16 +78,14 @@ def build_service_query(
     nodes: list[FactoryNode],
     distinct: bool = True,
 ) -> str:
-    
+
     if not nodes:
         raise ValueError("No nodes provided for federation")
 
     blocks = []
     for node in nodes:
         blocks.append(
-            f"  {{ SERVICE <{node.service_uri}> {{\n"
-            f"    {inner_pattern}\n"
-            f"  }} }}"
+            f"  {{ SERVICE <{node.service_uri}> {{\n    {inner_pattern}\n  }} }}"
         )
 
     union_body = "\n  UNION\n".join(blocks)
@@ -95,7 +100,7 @@ def build_service_query(
 
 
 def federated_latest_all_nodes(nodes: list[FactoryNode], limit: int = 50) -> str:
-    
+
     inner = (
         "?obs a sosa:Observation ;\n"
         "     sosa:madeBySensor ?sensor ;\n"
@@ -109,7 +114,7 @@ def federated_latest_all_nodes(nodes: list[FactoryNode], limit: int = 50) -> str
 
 
 def federated_fire_risk(nodes: list[FactoryNode]) -> str:
-    
+
     inner = (
         "?t a sosa:Observation ;\n"
         "   sosa:madeBySensor ?tempSensor ;\n"
@@ -128,7 +133,6 @@ def federated_fire_risk(nodes: list[FactoryNode]) -> str:
         "?tempSensor ?tempVal ?gasSensor ?gasVal",
         nodes,
     )
-
 
 
 @dataclass
@@ -179,10 +183,16 @@ async def execute_federated(
 
     nodes = registry.online_nodes()
     if not nodes:
-        return {"nodes_queried": 0, "nodes_ok": 0, "nodes_error": 0,
-                "total_bindings": 0, "results": [], "node_latencies": {}}
+        return {
+            "nodes_queried": 0,
+            "nodes_ok": 0,
+            "nodes_error": 0,
+            "total_bindings": 0,
+            "results": [],
+            "node_latencies": {},
+        }
 
-    async with httpx.AsyncClient(timeout=timeout) as client:
+    async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
         tasks = [_query_node(n, sparql, client) for n in nodes]
         node_results: list[NodeResult] = await asyncio.gather(*tasks)
 

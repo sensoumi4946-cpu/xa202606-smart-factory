@@ -15,29 +15,34 @@ from smart_factory_contracts.messages import UnifiedMessage
 BINDINGS_TTL = Path(__file__).resolve().parents[2] / "bindings.ttl"
 
 FIELD_PAYLOADS = [
-    {"schema_version": "v1", "device_id": "ESP32_002", "subsystem": "counting",
-     "protocol": "rest",
-     "measurements": [{"type": "count", "value": 3.0, "unit": "count"}]},
-    {"schema_version": "v1", "device_id": "ESP32_003", "subsystem": "lighting",
-     "protocol": "rest",
-     "measurements": [{"type": "occupancy", "value": 1.0, "unit": "boolean"},
-                      {"type": "light_state", "value": 0.0, "unit": "boolean"}]},
-    {"schema_version": "v1", "device_id": "ESP32_001", "subsystem": "temp_humidity",
-     "protocol": "mqtt",
-     "measurements": [{"type": "temperature", "value": 26.1, "unit": "celsius"},
-                      {"type": "humidity", "value": 56.2, "unit": "percent"}]},
+    {
+        "schema_version": "v1",
+        "device_id": "ESP32_002",
+        "subsystem": "counting",
+        "protocol": "rest",
+        "measurements": [{"type": "count", "value": 3.0, "unit": "count"}],
+    },
+    {
+        "schema_version": "v1",
+        "device_id": "ESP32_003",
+        "subsystem": "lighting",
+        "protocol": "rest",
+        "measurements": [
+            {"type": "occupancy", "value": 1.0, "unit": "boolean"},
+            {"type": "light_state", "value": 0.0, "unit": "boolean"},
+        ],
+    },
+    {
+        "schema_version": "v1",
+        "device_id": "ESP32_001",
+        "subsystem": "temp_humidity",
+        "protocol": "mqtt",
+        "measurements": [
+            {"type": "temperature", "value": 26.1, "unit": "celsius"},
+            {"type": "humidity", "value": 56.2, "unit": "percent"},
+        ],
+    },
 ]
-
-
-def _unit_for(measurement_type: str) -> str:
-    return {
-        "temperature": "celsius",
-        "humidity": "percent",
-        "occupancy": "boolean",
-        "light_state": "boolean",
-        "count": "count",
-        "distance": "cm",
-    }.get(measurement_type, "status")
 
 
 @pytest.fixture(scope="module")
@@ -74,25 +79,15 @@ def test_generated_modbus_messages_satisfy_the_contract(registry):
     namespace: dict = {}
     exec(generate_all(registry)["modbus"], namespace)
     for entry in namespace["REGISTER_MAP"]:
-        message = namespace["build_message"](entry, [100], unit="status")
-        UnifiedMessage(
-            **{
-                **message,
-                "measurements": [
-                    {**m, "unit": _unit_for(m["type"])}
-                    for m in message["measurements"]
-                ],
-            }
-        )
+        message = namespace["build_message"](entry, [100] * entry["count"])
+        UnifiedMessage(**message)
 
 
 def test_generated_rest_messages_satisfy_the_contract(registry):
     namespace: dict = {}
     exec(generate_all(registry)["rest"], namespace)
     for entry in namespace["ROUTE_MAP"]:
-        message = namespace["build_message"](
-            entry, 1, unit=_unit_for(entry["property_name"])
-        )
+        message = namespace["build_message"](entry, 1)
         UnifiedMessage(**message)
 
 
@@ -135,7 +130,13 @@ def test_firmware_aliases_collapse_onto_one_device(registry):
     assert registry.resolve_device_id("ESP32_001_dht22") == "ESP32_001"
     assert registry.resolve_device_id("ESP32_002_ir") == "ESP32_002"
     assert registry.resolve_device_id("ESP32_003_pir") == "ESP32_003"
-    assert registry.devices() == ["ESP32_001", "ESP32_002", "ESP32_003", "ESP32_004"]
+    assert registry.devices() == [
+        "ESP32_001",
+        "ESP32_002",
+        "ESP32_003",
+        "ESP32_004",
+        "ESP32_005",
+    ]
 
 
 @pytest.mark.parametrize("payload", FIELD_PAYLOADS, ids=lambda p: p["device_id"])

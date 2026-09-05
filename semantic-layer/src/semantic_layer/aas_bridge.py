@@ -21,6 +21,7 @@ _AAS_FILES = [
 
 # AAS JSON → RDFlib Graph
 
+
 def load_aas_as_rdf() -> Graph:
     """Read all five AAS JSON descriptor files and return an RDFlib Graph.
 
@@ -56,7 +57,6 @@ def load_aas_as_rdf() -> Graph:
 
         # One submodel per subsystem ─
         for submodel in aas.get("submodels", []):
-
             # Unique URI for this submodel
             submodel_uri = URIRef(f"{aas['id']}:submodel:{submodel['idShort']}")
 
@@ -68,7 +68,7 @@ def load_aas_as_rdf() -> Graph:
                 g.add((submodel_uri, SF.semanticId, URIRef(semantic_id)))
 
             g.add((submodel_uri, SF.subsystem, Literal(submodel.get("subsystem", ""))))
-            g.add((submodel_uri, SF.protocol,   Literal(submodel.get("protocol",   ""))))
+            g.add((submodel_uri, SF.protocol, Literal(submodel.get("protocol", ""))))
 
             for device_id in submodel.get("deviceIds", []):
                 device_uri = URIRef(f"http://example.org/smart-factory#{device_id}")
@@ -80,11 +80,12 @@ def load_aas_as_rdf() -> Graph:
 
     return g
 
+
 # Helpers for the backend REST endpoint (no RDF needed by callers)
 
+
 def get_aas_catalog() -> list[dict]:
-    """Return a Python list with the index entries for all five AAS shells.
-    """
+    """Return a Python list with the index entries for all five AAS shells."""
     index_path = _AAS_DIR / "aas_index.json"
     with open(index_path, encoding="utf-8") as fh:
         index = json.load(fh)
@@ -92,8 +93,7 @@ def get_aas_catalog() -> list[dict]:
 
 
 def get_aas_descriptor(subsystem: str) -> dict | None:
-    """Return the full AAS descriptor JSON for a single subsystem, or None.
-    """
+    """Return the full AAS descriptor JSON for a single subsystem, or None."""
     catalog = get_aas_catalog()
     entry = next((s for s in catalog if s["subsystem"] == subsystem), None)
     if entry is None:
@@ -102,7 +102,9 @@ def get_aas_descriptor(subsystem: str) -> dict | None:
     with open(descriptor_path, encoding="utf-8") as fh:
         return json.load(fh)
 
+
 # Fuseki write path
+
 
 async def write_aas_to_fuseki(endpoint: str) -> bool:
     """Serialise all AAS triples to Turtle and POST them to a Fuseki endpoint.
@@ -114,7 +116,7 @@ async def write_aas_to_fuseki(endpoint: str) -> bool:
     turtle = g.serialize(format="turtle")
 
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with httpx.AsyncClient(timeout=5.0, trust_env=False) as client:
             resp = await client.post(
                 endpoint,
                 content=turtle.encode("utf-8"),

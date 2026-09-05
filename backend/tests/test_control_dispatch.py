@@ -1,12 +1,11 @@
-# Tests for the end-to-end control loop. Tests check that a command is published, 
-# that the status machine moves pending -> dispatched -> executed, and that
-# a dead broker degrades to 'failed' instead of a 500.
+
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from backend.main import app
 from backend.services import control_dispatcher
+from backend.security import command_signing
 from backend.store import get_control_status, init_db
 
 
@@ -65,6 +64,30 @@ async def test_command_is_published_to_mqtt(published):
     assert payload["action"] == "on"
     assert payload["command_id"] == body["command_id"]
     assert payload["ack_url"].endswith(f"/api/v1/control/{body['command_id']}/ack")
+
+
+@pytest.mark.asyncio
+async def test_signed_command_is_the_top_level_device_payload(published, monkeypatch):
+    monkeypatch.setattr(command_signing, "SIGNING_KEY", "test-device-key")
+    command_signing.reset_nonces()
+
+    async with await _client() as client:
+        resp = await client.post(
+            "/api/v1/control",
+            json={
+                "device_id": "relay_signed_01",
+                "action": "set",
+                "params": {"level": 3},
+            },
+        )
+
+    assert resp.status_code == 202
+    _, payload = published[0]
+    assert payload["params"] == {"level": 3}
+    assert "signature" in payload
+    assert "signature" not in payload["params"]
+    ok, reason = command_signing.verify(payload, key="test-device-key")
+    assert ok, reason
 
 
 @pytest.mark.asyncio
@@ -164,7 +187,9 @@ async def test_broker_down_does_not_500(broker_down):
     assert body["status"] == "failed"
 
     cmd = get_control_status(body["command_id"])
-    assert cmd is not None, f"Command {body['command_id']} was not found or returned None"
+    assert cmd is not None, (
+        f"Command {body['command_id']} was not found or returned None"
+    )
     assert cmd["status"] == "failed"
     assert cmd["result"] == "broker unreachable"
 
@@ -188,8 +213,12 @@ async def test_control_log_lists_recent_commands(published):
 @pytest.mark.asyncio
 async def test_control_log_filters_by_device(published):
     async with await _client() as client:
-        await client.post("/api/v1/control", json={"device_id": "relay_A", "action": "on"})
-        await client.post("/api/v1/control", json={"device_id": "relay_B", "action": "on"})
+        await client.post(
+            "/api/v1/control", json={"device_id": "relay_A", "action": "on"}
+        )
+        await client.post(
+            "/api/v1/control", json={"device_id": "relay_B", "action": "on"}
+        )
         resp = await client.get("/api/v1/control?device_id=relay_A")
 
     items = resp.json()["items"]

@@ -15,5 +15,5 @@ sf:case_valid_temperature a sf:ProtocolBinding ;
     sf:wordOrder "big" ;
     sf:byteOrder "big" ;
     sf:scaleFactor "0.01"^^xsd:double ;
-    sf:slaveId 1 ;
+    sf:slaveId 7 ;
     sf:pollIntervalMs 2000 .

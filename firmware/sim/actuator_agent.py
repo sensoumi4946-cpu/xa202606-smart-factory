@@ -2,6 +2,8 @@
 
 
 import argparse
+import hashlib
+import hmac
 import json
 import logging
 import os
@@ -23,12 +25,21 @@ SUPPORTED_ACTIONS = {"on", "off", "toggle", "dim", "reset"}
 
 
 class ActuatorAgent:
-    def __init__(self, device_id, subsystem, broker_host, broker_port, api_key=""):
+    def __init__(
+        self,
+        device_id,
+        subsystem,
+        broker_host,
+        broker_port,
+        api_key="",
+        signing_key="",
+    ):
         self.device_id = device_id
         self.subsystem = subsystem
         self.broker_host = broker_host
         self.broker_port = broker_port
         self.api_key = api_key
+        self.signing_key = signing_key
         self.topic = f"factory/{subsystem}/control/{device_id}"
         self.relay_state = "off"
 
@@ -68,12 +79,38 @@ class ActuatorAgent:
             log.warning("command missing command_id or action, ignoring")
             return
 
+        if self.signing_key and not self._valid_signature(cmd):
+            log.warning("command %s has an invalid signature", command_id[:8])
+            return
+
         log.info("got '%s' (command_id=%s)", action, command_id[:8])
         ok, detail = self._actuate(action, params)
         log.info("  -> %s | %s", "OK" if ok else "FAILED", detail)
 
         if ack_url:
             self._send_ack(ack_url, ok, detail)
+
+    def _valid_signature(self, command):
+        params = json.dumps(
+            command.get("params") or {},
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+        canonical = "|".join(
+            [
+                str(command.get("command_id", "")),
+                str(command.get("device_id", "")),
+                str(command.get("action", "")),
+                params,
+                str(command.get("issued_at", "")),
+                str(command.get("nonce", "")),
+            ]
+        )
+        expected = hmac.new(
+            self.signing_key.encode(), canonical.encode(), hashlib.sha256
+        ).hexdigest()
+        return hmac.compare_digest(expected, str(command.get("signature", "")))
 
     def _actuate(self, action, params):
         if action not in SUPPORTED_ACTIONS:
@@ -109,7 +146,9 @@ class ActuatorAgent:
                 timeout=5,
             )
             if resp.status_code != 200:
-                log.warning("ack rejected: HTTP %s %s", resp.status_code, resp.text[:120])
+                log.warning(
+                    "ack rejected: HTTP %s %s", resp.status_code, resp.text[:120]
+                )
         except requests.RequestException as exc:
             log.warning("could not reach backend for ack: %s", exc)
 
@@ -118,9 +157,14 @@ def main():
     parser = argparse.ArgumentParser(description="Simulated actuator device")
     parser.add_argument("--device-id", default="relay_lighting_01")
     parser.add_argument("--subsystem", default="lighting")
-    parser.add_argument("--broker-host", default=os.getenv("MQTT_BROKER_HOST", "localhost"))
-    parser.add_argument("--broker-port", type=int, default=int(os.getenv("MQTT_BROKER_PORT", "1883")))
+    parser.add_argument(
+        "--broker-host", default=os.getenv("MQTT_BROKER_HOST", "localhost")
+    )
+    parser.add_argument(
+        "--broker-port", type=int, default=int(os.getenv("MQTT_BROKER_PORT", "1883"))
+    )
     parser.add_argument("--api-key", default=os.getenv("API_KEY", ""))
+    parser.add_argument("--signing-key", default=os.getenv("COMMAND_SIGNING_KEY", ""))
     args = parser.parse_args()
 
     agent = ActuatorAgent(
@@ -129,6 +173,7 @@ def main():
         broker_host=args.broker_host,
         broker_port=args.broker_port,
         api_key=args.api_key,
+        signing_key=args.signing_key,
     )
     try:
         agent.run()

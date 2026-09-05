@@ -1,0 +1,22 @@
+[Unit]
+Description=XA-202606 HC-SR04 serial to OPC UA gateway
+After=network.target
+
+[Service]
+Type=simple
+User=xa202606
+Group=xa202606
+EnvironmentFile=-/etc/xa202606/connectivity.env
+ExecStart=/opt/xa202606/venv/bin/sf-opcua-serial-gateway
+Restart=on-failure
+RestartSec=3s
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

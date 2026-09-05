@@ -47,6 +47,20 @@ def test_rest_counting_payload():
     assert msg.raw_payload == {"d": "sensor_ir_01", "v": 42}
 
 
+def test_rest_canonical_payload_needs_no_vendor_specific_parser():
+    msg = parse_payload(
+        {
+            "schema_version": "v1",
+            "device_id": "third_party_sensor_01",
+            "subsystem": "gas",
+            "protocol": "rest",
+            "measurements": [{"type": "co", "value": 12.5, "unit": "ppm"}],
+        }
+    )
+    assert msg.device_id == "third_party_sensor_01"
+    assert by_type(msg, "co").value == 12.5
+
+
 def test_rest_invalid_payload_400():
     resp = post_json({"unexpected": True})
     assert resp.status_code == 400

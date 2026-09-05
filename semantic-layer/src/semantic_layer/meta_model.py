@@ -212,6 +212,23 @@ class MetaModelRegistry:
             self._history.clear()
             self._version = self._compute_version()
 
+    def replace_with(self, other: "MetaModelRegistry") -> None:
+        """Replace live state with a fully validated registry in one lock scope."""
+        if other is self:
+            return
+        with other._lock:
+            graph = other._graph
+            properties = dict(other._properties)
+            subsystems = dict(other._subsystems)
+            history = list(other._history)
+            version = other._version
+        with self._lock:
+            self._graph = graph
+            self._properties = properties
+            self._subsystems = subsystems
+            self._history = history
+            self._version = version
+
     def load_turtle(self, turtle: str) -> LoadResult:
         accepted, violations, fragment = validate_fragment(turtle)
         now = datetime.now(timezone.utc).isoformat()

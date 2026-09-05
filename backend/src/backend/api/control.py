@@ -11,7 +11,7 @@ from backend.models import (
 )
 from backend.security import command_audit, command_signing
 from backend.services import failsafe
-from backend.services.control_dispatcher import dispatch
+from backend.services import control_dispatcher
 from backend.store import (
     ack_control_command,
     get_control_status,
@@ -56,22 +56,20 @@ async def control(req: ControlRequest, request: Request):
 
     command_id = insert_control_command(req.device_id, req.action, req.params)
 
-    envelope = {
-        "command_id": command_id,
-        "device_id": req.device_id,
-        "action": req.action,
-        "params": req.params or {},
-    }
+    envelope = control_dispatcher.build_payload(
+        command_id, req.device_id, req.action, req.params or {}
+    )
     signed = command_signing.enabled()
     if signed:
         envelope = command_signing.attach_signature(envelope)
 
-    published = await dispatch(
+    published = await control_dispatcher.dispatch(
         command_id=command_id,
         device_id=req.device_id,
         action=req.action,
-        params=envelope if signed else req.params,
+        params=req.params,
         subsystem=req.subsystem,
+        payload=envelope,
     )
     mark_command_dispatched(command_id, published)
 
@@ -134,7 +132,7 @@ async def control_status(command_id: str):
 async def signing_status():
     return {
         "enabled": command_signing.enabled(),
-        "algorithm": "HMAC-SHA256" if command_signing.enabled() else None,
+        "algorithm": "HMAC-SHA256-HEX" if command_signing.enabled() else None,
         "signed_fields": list(command_signing.SIGNED_FIELDS),
     }
 

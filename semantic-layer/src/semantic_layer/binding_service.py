@@ -193,7 +193,7 @@ async def run(socket_path: str, bindings_path: Path) -> int:
     if target.exists():
         target.unlink()
 
-        start_unix_server = getattr(asyncio, "start_unix_server", None)
+    start_unix_server = getattr(asyncio, "start_unix_server", None)
     if start_unix_server is None:
         logger.error("Unix domain sockets are not available on this platform")
         return 1
@@ -217,7 +217,7 @@ async def run(socket_path: str, bindings_path: Path) -> int:
         except NotImplementedError:
             signal.signal(sig, _shutdown)
 
-        sighup = getattr(signal, "SIGHUP", None)
+    sighup = getattr(signal, "SIGHUP", None)
     if sighup is not None:
         try:
             loop.add_signal_handler(sighup, lambda: service.reload())

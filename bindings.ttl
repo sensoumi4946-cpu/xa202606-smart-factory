@@ -182,7 +182,7 @@ sf:binding_hcsr04_distance a sf:ProtocolBinding ;
     sf:scaleFactor "1.0"^^xsd:double ;
     sf:pollIntervalMs 500 .
 
-    sf:binding_mq2_raw a sf:ProtocolBinding ;
+sf:binding_mq2_raw a sf:ProtocolBinding ;
     sf:bindsProperty sf:measuresSmoke ;
     sf:transportProtocol "modbus" ;
     sf:deviceId "ESP32_005" ;
@@ -196,7 +196,7 @@ sf:binding_hcsr04_distance a sf:ProtocolBinding ;
     sf:wordOrder "big" ;
     sf:byteOrder "big" ;
     sf:scaleFactor "1.0"^^xsd:double ;
-    sf:slaveId 1 ;
+    sf:slaveId 2 ;
     sf:pollIntervalMs 2000 .
 
 sf:binding_mq7_co a sf:ProtocolBinding ;
@@ -213,7 +213,24 @@ sf:binding_mq7_co a sf:ProtocolBinding ;
     sf:wordOrder "big" ;
     sf:byteOrder "big" ;
     sf:scaleFactor "1.0"^^xsd:double ;
-    sf:slaveId 1 ;
+    sf:slaveId 2 ;
+    sf:pollIntervalMs 2000 .
+
+sf:binding_mq2_combustible_gas a sf:ProtocolBinding ;
+    sf:bindsProperty sf:measuresCombustibleGas ;
+    sf:transportProtocol "modbus" ;
+    sf:deviceId "ESP32_005" ;
+    sf:belongsToSubsystem sf:GasSubsystem ;
+    sf:hasUnit "ppm" ;
+    sf:registerAddress 40005 ;
+    sf:registerBase 40001 ;
+    sf:functionCode 3 ;
+    sf:registerCount 2 ;
+    sf:registerType "float32" ;
+    sf:wordOrder "big" ;
+    sf:byteOrder "big" ;
+    sf:scaleFactor "1.0"^^xsd:double ;
+    sf:slaveId 2 ;
     sf:pollIntervalMs 2000 .
 
 sf:binding_gas_status a sf:ProtocolBinding ;
@@ -227,5 +244,5 @@ sf:binding_gas_status a sf:ProtocolBinding ;
     sf:functionCode 3 ;
     sf:registerType "uint16" ;
     sf:scaleFactor "1.0"^^xsd:double ;
-    sf:slaveId 1 ;
+    sf:slaveId 2 ;
     sf:pollIntervalMs 2000 .

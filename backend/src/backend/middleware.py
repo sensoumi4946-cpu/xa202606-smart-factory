@@ -21,7 +21,7 @@ MAX_BODY_BYTES = int(os.getenv("MAX_BODY_BYTES", str(64 * 1024)))
 RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "6000"))
 RATE_LIMIT_BURST = int(os.getenv("RATE_LIMIT_BURST", "400"))
 SLOW_REQUEST_MS = float(os.getenv("SLOW_REQUEST_MS", "500"))
-RATE_LIMIT_TRUST_LOCAL = os.getenv("RATE_LIMIT_TRUST_LOCAL", "true").lower() == "true"
+RATE_LIMIT_TRUST_LOCAL = os.getenv("RATE_LIMIT_TRUST_LOCAL", "false").lower() == "true"
 
 EXEMPT_PATHS = ("/health", "/metrics")
 

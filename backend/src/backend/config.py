@@ -2,10 +2,6 @@ import os
 from pathlib import Path
 
 
-import os
-from pathlib import Path
-
-
 def _repo_root() -> Path:
     for parent in Path(__file__).resolve().parents:
         if (parent / "bindings.ttl").exists():
@@ -38,9 +34,9 @@ BACKEND_HOST: str = os.getenv("BACKEND_HOST", "0.0.0.0")
 BACKEND_PORT: int = int(os.getenv("BACKEND_PORT", "8000"))
 PUBLIC_BACKEND_URL: str = os.getenv("PUBLIC_BACKEND_URL", "http://localhost:8000")
 
-API_KEY: str = os.getenv("API_KEY", "changeme")
+API_KEY: str = os.getenv("API_KEY", "")
 
-HARDWARE_PROFILE: str = os.getenv("HARDWARE_PROFILE", "lab_zjnu")
+HARDWARE_PROFILE: str = os.getenv("HARDWARE_PROFILE", "mock")
 
 MQTT_BROKER_HOST: str = os.getenv("MQTT_BROKER_HOST", "localhost")
 MQTT_BROKER_PORT: int = int(os.getenv("MQTT_BROKER_PORT", "1883"))
@@ -53,18 +49,27 @@ FUSEKI_QUERY_URL: str = os.getenv(
 )
 
 SEMANTIC_WRITE_ENABLED: bool = (
-    os.getenv("SEMANTIC_WRITE_ENABLED", "true").lower() == "true"
+    os.getenv("SEMANTIC_WRITE_ENABLED", "false").lower() == "true"
+)
+
+CORS_ORIGINS: tuple[str, ...] = tuple(
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
+    ).split(",")
+    if origin.strip()
 )
 
 LATEST_WINDOW_MINUTES: int = int(os.getenv("LATEST_WINDOW_MINUTES", "30"))
 
-DATABASE_PATH: str = os.getenv(
-    "DATABASE_PATH", str(DATA_DIR / "smart_factory.db")
-)
+DATABASE_PATH: str = os.getenv("DATABASE_PATH", str(DATA_DIR / "smart_factory.db"))
 PROVENANCE_AUDIT_DB: str = os.getenv(
     "PROVENANCE_AUDIT_DB", str(DATA_DIR / "prov_audit.db")
 )
 
 BINDINGS_TTL: str = os.getenv("BINDINGS_TTL", str(REPO_ROOT / "bindings.ttl"))
+THRESHOLDS_TTL: str = os.getenv(
+    "THRESHOLDS_TTL", str(REPO_ROOT / "thresholds.ttl")
+)
 
 FEDERATED_NODES: str = os.getenv("FEDERATED_NODES", "")

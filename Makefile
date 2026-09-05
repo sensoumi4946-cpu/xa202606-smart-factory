@@ -1,4 +1,4 @@
-.PHONY: up down test lint clean install-dev
+.PHONY: up down test lint clean install-dev generate-adapters check-generated
 
 install-dev:
 	pip install -e shared/
@@ -7,6 +7,12 @@ install-dev:
 	pip install -e analytics/[dev]
 	pip install -e semantic-layer/[dev]
 	cd dashboard && npm install
+
+generate-adapters:
+	python scripts/generate_adapters.py
+
+check-generated:
+	python scripts/generate_adapters.py --check
 
 up:
 	docker compose -f deploy/docker-compose.yml up -d

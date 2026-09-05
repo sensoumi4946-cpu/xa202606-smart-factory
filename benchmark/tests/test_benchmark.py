@@ -1,5 +1,3 @@
-import math
-
 from benchmark import baseline_platform
 from benchmark.extensibility_benchmark import (
     measure_baseline_approach,
@@ -36,30 +34,29 @@ class TestBaselineIsFair:
 
 
 class TestMeasurement:
-    def test_semantic_touches_no_code_files(self):
+    def test_ontology_only_does_not_extend_the_runtime_contract(self):
         cost = measure_semantic_approach()
-        assert cost.code_files_touched == 0
-        assert cost.restart_required is False
+        assert cost.ontology_only_supported is False
+        assert cost.restart_required is True
 
     def test_semantic_keeps_validation(self):
         cost = measure_semantic_approach()
         assert cost.validation_kept is True
 
-    def test_baseline_requires_a_restart(self):
+    def test_baseline_is_labelled_as_illustrative(self):
         cost = measure_baseline_approach()
         assert cost.restart_required is True
-        assert cost.code_files_touched > 10
+        assert "not a measured external" in cost.notes
 
     def test_semantic_extension_is_fast(self):
         cost = measure_semantic_approach()
-        assert cost.seconds_to_first_reading < 5.0
+        assert cost.elapsed_seconds < 5.0
 
-    def test_reduction_is_reported_and_real(self):
+    def test_result_reports_the_real_extensibility_boundary(self):
         result = run()
         s = result["summary"]
-        assert s["baseline_lines"] > s["semantic_lines"]
-        assert s["reduction_ratio"] > 1.0
-        assert not math.isnan(s["reduction_ratio"])
+        assert s["ontology_only_supported"] is False
+        assert s["validation_rejects_unknown_type"] is True
 
     def test_result_is_json_serialisable(self):
         import json

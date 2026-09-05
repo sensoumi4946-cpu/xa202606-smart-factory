@@ -17,8 +17,7 @@ _PREFIX = (
 )
 
 _BASE_QUERY = (
-    _PREFIX
-    + "SELECT DISTINCT ?sensor ?subsystem ?protocol ?prop WHERE { "
+    _PREFIX + "SELECT DISTINCT ?sensor ?subsystem ?protocol ?prop WHERE { "
     "?obs a sosa:Observation ; sosa:madeBySensor ?sensor ; "
     "sosa:observedProperty ?prop . "
     "OPTIONAL { ?sensor sf:belongsToSubsystem ?subsystem } "
@@ -38,9 +37,7 @@ _FIRE_RISK_FILTER = (
     "sf:measuresSmoke sf:measuresCombustibleGas }"
 )
 
-_GAS_DETAIL_FILTER = (
-    "?sensor sf:belongsToSubsystem sf:GasMonitoringSubsystem ."
-)
+_GAS_DETAIL_FILTER = "?sensor sf:belongsToSubsystem sf:GasMonitoringSubsystem ."
 
 _PRODUCTION_FILTER = (
     "VALUES ?prop { "
@@ -50,18 +47,18 @@ _PRODUCTION_FILTER = (
 
 VIEWS: dict[str, str] = {
     "sensor-observations": _BASE_QUERY % "",
-    "co-temp-sensors":     _BASE_QUERY % _CO_TEMP_FILTER,
-    "fire-risk-sensors":   _BASE_QUERY % _FIRE_RISK_FILTER,
+    "co-temp-sensors": _BASE_QUERY % _CO_TEMP_FILTER,
+    "fire-risk-sensors": _BASE_QUERY % _FIRE_RISK_FILTER,
     "gas-subsystem-detail": _BASE_QUERY % _GAS_DETAIL_FILTER,
-    "production-sensors":  _BASE_QUERY % _PRODUCTION_FILTER,
+    "production-sensors": _BASE_QUERY % _PRODUCTION_FILTER,
 }
 
 DESCRIPTIONS: dict[str, str] = {
-    "sensor-observations":  "All sensors with their observed properties and subsystems",
-    "co-temp-sensors":      "Sensors observing CO or temperature — cross-device fire risk correlation",
-    "fire-risk-sensors":    "All fire-safety sensors (temperature + CO + smoke + combustible gas) across all protocols",
+    "sensor-observations": "All sensors with their observed properties and subsystems",
+    "co-temp-sensors": "Sensors observing CO or temperature — cross-device fire risk correlation",
+    "fire-risk-sensors": "All fire-safety sensors (temperature + CO + smoke + combustible gas) across all protocols",
     "gas-subsystem-detail": "Gas monitoring subsystem: all three hazardous-gas properties via Modbus TCP",
-    "production-sensors":   "Production-floor sensors: AGV distance (OPC UA), counting (REST), occupancy/lighting (REST)",
+    "production-sensors": "Production-floor sensors: AGV distance (OPC UA), counting (REST), occupancy/lighting (REST)",
 }
 
 
@@ -78,7 +75,7 @@ SUBSYS_NAMES: dict[str, str] = {
 
 
 async def _run_sparql(query: str) -> list[dict[str, Any]]:
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+    async with httpx.AsyncClient(timeout=_TIMEOUT, trust_env=False) as client:
         resp = await client.post(
             config.FUSEKI_QUERY_URL,
             content=query.encode("utf-8"),
@@ -99,10 +96,10 @@ def _aggregate(bindings: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if sensor not in by_sensor:
             subsys = _local(b["subsystem"]["value"]) if "subsystem" in b else ""
             by_sensor[sensor] = {
-                "sensor":    sensor,
+                "sensor": sensor,
                 "subsystem": SUBSYS_NAMES.get(subsys, subsys),
-                "observes":  [],
-                "protocol":  b.get("protocol", {}).get("value", ""),
+                "observes": [],
+                "protocol": b.get("protocol", {}).get("value", ""),
             }
             order.append(sensor)
         if "prop" in b:

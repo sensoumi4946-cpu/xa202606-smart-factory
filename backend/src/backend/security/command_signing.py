@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import hashlib
 import hmac
 import json
@@ -11,7 +10,7 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
-SIGNING_KEY = os.getenv("COMMAND_SIGNING_KEY", "ce30c115aec4ca7be413779292ea725c0f323afff4ab9d70e4e946e46a6a4460")
+SIGNING_KEY = os.getenv("COMMAND_SIGNING_KEY", "")
 MAX_CLOCK_SKEW_S = int(os.getenv("COMMAND_MAX_SKEW_S", "30"))
 NONCE_CACHE_SIZE = 4096
 
@@ -29,24 +28,36 @@ def enabled() -> bool:
 
 
 def canonical_payload(command: dict[str, Any]) -> str:
-    subset = {k: command.get(k) for k in SIGNED_FIELDS}
-    return json.dumps(subset, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    params = json.dumps(
+        command.get("params") or {},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return (
+        "|".join(
+            str(command.get(field, ""))
+            for field in ("command_id", "device_id", "action")
+        )
+        + f"|{params}|{command.get('issued_at', '')}|{command.get('nonce', '')}"
+    )
 
 
 def sign(command: dict[str, Any], key: Optional[str] = None) -> str:
     secret = key if key is not None else SIGNING_KEY
     if not secret:
         raise SigningDisabled("COMMAND_SIGNING_KEY is not set")
-    digest = hmac.new(
+    return hmac.new(
         secret.encode(), canonical_payload(command).encode(), hashlib.sha256
-    ).digest()
-    return base64.b64encode(digest).decode()
+    ).hexdigest()
 
 
-def attach_signature(command: dict[str, Any], key: Optional[str] = None) -> dict[str, Any]:
+def attach_signature(
+    command: dict[str, Any], key: Optional[str] = None
+) -> dict[str, Any]:
     if "nonce" not in command:
-        command["nonce"] = base64.b64encode(os.urandom(9)).decode()
-    command["sig_alg"] = "HMAC-SHA256"
+        command["nonce"] = os.urandom(12).hex()
+    command["sig_alg"] = "HMAC-SHA256-HEX"
     command["signature"] = sign(command, key)
     return command
 

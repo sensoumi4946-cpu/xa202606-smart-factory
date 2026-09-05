@@ -1,18 +1,20 @@
 # Observation gate validates RDF before Fuseki write.
 
-from datetime import datetime, timezone
-
-from rdflib import Graph, Literal, Namespace, URIRef, XSD
+from rdflib import Graph, Namespace, URIRef
 from rdflib.namespace import RDF, SOSA
 
 from semantic_layer.mapping import SF, to_rdf_graph
-from semantic_layer.shacl_runner import ValidationReport, _load_all_shapes as _base_shapes, validate
+from semantic_layer.shacl_runner import (
+    ValidationReport,
+    _load_all_shapes as _base_shapes,
+    validate,
+)
 from semantic_layer.semantic_unit_harmonizer import enrich_graph_with_qudt
 from semantic_layer.shacl_domain_shapes import load_all_shapes
+from semantic_layer.provenance import PROV, stamp_provenance
 
 from smart_factory_contracts.messages import UnifiedMessage
 
-PROV = Namespace("http://www.w3.org/ns/prov#")
 _SF = Namespace(SF)
 
 _domain_shapes_cache = None
@@ -23,17 +25,6 @@ def _get_domain_shapes():
     if _domain_shapes_cache is None:
         _domain_shapes_cache = load_all_shapes()
     return _domain_shapes_cache
-
-
-def _add_provenance(g: Graph, msg: UnifiedMessage) -> None:
-    g.bind("prov", PROV)
-    adapter_uri = URIRef(f"{SF}adapter_{msg.protocol.value}")
-    g.add((adapter_uri, RDF.type, PROV.SoftwareAgent))
-    g.add((adapter_uri, _SF.protocol, Literal(msg.protocol.value)))
-    now_str = datetime.now(timezone.utc).isoformat()
-    for obs in g.subjects(RDF.type, SOSA.Observation):
-        g.add((obs, PROV.wasAttributedTo, adapter_uri))
-        g.add((obs, PROV.generatedAtTime, Literal(now_str, datatype=XSD.dateTime)))
 
 
 class GateResult:
@@ -57,10 +48,9 @@ def check_and_prepare(
     add_prov: bool = True,
     use_domain_shapes: bool = True,
 ) -> GateResult:
-    
+
     g = to_rdf_graph(msg)
 
-    
     enrich_graph_with_qudt(g)
 
     if use_domain_shapes:
@@ -89,10 +79,10 @@ def check_and_prepare(
             assert isinstance(results_graph, Graph)
             report = ValidationReport(conforms=True)
             SH = "http://www.w3.org/ns/shacl#"
-            result_class  = URIRef(f"{SH}ValidationResult")
+            result_class = URIRef(f"{SH}ValidationResult")
             severity_prop = URIRef(f"{SH}resultSeverity")
-            message_prop  = URIRef(f"{SH}resultMessage")
-            warning_sev   = URIRef(f"{SH}Warning")
+            message_prop = URIRef(f"{SH}resultMessage")
+            warning_sev = URIRef(f"{SH}Warning")
             for node in results_graph.subjects(RDF.type, result_class):
                 msgs = list(results_graph.objects(node, message_prop))
                 msg_text = str(msgs[0]) if msgs else "(no message)"
@@ -112,6 +102,6 @@ def check_and_prepare(
 
     # stamp provenance
     if add_prov:
-        _add_provenance(g, msg)
+        stamp_provenance(g, msg.protocol.value, msg.device_id)
 
     return GateResult(accepted=True, graph=g, report=report)

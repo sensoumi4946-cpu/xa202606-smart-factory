@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 import pytest
 
 from connectivity.adapters.mqtt_adapter import MQTTAdapter
+from connectivity.generated_adapters import GeneratedAdapterSet
+from semantic_layer.protocol_binding import BindingRegistry
 
 
 class FakeClient:
@@ -115,3 +117,35 @@ def test_timestamp_within_range(adapter):
     diff_before = abs((msg.timestamp - before).total_seconds())
     diff_after = abs((msg.timestamp - after).total_seconds())
     assert diff_before < 2 or diff_after < 2
+
+
+def test_bound_topic_uses_ontology_identity_unit_and_scaling():
+    registry = BindingRegistry()
+    result = registry.load_turtle(
+        """
+        @prefix sf: <http://example.org/smart-factory#> .
+        @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+        sf:mqtt_temp a sf:ProtocolBinding ;
+          sf:bindsProperty sf:measuresTemperature ;
+          sf:transportProtocol "mqtt" ;
+          sf:deviceId "canonical_device" ;
+          sf:belongsToSubsystem sf:TempHumiditySubsystem ;
+          sf:hasUnit "celsius" ;
+          sf:mqttTopic "vendor/raw/temp" ;
+          sf:mqttQos 1 ;
+          sf:scaleFactor "0.1"^^xsd:double ;
+          sf:valueOffset "-5.0"^^xsd:double ;
+          sf:pollIntervalMs 1000 .
+        """
+    )
+    assert result.accepted
+    adapter = MQTTAdapter(GeneratedAdapterSet(registry))
+
+    msg = adapter._parse_payload("vendor/raw/temp", json.dumps({"value": 300}))
+
+    assert msg is not None
+    assert msg.device_id == "canonical_device"
+    assert msg.subsystem.value == "temp_humidity"
+    assert msg.measurements[0].type.value == "temperature"
+    assert msg.measurements[0].unit.value == "celsius"
+    assert msg.measurements[0].value == 25.0

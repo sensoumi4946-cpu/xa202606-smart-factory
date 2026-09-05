@@ -2,7 +2,6 @@
 Description=XA-202606 semantic binding service
 Documentation=https://github.com/sensoumi4946-cpu/xa202606-smart-factory
 After=network.target
-Requires=xa202606-bindingd.socket
 
 [Service]
 Type=simple

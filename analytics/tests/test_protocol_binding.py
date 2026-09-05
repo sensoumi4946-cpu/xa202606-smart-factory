@@ -17,6 +17,7 @@ MODBUS_TTL = """
 
 sf:binding_mq2_co a sf:ProtocolBinding ;
     sf:bindsProperty sf:measuresCo ;
+    sf:hasUnit "ppm" ;
     sf:transportProtocol "modbus" ;
     sf:deviceId "esp32_02_mq2" ;
     sf:belongsToSubsystem sf:GasSubsystem ;
@@ -31,6 +32,7 @@ sf:binding_mq2_co a sf:ProtocolBinding ;
 
 sf:binding_mq2_gas a sf:ProtocolBinding ;
     sf:bindsProperty sf:measuresCombustibleGas ;
+    sf:hasUnit "ppm" ;
     sf:transportProtocol "modbus" ;
     sf:deviceId "esp32_02_mq2" ;
     sf:belongsToSubsystem sf:GasSubsystem ;
@@ -104,7 +106,9 @@ sf:binding_bad3 a sf:ProtocolBinding ;
 
 class TestDecoding:
     def test_uint16_scaled(self):
-        assert decode_registers([435], "uint16", scale_factor=0.1) == pytest.approx(43.5)
+        assert decode_registers([435], "uint16", scale_factor=0.1) == pytest.approx(
+            43.5
+        )
 
     def test_int16_negative(self):
         assert decode_registers([0xFFFB], "int16") == pytest.approx(-5.0)
@@ -129,7 +133,9 @@ class TestDecoding:
 
     def test_encode_inverts_decode(self):
         words = encode_value(43.5, "uint16", scale_factor=0.1)
-        assert decode_registers(words, "uint16", scale_factor=0.1) == pytest.approx(43.5)
+        assert decode_registers(words, "uint16", scale_factor=0.1) == pytest.approx(
+            43.5
+        )
 
     def test_unknown_register_type_rejected(self):
         with pytest.raises(ValueError):
@@ -239,6 +245,18 @@ class TestRegistry:
         reg.load_turtle(MQTT_TTL)
         assert reg.devices() == ["esp32_01_dht22", "esp32_02_mq2"]
 
+    def test_overlapping_modbus_addresses_are_rejected_atomically(self):
+        reg = BindingRegistry()
+        assert reg.load_turtle(MODBUS_TTL).accepted
+        before = len(reg)
+        conflict = MODBUS_TTL.replace("binding_mq2_co", "binding_conflicting_co").split(
+            "sf:binding_mq2_gas", 1
+        )[0]
+        result = reg.load_turtle(conflict)
+        assert not result.accepted
+        assert any("address collision" in violation for violation in result.violations)
+        assert len(reg) == before
+
 
 class TestCodeGeneration:
     def _registry(self):
@@ -264,9 +282,7 @@ class TestCodeGeneration:
         code = generate_adapter("modbus", self._registry().all())
         namespace: dict = {}
         exec(code, namespace)
-        entry = next(
-            e for e in namespace["REGISTER_MAP"] if e["property_name"] == "co"
-        )
+        entry = next(e for e in namespace["REGISTER_MAP"] if e["property_name"] == "co")
         assert namespace["decode_entry"](entry, [435]) == pytest.approx(43.5)
 
     def test_generated_modbus_builds_a_valid_message(self):
@@ -274,7 +290,7 @@ class TestCodeGeneration:
         namespace: dict = {}
         exec(code, namespace)
         entry = namespace["REGISTER_MAP"][0]
-        message = namespace["build_message"](entry, [435], "ppm")
+        message = namespace["build_message"](entry, [435])
         assert message["schema_version"] == "v1"
         assert message["protocol"] == "modbus"
         assert message["device_id"] == "esp32_02_mq2"

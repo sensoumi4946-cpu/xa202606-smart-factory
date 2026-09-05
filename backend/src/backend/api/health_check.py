@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 async def _check_fuseki() -> dict:
     t0 = time.perf_counter()
     try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
+        async with httpx.AsyncClient(timeout=3.0, trust_env=False) as client:
             resp = await client.get(
                 config.FUSEKI_QUERY_URL.replace("/sparql", "/$/ping")
             )
@@ -43,6 +43,7 @@ def _check_sqlite() -> dict:
 
 async def _check_mqtt() -> dict:
     import asyncio
+
     t0 = time.perf_counter()
     try:
         reader, writer = await asyncio.wait_for(
@@ -69,7 +70,7 @@ async def readiness() -> JSONResponse:
     checks: dict[str, Any] = {
         "fuseki": await _check_fuseki(),
         "sqlite": _check_sqlite(),
-        "mqtt":   await _check_mqtt(),
+        "mqtt": await _check_mqtt(),
     }
     all_ok = all(v["ok"] for v in checks.values())
     return JSONResponse(

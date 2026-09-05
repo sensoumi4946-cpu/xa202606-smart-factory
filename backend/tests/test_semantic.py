@@ -36,7 +36,9 @@ def _msg():
         subsystem=Subsystem.TEMP_HUMIDITY,
         protocol=Protocol.MQTT,
         measurements=[
-            Measurement(type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS),
+            Measurement(
+                type=MeasurementType.TEMPERATURE, value=25.5, unit=Unit.CELSIUS
+            ),
         ],
     )
 
@@ -119,14 +121,16 @@ async def test_ingest_triggers_semantic_write(monkeypatch):
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.post("/ingest/api/v1/data", json=_msg().model_dump(mode="json"))
+        resp = await client.post(
+            "/ingest/api/v1/data", json=_msg().model_dump(mode="json")
+        )
     assert resp.status_code == 200
     assert len(calls) == 1
     assert calls[0][0] == "sensor_dht22_01"
 
 
 @pytest.mark.asyncio
-async def test_failed_semantic_write_logs_warning(monkeypatch, capsys):
+async def test_failed_semantic_write_logs_warning(monkeypatch, caplog):
     async def fake_write(msg, endpoint):
         return False
 
@@ -135,15 +139,12 @@ async def test_failed_semantic_write_logs_warning(monkeypatch, capsys):
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.post("/ingest/api/v1/data", json=_msg().model_dump(mode="json"))
+        resp = await client.post(
+            "/ingest/api/v1/data", json=_msg().model_dump(mode="json")
+        )
     assert resp.status_code == 200
-    # NOTE: as of current ingest.py, a failed semantic write is NOT logged
-    # anywhere -- kg_written just comes back False in the response body.
-    # That is itself a gap worth fixing (silent failures are hard to
-    # notice in production), tracked separately. This test now pins the
-    # actual current behaviour instead of asserting a log line that
-    # never gets written.
-    assert resp.json()["kg_written"] is False
+    assert resp.json()["kg_write"] == "queued"
+    assert "Fuseki write returned false" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -169,7 +170,7 @@ async def test_semantic_view_sensor_observations(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_semantic_unavailable_returns_503(monkeypatch):
+async def test_semantic_unavailable_returns_degraded_view(monkeypatch):
     monkeypatch.setattr(
         semantic_mod.httpx,
         "AsyncClient",
@@ -178,8 +179,9 @@ async def test_semantic_unavailable_returns_503(monkeypatch):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get("/api/v1/semantic?view=sensor-observations")
-    assert resp.status_code == 503
-    assert resp.json() == {"error": "semantic service unavailable"}
+    assert resp.status_code == 200
+    assert resp.json()["degraded"] is True
+    assert resp.json()["results"] == []
 
 
 @pytest.mark.asyncio

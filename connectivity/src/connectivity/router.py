@@ -31,15 +31,23 @@ def log_event(event: str, level: str, device_id: Optional[str] = None, **kwargs)
     print(json.dumps(entry), file=sys.stderr if level == "error" else sys.stdout)
 
 
-
 async def forward_to_backend(msg: UnifiedMessage) -> bool:
     payload = msg.model_dump(mode="json")
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            # The backend is a service-to-service endpoint.  Ignoring ambient
+            # desktop proxy variables prevents loopback/container traffic from
+            # being sent through an unrelated SOCKS/HTTP proxy.
+            async with httpx.AsyncClient(timeout=10.0, trust_env=False) as client:
+                headers = (
+                    {"X-API-Key": connectivity_models.BACKEND_API_KEY}
+                    if connectivity_models.BACKEND_API_KEY
+                    else None
+                )
                 resp = await client.post(
                     f"{connectivity_models.BACKEND_URL}/ingest/api/v1/data",
                     json=payload,
+                    headers=headers,
                 )
             if resp.status_code in (200, 201):
                 log_event("forward_success", "info", device_id=msg.device_id)
@@ -62,6 +70,7 @@ async def forward_to_backend(msg: UnifiedMessage) -> bool:
             )
         if attempt < MAX_RETRIES:
             import asyncio
+
             await asyncio.sleep(RETRY_INTERVAL)
 
     log_event("forward_failed", "error", device_id=msg.device_id, retries=MAX_RETRIES)

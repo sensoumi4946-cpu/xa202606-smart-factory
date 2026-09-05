@@ -69,12 +69,15 @@ async def _write_kg_and_audit(
     protocol_value: str,
     observed_at: datetime,
 ) -> None:
+    if not config.SEMANTIC_WRITE_ENABLED:
+        return
     kg_written = False
     error = None
     try:
         kg_written = await write_to_fuseki(msg, config.FUSEKI_ENDPOINT)
         if not kg_written:
             error = "Fuseki write returned false"
+            logger.warning("KG write failed for %s: %s", msg.device_id, error)
     except Exception as exc:
         error = f"Fuseki write failed: {exc}"
         logger.warning("KG write failed for %s: %s", msg.device_id, exc)
@@ -101,9 +104,13 @@ def _to_unified(reading: SensorReading) -> UnifiedMessage:
     if unit is None:
         raise ValueError(f"Unknown unit '{reading.unit}'. Valid: {list(_UNIT)}")
     if proto is None:
-        raise ValueError(f"Unknown protocol '{reading.protocol}'. Valid: {list(_PROTO)}")
+        raise ValueError(
+            f"Unknown protocol '{reading.protocol}'. Valid: {list(_PROTO)}"
+        )
     if sub is None:
-        raise ValueError(f"Unknown subsystem '{reading.subsystem}'. Valid: {list(_SUB)}")
+        raise ValueError(
+            f"Unknown subsystem '{reading.subsystem}'. Valid: {list(_SUB)}"
+        )
 
     return UnifiedMessage(
         schema_version="v1",
@@ -184,7 +191,7 @@ async def ingest_reading(
         protocol=reading.protocol.lower(),
         measurement_types=[reading.property_name],
     )
-    if aas_registry.observe(device):
+    if config.SEMANTIC_WRITE_ENABLED and aas_registry.observe(device):
         background_tasks.add_task(
             register_device_in_fuseki, device, config.FUSEKI_ENDPOINT
         )
@@ -279,7 +286,7 @@ async def ingest_unified_data(
             protocol=protocol_value,
             measurement_types=[_enum_value(first_m.type)],
         )
-        if aas_registry.observe(device):
+        if config.SEMANTIC_WRITE_ENABLED and aas_registry.observe(device):
             background_tasks.add_task(
                 register_device_in_fuseki, device, config.FUSEKI_ENDPOINT
             )

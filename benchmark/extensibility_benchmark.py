@@ -1,7 +1,9 @@
-"""Extensibility benchmark: semantic platform vs hardcoded baseline.
+"""Check the boundary of the repository's ontology extensibility claim.
 
-Run:  python -m benchmark.extensibility_benchmark
-      python -m benchmark.extensibility_benchmark --json results.json
+This benchmark deliberately tests a *new measurement type*, not merely whether
+Turtle syntax can be parsed. The platform uses a strict UnifiedMessage
+contract, so an ontology-only vibration extension must be rejected until the
+contract and semantic mappings are extended as well.
 """
 
 from __future__ import annotations
@@ -14,27 +16,25 @@ from pathlib import Path
 from typing import Any
 
 from rdflib import Graph
-
-BASELINE_SRC = Path(__file__).parent / "baseline_platform.py"
+from smart_factory_contracts.messages import MeasurementType
 
 
 @dataclass
-class ExtensionCost:
+class ExtensionCheck:
     approach: str
     sensor_type: str
-    lines_changed: int
-    files_touched: int
-    code_files_touched: int
+    ontology_lines: int
+    ontology_triples: int
+    ontology_only_supported: bool
     restart_required: bool
     validation_kept: bool
-    seconds_to_first_reading: float
+    elapsed_seconds: float
     notes: str
 
 
 NEW_SENSOR_TURTLE = """
 @prefix sf:   <http://example.org/smart-factory#> .
 @prefix sosa: <http://www.w3.org/ns/sosa/> .
-@prefix qudt: <http://qudt.org/schema/qudt/> .
 @prefix unit: <http://qudt.org/vocab/unit/> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 
@@ -53,108 +53,96 @@ sf:VibrationSubsystem a sf:Subsystem ;
 
 
 def _count_lines(text: str) -> int:
-    return len([ln for ln in text.strip().splitlines() if ln.strip()])
+    return len([line for line in text.strip().splitlines() if line.strip()])
 
 
-def measure_semantic_approach() -> ExtensionCost:
+def measure_semantic_approach() -> ExtensionCheck:
     start = time.perf_counter()
+    graph = Graph()
+    graph.parse(data=NEW_SENSOR_TURTLE, format="turtle")
 
-    g = Graph()
-    g.parse(data=NEW_SENSOR_TURTLE, format="turtle")
-    triples = len(g)
-    assert triples > 0, "ontology fragment failed to parse"
+    try:
+        MeasurementType("vibration")
+        supported = True
+    except ValueError:
+        supported = False
 
-    from smart_factory_contracts.messages import UnifiedMessage  # noqa: F401
-
-    elapsed = time.perf_counter() - start
-
-    return ExtensionCost(
-        approach="semantic",
+    return ExtensionCheck(
+        approach="ontology_only",
         sensor_type="vibration",
-        lines_changed=_count_lines(NEW_SENSOR_TURTLE),
-        files_touched=1,
-        code_files_touched=0,
-        restart_required=False,
+        ontology_lines=_count_lines(NEW_SENSOR_TURTLE),
+        ontology_triples=len(graph),
+        ontology_only_supported=supported,
+        restart_required=True,
         validation_kept=True,
-        seconds_to_first_reading=elapsed,
+        elapsed_seconds=time.perf_counter() - start,
         notes=(
-            f"{triples} triples loaded at runtime; thresholds, units, labels "
-            "and subsystem membership all come from the graph"
+            "The graph parses, but UnifiedMessage rejects vibration. A genuine "
+            "new type requires coordinated contract, mapping, shape/rule, and "
+            "test changes; parsing Turtle alone is not runtime extensibility."
         ),
     )
 
 
-def measure_baseline_approach() -> ExtensionCost:
+def measure_baseline_approach() -> ExtensionCheck:
     from benchmark.baseline_platform import EXTENSION_DIFF
 
-    total = sum(d["lines"] for d in EXTENSION_DIFF)
-    files = {d["file"] for d in EXTENSION_DIFF}
-
-    return ExtensionCost(
-        approach="baseline_hardcoded",
+    return ExtensionCheck(
+        approach="explicit_code_baseline",
         sensor_type="vibration",
-        lines_changed=total,
-        files_touched=len(files),
-        code_files_touched=len(files),
+        ontology_lines=0,
+        ontology_triples=0,
+        ontology_only_supported=False,
         restart_required=True,
         validation_kept=False,
-        seconds_to_first_reading=float("nan"),
-        notes="; ".join(f"{d['file']}: +{d['lines']} ({d['what']})" for d in EXTENSION_DIFF),
+        elapsed_seconds=float("nan"),
+        notes=(
+            f"Illustrative baseline lists {len(EXTENSION_DIFF)} explicit edits. "
+            "It is not a measured external product benchmark."
+        ),
     )
 
 
 def run() -> dict[str, Any]:
     semantic = measure_semantic_approach()
     baseline = measure_baseline_approach()
-
-    ratio = (
-        baseline.lines_changed / semantic.lines_changed
-        if semantic.lines_changed
-        else float("inf")
-    )
-
     return {
-        "benchmark": "BM-EXT-1 sensor type extensibility",
+        "benchmark": "BM-EXT-1 ontology-only new measurement type",
         "results": [asdict(semantic), asdict(baseline)],
         "summary": {
-            "semantic_lines": semantic.lines_changed,
-            "baseline_lines": baseline.lines_changed,
-            "reduction_ratio": round(ratio, 1),
-            "semantic_code_files": semantic.code_files_touched,
-            "baseline_code_files": baseline.code_files_touched,
-            "semantic_restart": semantic.restart_required,
-            "baseline_restart": baseline.restart_required,
+            "ontology_only_supported": semantic.ontology_only_supported,
+            "validation_rejects_unknown_type": not semantic.ontology_only_supported,
+            "restart_required": semantic.restart_required,
+            "finding": (
+                "The platform is binding-extensible for known measurement types, "
+                "but it is not ontology-only extensible for new types."
+            ),
         },
     }
 
 
 def render(result: dict[str, Any]) -> str:
-    s = result["summary"]
-    lines = [
-        "",
-        "  BM-EXT-1  Adding a new sensor type (vibration)",
-        "  " + "-" * 62,
-        f"  {'':<22}{'semantic':>14}{'hardcoded':>16}",
-        "  " + "-" * 62,
-        f"  {'lines changed':<22}{s['semantic_lines']:>14}{s['baseline_lines']:>16}",
-        f"  {'code files edited':<22}{s['semantic_code_files']:>14}{s['baseline_code_files']:>16}",
-        f"  {'restart required':<22}{str(s['semantic_restart']):>14}{str(s['baseline_restart']):>16}",
-        "  " + "-" * 62,
-        f"  reduction: {s['reduction_ratio']}x fewer lines, "
-        f"{s['baseline_code_files']} -> {s['semantic_code_files']} code files",
-        "",
-    ]
-    return "\n".join(lines)
+    summary = result["summary"]
+    return "\n".join(
+        [
+            "",
+            "  BM-EXT-1  Ontology-only new type: vibration",
+            "  " + "-" * 58,
+            f"  accepted by runtime contract: {summary['ontology_only_supported']}",
+            f"  validation rejects unknown type: {summary['validation_rejects_unknown_type']}",
+            f"  service restart after code extension: {summary['restart_required']}",
+            f"  finding: {summary['finding']}",
+            "",
+        ]
+    )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--json", type=str, default=None)
     args = parser.parse_args()
-
     result = run()
     print(render(result))
-
     if args.json:
         Path(args.json).write_text(json.dumps(result, indent=2), encoding="utf-8")
         print(f"  written to {args.json}\n")

@@ -71,27 +71,40 @@ def _print_status(reply: dict) -> None:
             print(f"           {alias} -> {canonical}")
 
 
+PROTOCOL_FIELDS = {
+    "modbus": (
+        "register_address",
+        "register_base",
+        "wire_address",
+        "register_count",
+        "function_code",
+        "register_type",
+        "word_order",
+        "byte_order",
+        "slave_id",
+    ),
+    "opcua": ("node_id", "namespace_index"),
+    "mqtt": ("topic", "qos"),
+    "rest": ("path", "method"),
+}
+
+COMMON_FIELDS = ("unit", "scale_factor", "offset", "poll_interval_ms")
+
+
 def _print_describe(reply: dict) -> None:
     print(f"device {reply['device_id']}")
     for b in reply["bindings"]:
-        print(f"\n  {b['binding_id']}  [{b['protocol']}]  {b['property_name']}")
-        for key in (
-            "register_address",
-            "register_base",
-            "wire_address",
-            "function_code",
-            "register_type",
-            "byte_order",
-            "scale_factor",
-            "poll_interval_ms",
-            "node_id",
-            "topic",
-            "path",
-            "unit",
-        ):
+        protocol = b.get("protocol", "")
+        print(f"\n  {b['binding_id']}  [{protocol}]  {b['property_name']}")
+        fields = PROTOCOL_FIELDS.get(protocol, ()) + COMMON_FIELDS
+        for key in fields:
             value = b.get(key)
-            if value not in (None, "", 0) or key == "wire_address":
-                print(f"      {key:<18}{value}")
+            if value in (None, ""):
+                continue
+            print(f"      {key:<18}{value}")
+        aliases = b.get("device_aliases") or []
+        if aliases:
+            print(f"      {'aliases':<18}{', '.join(aliases)}")
 
 
 def _print_read_plan(reply: dict) -> None:

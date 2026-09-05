@@ -34,5 +34,11 @@ target/
 *.key
 *.pem
 secrets.*
+firmware/**/device_config.h
 dashboard/.env
+
+# Runtime state
+data/*.db
+data/*.db-shm
+data/*.db-wal
 benchmarks/

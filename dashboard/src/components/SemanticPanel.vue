@@ -13,12 +13,6 @@ async function load() {
     const data = await fetchSemanticView('sensor-observations')
     rows.value = data.results
     desc.value = data.description
-    const shaclLabel = computed(() => {
-      const s = gate.value?.status
-      if (s === 'passed') return '通过'
-      if (s === 'rejected') return '拒绝'
-      return '待接入'
-      })
     error.value = ''
   } catch {
     error.value = '语义服务不可用'

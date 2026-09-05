@@ -1,0 +1,71 @@
+@prefix sf:   <http://example.org/smart-factory#> .
+@prefix sosa: <http://www.w3.org/ns/sosa/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix unit: <http://qudt.org/vocab/unit/> .
+
+sf:TempHumiditySubsystem a sf:Subsystem ; rdfs:label "temperature and humidity"@en, "温湿度"@zh .
+sf:CountingSubsystem a sf:Subsystem ; rdfs:label "cargo counting"@en, "货物计数"@zh .
+sf:LightingSubsystem a sf:Subsystem ; rdfs:label "lighting"@en, "照明"@zh .
+sf:AgvSubsystem a sf:Subsystem ; rdfs:label "AGV safety"@en, "AGV 安全"@zh .
+sf:GasSubsystem a sf:Subsystem ; rdfs:label "hazardous gas"@en, "危险气体"@zh .
+
+sf:measuresTemperature a sosa:ObservableProperty ;
+    rdfs:label "temperature"@en, "温度"@zh ;
+    sf:hasUnit unit:DEG_C ; sf:minValue "-40.0"^^xsd:double ;
+    sf:maxValue "80.0"^^xsd:double ; sf:warnThreshold "30.0"^^xsd:double ;
+    sf:dangerThreshold "38.0"^^xsd:double ; sf:direction "high" ;
+    sf:belongsToSubsystem sf:TempHumiditySubsystem .
+
+sf:measuresHumidity a sosa:ObservableProperty ;
+    rdfs:label "relative humidity"@en, "相对湿度"@zh ;
+    sf:hasUnit unit:PERCENT ; sf:minValue "0.0"^^xsd:double ;
+    sf:maxValue "100.0"^^xsd:double ; sf:warnThreshold "80.0"^^xsd:double ;
+    sf:dangerThreshold "85.0"^^xsd:double ; sf:direction "high" ;
+    sf:belongsToSubsystem sf:TempHumiditySubsystem .
+
+sf:measuresCount a sosa:ObservableProperty ;
+    rdfs:label "cargo count"@en, "货物计数"@zh ;
+    sf:hasUnit unit:NUM ; sf:minValue "0.0"^^xsd:double ;
+    sf:maxValue "1000000.0"^^xsd:double ;
+    sf:belongsToSubsystem sf:CountingSubsystem .
+
+sf:measuresOccupancy a sosa:ObservableProperty ;
+    rdfs:label "occupancy"@en, "占用状态"@zh ;
+    sf:hasUnit unit:UNITLESS ; sf:minValue "0.0"^^xsd:double ;
+    sf:maxValue "1.0"^^xsd:double ;
+    sf:belongsToSubsystem sf:LightingSubsystem .
+
+sf:measuresLightState a sosa:ObservableProperty ;
+    rdfs:label "light state"@en, "灯光状态"@zh ;
+    sf:hasUnit unit:UNITLESS ; sf:minValue "0.0"^^xsd:double ;
+    sf:maxValue "1.0"^^xsd:double ;
+    sf:belongsToSubsystem sf:LightingSubsystem .
+
+sf:measuresDistance a sosa:ObservableProperty ;
+    rdfs:label "obstacle distance"@en, "障碍距离"@zh ;
+    sf:hasUnit unit:CentiM ; sf:minValue "0.0"^^xsd:double ;
+    sf:maxValue "450.0"^^xsd:double ; sf:warnThreshold "60.0"^^xsd:double ;
+    sf:dangerThreshold "30.0"^^xsd:double ; sf:direction "low" ;
+    sf:belongsToSubsystem sf:AgvSubsystem .
+
+sf:measuresSmoke a sosa:ObservableProperty ;
+    rdfs:label "smoke concentration"@en, "烟雾浓度"@zh ;
+    sf:hasUnit unit:PPM ; sf:minValue "0.0"^^xsd:double ;
+    sf:maxValue "1000.0"^^xsd:double ; sf:warnThreshold "5.0"^^xsd:double ;
+    sf:dangerThreshold "8.0"^^xsd:double ; sf:direction "high" ;
+    sf:belongsToSubsystem sf:GasSubsystem .
+
+sf:measuresCombustibleGas a sosa:ObservableProperty ;
+    rdfs:label "combustible gas concentration"@en, "可燃气体浓度"@zh ;
+    sf:hasUnit unit:PPM ; sf:minValue "0.0"^^xsd:double ;
+    sf:maxValue "1000.0"^^xsd:double ; sf:warnThreshold "2.0"^^xsd:double ;
+    sf:dangerThreshold "3.0"^^xsd:double ; sf:direction "high" ;
+    sf:belongsToSubsystem sf:GasSubsystem .
+
+sf:measuresCo a sosa:ObservableProperty ;
+    rdfs:label "carbon monoxide concentration"@en, "一氧化碳浓度"@zh ;
+    sf:hasUnit unit:PPM ; sf:minValue "0.0"^^xsd:double ;
+    sf:maxValue "1000.0"^^xsd:double ; sf:warnThreshold "20.0"^^xsd:double ;
+    sf:dangerThreshold "35.0"^^xsd:double ; sf:direction "high" ;
+    sf:belongsToSubsystem sf:GasSubsystem .

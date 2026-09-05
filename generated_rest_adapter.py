@@ -1,8 +1,30 @@
-ROUTE_MAP = [
-    {"device_id": "ESP32_002", "property_name": "count", "subsystem": "counting", "path": "/ingest/api/v1/data", "method": "POST", "scale_factor": 1.0, "offset": 0.0, "poll_interval_ms": 2000},
-    {"device_id": "ESP32_003", "property_name": "light_state", "subsystem": "lighting", "path": "/ingest/api/v1/data", "method": "POST", "scale_factor": 1.0, "offset": 0.0, "poll_interval_ms": 2000},
-    {"device_id": "ESP32_003", "property_name": "occupancy", "subsystem": "lighting", "path": "/ingest/api/v1/data", "method": "POST", "scale_factor": 1.0, "offset": 0.0, "poll_interval_ms": 2000},
-]
+ROUTE_MAP = [{'device_id': 'ESP32_002',
+  'property_name': 'count',
+  'subsystem': 'counting',
+  'unit': 'count',
+  'path': '/ingest/api/v1/data',
+  'method': 'POST',
+  'scale_factor': 1.0,
+  'offset': 0.0,
+  'poll_interval_ms': 2000},
+ {'device_id': 'ESP32_003',
+  'property_name': 'light_state',
+  'subsystem': 'lighting',
+  'unit': 'boolean',
+  'path': '/ingest/api/v1/data',
+  'method': 'POST',
+  'scale_factor': 1.0,
+  'offset': 0.0,
+  'poll_interval_ms': 2000},
+ {'device_id': 'ESP32_003',
+  'property_name': 'occupancy',
+  'subsystem': 'lighting',
+  'unit': 'boolean',
+  'path': '/ingest/api/v1/data',
+  'method': 'POST',
+  'scale_factor': 1.0,
+  'offset': 0.0,
+  'poll_interval_ms': 2000}]
 
 
 def routes():
@@ -24,7 +46,7 @@ def scale(entry, raw_value):
     return float(raw_value) * entry["scale_factor"] + entry["offset"]
 
 
-def build_message(entry, raw_value, unit=""):
+def build_message(entry, raw_value):
     return {
         "schema_version": "v1",
         "device_id": entry["device_id"],
@@ -34,7 +56,7 @@ def build_message(entry, raw_value, unit=""):
             {
                 "type": entry["property_name"],
                 "value": scale(entry, raw_value),
-                "unit": unit,
+                "unit": entry["unit"],
             }
         ],
     }

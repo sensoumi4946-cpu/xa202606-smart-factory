@@ -330,7 +330,7 @@ async def measure_fuseki_write(runs: int, url: str) -> Latency:
 
     result = Latency("Fuseki 写入")
     turtle = to_turtle(_make_message()).encode("utf-8")
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=10.0, trust_env=False) as client:
         for _ in range(runs):
             t0 = time.perf_counter()
             try:
@@ -352,7 +352,7 @@ async def measure_sparql_query(runs: int, url: str) -> Latency:
 
     result = Latency("SPARQL 查询")
     query = "SELECT * WHERE {?s ?p ?o} LIMIT 50"
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=10.0, trust_env=False) as client:
         for _ in range(runs):
             t0 = time.perf_counter()
             try:

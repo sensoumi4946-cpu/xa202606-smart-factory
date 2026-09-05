@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from backend import config
-from backend.api.innovation_api import load_bindings
+from backend.api.innovation_api import load_bindings, load_thresholds
 from backend.api.routes import api_router
 from backend.middleware import RequestContextMiddleware
 from backend.runtime_state import assert_single_worker
@@ -33,6 +33,19 @@ async def lifespan(app: FastAPI):
 
     autobind()
 
+    threshold_result = load_thresholds()
+    if threshold_result.get("accepted"):
+        logger.info(
+            "loaded threshold ontology version %s from %s",
+            threshold_result["version"],
+            threshold_result["source"],
+        )
+    else:
+        logger.warning(
+            "threshold ontology unavailable; explicit fallbacks remain active: %s",
+            threshold_result.get("violations", []),
+        )
+
     binding_count = load_bindings()
     if binding_count == 0:
         logger.error(
@@ -42,24 +55,40 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("loaded %d protocol bindings", binding_count)
 
-    seeded = await write_aas_to_fuseki(config.FUSEKI_ENDPOINT)
-    if seeded:
-        logger.info("AAS descriptors seeded into Fuseki")
-    else:
-        logger.warning("AAS seed skipped — Fuseki may not be ready yet")
+    background_tasks: list[asyncio.Task] = []
+    if config.SEMANTIC_WRITE_ENABLED:
+        seeded = await write_aas_to_fuseki(config.FUSEKI_ENDPOINT)
+        if seeded:
+            logger.info("AAS descriptors seeded into Fuseki")
+        else:
+            logger.warning("AAS seed skipped — Fuseki may not be ready yet")
 
-    watch_task = asyncio.create_task(
-        aas_watch_loop(aas_registry, config.FUSEKI_ENDPOINT, poll_interval_seconds=30.0)
-    )
-    retry_task = asyncio.create_task(
-        retry_loop(provenance_audit, config.FUSEKI_ENDPOINT, interval_seconds=60.0)
-    )
+        background_tasks.extend(
+            [
+                asyncio.create_task(
+                    aas_watch_loop(
+                        aas_registry,
+                        config.FUSEKI_ENDPOINT,
+                        poll_interval_seconds=30.0,
+                    )
+                ),
+                asyncio.create_task(
+                    retry_loop(
+                        provenance_audit,
+                        config.FUSEKI_ENDPOINT,
+                        interval_seconds=60.0,
+                    )
+                ),
+            ]
+        )
+    else:
+        logger.info("semantic persistence is disabled")
     yield
-    watch_task.cancel()
-    retry_task.cancel()
-    for t in [watch_task, retry_task]:
+    for task in background_tasks:
+        task.cancel()
+    for task in background_tasks:
         try:
-            await t
+            await task
         except asyncio.CancelledError:
             pass
 
@@ -72,10 +101,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=list(config.CORS_ORIGINS),
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["X-API-Key", "Content-Type"],

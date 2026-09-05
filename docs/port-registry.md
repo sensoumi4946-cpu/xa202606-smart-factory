@@ -7,8 +7,8 @@ This file is the single registry for local development and Docker Compose ports.
 | Port | Service | Directory | Protocol | Status | Notes |
 |---:|---|---|---|---|---|
 | 1883 | Mosquitto MQTT broker | `deploy/` | MQTT | Active | Mock generator publishes here; connectivity subscribes here |
-| 1502 | Modbus simulator | `deploy/` | Modbus | Active | Mock Modbus TCP server; connectivity-modbus polls here |
-| 4840 | OPC UA simulator | `deploy/` | OPC UA | Active | Mock OPC UA server; connectivity-opcua subscribes here |
+| 1502 | External Modbus endpoint | hardware | Modbus | Optional | Configure `MODBUS_HOST`; no simulator is committed |
+| 4840 | HC-SR04 serial gateway or external endpoint | `connectivity/` / hardware | OPC UA | Optional | Configure `OPCUA_ENDPOINT`; openEuler gateway is `sf-opcua-serial-gateway` |
 | 5173 | Dashboard dev server | `dashboard/` | HTTP | Active | Vite dev server |
 | 8000 | Backend API | `backend/` | HTTP | Active | FastAPI, `/health`, `/api/v1/*` |
 | 8100 | REST adapter | `connectivity/` | HTTP | Active | FastAPI server; rest-pusher POSTs vendor payloads here |

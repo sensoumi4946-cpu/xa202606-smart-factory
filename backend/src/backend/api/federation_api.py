@@ -5,6 +5,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
+from backend import config
 
 from analytics.decision_provenance import ledger
 from semantic_layer.cross_factory import (
@@ -29,7 +30,7 @@ class SiteRegistration(BaseModel):
 
 
 class SeedRequest(BaseModel):
-    local_sparql: str = "http://localhost:3030/factory/sparql"
+    local_sparql: str = config.FUSEKI_QUERY_URL
     partner_sparql: str = "http://localhost:3031/partner/sparql"
 
 

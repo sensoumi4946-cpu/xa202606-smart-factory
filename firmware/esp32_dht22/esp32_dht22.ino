@@ -1,36 +1,12 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
-#include <Preferences.h>
 #include <esp_task_wdt.h>
 #include <time.h>
 #include <mbedtls/md.h>
 #include <ArduinoJson.h>
+#include <DHT.h>
+#include "device_config.h"
 #include "sensor_dht22.h"
-
-static const char* WIFI_SSID = "FACTORY_AP";
-static const char* WIFI_PASS = "changeme";
-static const char* MQTT_HOST = "192.168.1.50";
-static const uint16_t MQTT_PORT = 1883;
-static const char* DEVICE_ID = "ESP32_001_dht22";
-static const char* SUBSYSTEM = "temp_humidity";
-static const char* SIGNING_KEY = "changeme-must-match-backend";
-
-static const char* NTP_1 = "ntp.aliyun.com";
-static const char* NTP_2 = "cn.pool.ntp.org";
-
-static const uint32_t WDT_TIMEOUT_S = 30;
-static const uint32_t PUBLISH_INTERVAL_MS = 2000;
-static const uint32_t HEARTBEAT_TIMEOUT_MS = 15000;
-static const uint32_t MAX_CLOCK_SKEW_S = 30;
-
-static const uint16_t RING_CAPACITY = 200;
-static const uint8_t BACKFILL_PER_CYCLE = 10;
-
-static const uint32_t MQ2_BURN_IN_MS = 180000UL;
-static const uint32_t MQ2_RECALIBRATION_INTERVAL_S = 2592000UL;
-
-static const uint8_t RELAY_PIN = 26;
-static const uint8_t RELAY_DE_ENERGISED = LOW;
 
 enum DeviceStatus : uint16_t {
   DEV_NORMAL = 0,
@@ -45,8 +21,7 @@ enum ErrorCode : uint16_t {
   ERR_READ_TIMEOUT = 1,
   ERR_CHECKSUM = 2,
   ERR_WIFI_LOST = 3,
-  ERR_LOW_VOLTAGE = 4,
-  ERR_CALIBRATION_DUE = 5
+  ERR_LOW_VOLTAGE = 4
 };
 
 enum SensorStatus : uint16_t {
@@ -89,21 +64,16 @@ struct RingBuffer {
 
 WiFiClient netClient;
 PubSubClient mqtt(netClient);
-Preferences prefs;
 RingBuffer buffer;
 
 uint16_t deviceStatus = DEV_STARTING;
 uint16_t errorCode = ERR_NONE;
 uint16_t sensorStatus = SEN_WARMING_UP;
 
-uint32_t bootMillis = 0;
 uint32_t lastPublish = 0;
 uint32_t lastHeartbeat = 0;
 bool timeSynced = false;
 bool failSafeEngaged = false;
-
-float mq2R0 = 0.0f;
-uint32_t mq2CalibratedAt = 0;
 
 char lastNonce[24] = {0};
 
@@ -178,12 +148,16 @@ static bool verifyCommand(JsonDocument& doc) {
     return false;
   }
 
-  char canonical[384];
+  char paramsJson[192];
+  serializeJson(doc["params"], paramsJson, sizeof(paramsJson));
+
+  char canonical[576];
   snprintf(canonical, sizeof(canonical),
-           "%s|%s|%s|%s|%s",
+           "%s|%s|%s|%s|%s|%s",
            doc["command_id"] | "",
            doc["device_id"] | "",
            doc["action"] | "",
+           paramsJson,
            issuedAt,
            nonce);
 
@@ -210,31 +184,6 @@ static bool verifyCommand(JsonDocument& doc) {
 
   strncpy(lastNonce, nonce, sizeof(lastNonce) - 1);
   return true;
-}
-
-static void calibrateMq2() {
-  prefs.begin("cal", false);
-  mq2R0 = prefs.getFloat("mq2_r0", 0.0f);
-  mq2CalibratedAt = prefs.getUInt("mq2_at", 0);
-  prefs.end();
-
-  uint32_t current = nowEpoch();
-  bool due = (mq2R0 <= 0.0f) ||
-             (current > 0 && mq2CalibratedAt > 0 &&
-              (current - mq2CalibratedAt) > MQ2_RECALIBRATION_INTERVAL_S);
-
-  if (due) {
-    errorCode = ERR_CALIBRATION_DUE;
-    Serial.println("[cal] MQ-2 calibration due");
-  }
-}
-
-static void finishBurnIn() {
-  if (sensorStatus == SEN_WARMING_UP && millis() - bootMillis > MQ2_BURN_IN_MS) {
-    sensorStatus = SEN_OK;
-    deviceStatus = DEV_NORMAL;
-    Serial.println("[cal] burn-in complete, readings now trusted");
-  }
 }
 
 static bool readSensor(Reading& out) {
@@ -362,7 +311,6 @@ void setup() {
   pinMode(RELAY_PIN, OUTPUT);
   digitalWrite(RELAY_PIN, RELAY_DE_ENERGISED);
 
-  bootMillis = millis();
   deviceStatus = DEV_STARTING;
   sensorStatus = SEN_WARMING_UP;
 
@@ -375,8 +323,9 @@ void setup() {
   esp_task_wdt_add(NULL);
 
   initSensor();
+  sensorStatus = SEN_OK;
+  deviceStatus = DEV_NORMAL;
   connectWifi();
-  calibrateMq2();
 
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setCallback(onCommand);
@@ -390,8 +339,6 @@ void loop() {
   connectWifi();
   connectMqtt();
   mqtt.loop();
-
-  finishBurnIn();
 
   if (millis() - lastHeartbeat > HEARTBEAT_TIMEOUT_MS) {
     applyFailSafe("no platform heartbeat");

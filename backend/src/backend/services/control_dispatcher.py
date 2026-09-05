@@ -33,7 +33,7 @@ def _publish_blocking(topic: str, payload: dict) -> None:
 
     publish.single(
         topic,
-        payload=json.dumps(payload),
+        payload=json.dumps(payload, sort_keys=True, separators=(",", ":")),
         qos=1,
         hostname=config.MQTT_BROKER_HOST,
         port=config.MQTT_BROKER_PORT,
@@ -47,6 +47,7 @@ async def dispatch(
     action: str,
     params: dict,
     subsystem: str = "actuator",
+    payload: dict | None = None,
 ) -> bool:
     """Push one command to the broker. Returns False if the broker is down.
 
@@ -55,11 +56,11 @@ async def dispatch(
     operator can deal with it.
     """
     topic = control_topic(device_id, subsystem)
-    payload = build_payload(command_id, device_id, action, params)
+    outbound = payload or build_payload(command_id, device_id, action, params)
 
     try:
         await asyncio.wait_for(
-            asyncio.to_thread(_publish_blocking, topic, payload),
+            asyncio.to_thread(_publish_blocking, topic, outbound),
             timeout=CONTROL_TIMEOUT,
         )
     except Exception as exc:

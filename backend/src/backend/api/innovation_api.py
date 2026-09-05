@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from typing import Any, Optional
 
@@ -9,8 +8,10 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from analytics.thresholds import resolver
+from backend import config
 from semantic_layer.conformance_kit import render as render_kit
 from semantic_layer.conformance_kit import run_kit
+from semantic_layer.meta_model import MetaModelRegistry
 from semantic_layer.meta_model import registry as meta_registry
 from semantic_layer.ontology_migration import plan_migration
 from semantic_layer.ontology_migration import render as render_plan
@@ -30,12 +31,12 @@ HAND_WRITTEN_ADAPTER_FILES = (
 )
 
 BINDING_CONSTANT_MARKERS = (
-    "REGISTER_BASE",
-    "REGISTER_COUNT",
+    "ESP32_001",
+    "ESP32_005",
     "40001",
-    "register_map",
-    "node_map",
-    "topic_map",
+    "40002",
+    "AGV.Distance",
+    "factory/temp_humidity/sensors/ESP32_001",
 )
 
 
@@ -59,8 +60,7 @@ def _candidate_paths(name: str) -> list[Path]:
     return out
 
 
-def load_bindings(path: Optional[str] = None) -> int:
-    name = path or os.getenv("BINDINGS_TTL", "bindings.ttl")
+def _resolve_config_file(name: str) -> Optional[Path]:
     target = Path(name)
     if not target.is_absolute() or not target.exists():
         for candidate in _candidate_paths(name):
@@ -68,17 +68,74 @@ def load_bindings(path: Optional[str] = None) -> int:
                 target = candidate
                 break
     if not target.exists():
+        return None
+    return target
+
+
+def _prepare_bindings(
+    path: Optional[str] = None,
+) -> tuple[Optional[BindingRegistry], Optional[Path], list[str]]:
+    name = path or config.BINDINGS_TTL
+    target = _resolve_config_file(name)
+    if target is None:
         logger.warning(
             "bindings file %s not found (searched %s) — adapter generation DISABLED",
             name,
             [str(p) for p in _candidate_paths(name)[:4]],
         )
-        return 0
-    result = binding_registry.load_turtle(target.read_text(encoding="utf-8"))
+        return None, None, ["file not found"]
+    fresh = BindingRegistry()
+    result = fresh.load_turtle(target.read_text(encoding="utf-8"))
     if not result.accepted:
         logger.error("bindings rejected: %s", result.violations)
+        return None, target, result.violations
+    return fresh, target, []
+
+
+def load_bindings(path: Optional[str] = None) -> int:
+    global binding_registry
+    fresh, _, _ = _prepare_bindings(path)
+    if fresh is None:
         return 0
+    # Replace only after complete validation, so a bad reload preserves the
+    # active registry. Module consumers resolve this global at request time.
+    binding_registry = fresh
     return len(binding_registry)
+
+
+def _prepare_thresholds(
+    path: Optional[str] = None,
+) -> tuple[Optional[MetaModelRegistry], Optional[Path], list[str]]:
+    name = path or config.THRESHOLDS_TTL
+    target = _resolve_config_file(name)
+    if target is None:
+        return None, None, ["file not found"]
+    scratch = MetaModelRegistry()
+    checked = scratch.load_turtle(target.read_text(encoding="utf-8"))
+    if not checked.accepted:
+        logger.error("threshold ontology rejected: %s", checked.violations)
+        return None, target, checked.violations
+    return scratch, target, []
+
+
+def load_thresholds(path: Optional[str] = None) -> dict[str, Any]:
+    scratch, target, violations = _prepare_thresholds(path)
+    if scratch is None:
+        return {
+            "accepted": False,
+            "source": str(target or path or config.THRESHOLDS_TTL),
+            "violations": violations,
+        }
+
+    meta_registry.replace_with(scratch)
+    resolver.bind(meta_registry)
+    return {
+        "accepted": True,
+        "version": scratch.version,
+        "properties_added": sorted(scratch.properties()),
+        "source": str(target),
+        "violations": [],
+    }
 
 
 def adapter_line_audit() -> dict[str, Any]:
@@ -120,6 +177,53 @@ async def threshold_sources() -> dict[str, Any]:
             }
         )
     return {**report, "properties": detail}
+
+
+@router.post("/reload")
+async def reload_runtime_configuration() -> dict[str, Any]:
+    """Validate and atomically replace backend bindings and thresholds."""
+    global binding_registry
+    fresh_bindings, _, binding_errors = _prepare_bindings()
+    fresh_thresholds, threshold_path, threshold_errors = _prepare_thresholds()
+    if fresh_bindings is None:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": "binding reload failed; active configuration was preserved",
+                "violations": binding_errors,
+            },
+        )
+    if fresh_thresholds is None:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": "threshold reload failed; active configuration was preserved",
+                "violations": threshold_errors,
+            },
+        )
+    # No await occurs between validation and replacement. With the enforced
+    # single backend worker, requests cannot observe a partially applied pair.
+    binding_registry = fresh_bindings
+    meta_registry.replace_with(fresh_thresholds)
+    resolver.bind(meta_registry)
+    binding_count = len(binding_registry)
+    threshold_version = fresh_thresholds.version
+    logger.info(
+        "runtime configuration reloaded: bindings=%d threshold_version=%s",
+        binding_count,
+        threshold_version,
+    )
+    return {
+        "reloaded": True,
+        "bindings": binding_count,
+        "devices": binding_registry.devices(),
+        "thresholds": {
+            "version": threshold_version,
+            "properties": sorted(meta_registry.properties()),
+            "source": str(threshold_path),
+        },
+        "adapter_action": "send SIGHUP or run deploy/openeuler/reload-bindings.sh",
+    }
 
 
 @router.get("/adapters")

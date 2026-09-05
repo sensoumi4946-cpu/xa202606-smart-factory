@@ -21,7 +21,7 @@ _TIMEOUT = 5.0
 
 
 async def _run_query(sparql: str) -> list[dict[str, Any]]:
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+    async with httpx.AsyncClient(timeout=_TIMEOUT, trust_env=False) as client:
         resp = await client.post(
             config.FUSEKI_QUERY_URL,
             content=sparql.encode("utf-8"),
@@ -35,7 +35,7 @@ async def _run_query(sparql: str) -> list[dict[str, Any]]:
 
 
 def _simplify(bindings: list[dict]) -> list[dict]:
-    
+
     rows = []
     for b in bindings:
         row = {}

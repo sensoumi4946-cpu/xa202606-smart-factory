@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { defineAsyncComponent, ref, onMounted } from 'vue'
 import ConsoleLayout from './layouts/ConsoleLayout.vue'
-import DashboardView from './views/DashboardView.vue'
-import OntologyLabView from './views/OntologyLabView.vue'
-import ApiConsoleView from './views/ApiConsoleView.vue'
-import DeviceManagerView from './views/DeviceManagerView.vue'
-import SystemStatusView from './views/SystemStatusView.vue'
-import WallboardView from './views/WallboardView.vue'
 import { ensureDeviceMetaLoaded } from './deviceMeta'
 import { refreshAll } from './usePoll'
+
+const DashboardView = defineAsyncComponent(() => import('./views/DashboardView.vue'))
+const OntologyLabView = defineAsyncComponent(() => import('./views/OntologyLabView.vue'))
+const ApiConsoleView = defineAsyncComponent(() => import('./views/ApiConsoleView.vue'))
+const DeviceManagerView = defineAsyncComponent(() => import('./views/DeviceManagerView.vue'))
+const SystemStatusView = defineAsyncComponent(() => import('./views/SystemStatusView.vue'))
+const WallboardView = defineAsyncComponent(() => import('./views/WallboardView.vue'))
 
 const active = ref('monitor')
 const refreshKey = ref(0)

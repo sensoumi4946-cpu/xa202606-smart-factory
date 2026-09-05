@@ -41,6 +41,15 @@ def parse_payload(payload: dict[str, Any]) -> UnifiedMessage:
     if not isinstance(payload, dict):
         raise ValueError("unknown payload format")
 
+    if {
+        "schema_version",
+        "device_id",
+        "subsystem",
+        "protocol",
+        "measurements",
+    } <= payload.keys():
+        return UnifiedMessage.model_validate(payload)
+
     is_lighting = "device" in payload and "metrics" in payload
     is_counting = "d" in payload and "v" in payload
     if is_lighting and is_counting:

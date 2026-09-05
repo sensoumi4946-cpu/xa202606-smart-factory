@@ -22,6 +22,82 @@ def _t_critical(dof: int) -> float:
             return T_95[k]
     return 1.96
 
+@dataclass
+class Fit:
+    n: int
+    slope: float
+    intercept: float
+    r_squared: float
+    residual_sigma: float
+    slope_ci_low: float
+    slope_ci_high: float
+    significant: bool
+    mean_x: float
+    sxx: float
+    span_x: float
+    last_x: float
+    last_y: float
+
+    def predict_at(self, x: float) -> float:
+        return self.intercept + self.slope * x
+
+    def prediction_interval(self, x: float) -> tuple[float, float]:
+        if self.residual_sigma <= 0 or self.sxx <= 0:
+            centre = self.predict_at(x)
+            return centre, centre
+        t_crit = _t_critical(self.n - 2)
+        se = self.residual_sigma * math.sqrt(
+            1.0 + 1.0 / self.n + (x - self.mean_x) ** 2 / self.sxx
+        )
+        centre = self.predict_at(x)
+        return centre - t_crit * se, centre + t_crit * se
+
+
+def fit(points: list[tuple[float, float]], min_samples: int = MIN_SAMPLES):
+    if len(points) < min_samples:
+        return None
+
+    xs = [p[0] for p in points]
+    ys = [p[1] for p in points]
+    n = len(xs)
+
+    mean_x = sum(xs) / n
+    mean_y = sum(ys) / n
+    sxx = sum((x - mean_x) ** 2 for x in xs)
+    if sxx == 0.0:
+        return None
+
+    sxy = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys))
+    slope = sxy / sxx
+    intercept = mean_y - slope * mean_x
+
+    residuals = [y - (intercept + slope * x) for x, y in zip(xs, ys)]
+    ss_res = sum(r * r for r in residuals)
+    ss_tot = sum((y - mean_y) ** 2 for y in ys)
+    r_squared = max(0.0, 1.0 - ss_res / ss_tot) if ss_tot > 0 else 0.0
+
+    dof = n - 2
+    sigma = math.sqrt(ss_res / dof) if dof > 0 else 0.0
+    se_slope = sigma / math.sqrt(sxx) if sxx > 0 else 0.0
+    t_crit = _t_critical(dof)
+    low = slope - t_crit * se_slope
+    high = slope + t_crit * se_slope
+
+    return Fit(
+        n=n,
+        slope=slope,
+        intercept=intercept,
+        r_squared=r_squared,
+        residual_sigma=sigma,
+        slope_ci_low=low,
+        slope_ci_high=high,
+        significant=low > 0 or high < 0,
+        mean_x=mean_x,
+        sxx=sxx,
+        span_x=max(xs) - min(xs),
+        last_x=xs[-1],
+        last_y=ys[-1],
+    )
 
 @dataclass
 class Sample:

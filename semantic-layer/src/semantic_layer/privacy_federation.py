@@ -187,9 +187,7 @@ def summarise(
         raw_rate = 0.0
     noisy_rate = min(1.0, max(0.0, raw_rate + _laplace(1.0 / (n * per_statistic), rng)))
 
-    breaches = (
-        sum(1 for v in values if v > threshold) if threshold is not None else 0
-    )
+    breaches = sum(1 for v in values if v > threshold) if threshold is not None else 0
     noisy_breaches = max(0, int(round(breaches + _laplace(1.0 / per_statistic, rng))))
 
     return StatisticalSummary(
@@ -334,10 +332,12 @@ class StatisticsExchange:
         client: Optional[httpx.AsyncClient] = None,
     ) -> list[StatisticalSummary]:
         owns = client is None
-        client = client or httpx.AsyncClient()
+        client = client or httpx.AsyncClient(trust_env=False)
 
         async def fetch(site) -> Optional[StatisticalSummary]:
-            url = site.sparql_endpoint.rsplit("/", 1)[0] + "/api/v1/federation/statistics"
+            url = (
+                site.sparql_endpoint.rsplit("/", 1)[0] + "/api/v1/federation/statistics"
+            )
             assert client is not None
             try:
                 response = await client.get(

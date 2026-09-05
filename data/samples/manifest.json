@@ -1,0 +1,12 @@
+{
+  "dataset": "five_subsystems.jsonl",
+  "classification": "synthetic demonstration fixture",
+  "is_physical_sensor_data": false,
+  "purpose": "Contract, semantic-gate, binding-coverage, and UI demonstration",
+  "limitations": [
+    "Values are hand-authored examples, not measurements captured from devices.",
+    "No device acquisition timestamps or raw ADC/register values are available.",
+    "No calibration instrument, uncertainty, repetition, packet-loss, or latency metadata is available.",
+    "These records must not be cited as accuracy or performance evidence."
+  ]
+}

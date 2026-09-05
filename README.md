@@ -13,10 +13,14 @@ POST JSON。这个平台把它们接到一起，校验数据，存成 RDF 知识
 字节序、Modbus 功能码、轮询周期、OPC UA 节点号，全部写在那一个文件。平台读这个
 文件，自动生成四种协议的适配代码。
 
-Python 里没有任何一处写死的寄存器地址。有测试专门检查这件事，谁往适配器里写了
-地址，测试就会失败。
+实时 Modbus、OPC UA 和 MQTT 适配器从同一份已校验绑定表构造读取/订阅计划；设备 ID、
+地址、单位、缩放、功能码、Topic 和节点号不再散落在协议代码里。生成物可用
+`make check-generated` 校验，地址重叠和重复绑定会在加载阶段被拒绝。
 
-接一台新设备：写几行三元组，重新生成，完事。不改业务代码，不重启服务。
+接入一个**已有测量和单位类型**的新设备，只需修改 `bindings.ttl` 并重新生成；openEuler
+部署可用 `sudo xa202606-reload` 让后端、绑定服务和活动适配器在原进程内重载配置，无需
+重启进程。增加全新的测量或单位类型仍需同步修改 Python 消息契约、语义映射、本体和
+测试，不能只增加 Turtle 三元组。
 
 ## 需要什么
 
@@ -48,8 +52,10 @@ cd dashboard && npm install && cd ..
 API_KEY=你自己的密钥
 ```
 
-其余的都有默认值，本机跑不用改。Fuseki 写入地址默认
+远程控制还必须设置 `COMMAND_SIGNING_KEY`，设备端使用相同密钥。其余参数有本地开发
+默认值。Fuseki 写入地址默认
 `http://localhost:3030/factory/data`，查询地址 `http://localhost:3030/factory/query`。
+设置 `SEMANTIC_WRITE_ENABLED=true` 才会启动知识图谱写入和同步任务。
 
 前端在 `dashboard/.env` 里写：
 
@@ -70,7 +76,7 @@ Vite 只在启动时读 `.env`，改了要重启 `npm run dev`。
 uvicorn backend.main:app --host 0.0.0.0 --port 8000
 ```
 
-启动日志里应该有 `loaded 13 protocol bindings`。如果是 0，说明路径不对。
+启动日志里应该有 `loaded 17 protocol bindings`。如果是 0，说明路径不对。
 
 **Fuseki**（可选）：
 
@@ -87,6 +93,13 @@ npm run dev
 ```
 
 打开 http://localhost:5173
+
+Docker Compose 默认启动后端、Fuseki、MQTT、REST 和执行器模拟器。连接真实 Modbus /
+OPC UA 设备时使用硬件 profile，并按现场地址覆盖环境变量：
+
+```bash
+docker compose -f deploy/docker-compose.yml --profile hardware up -d --build
+```
 
 ## 发一条数据试试
 
@@ -109,19 +122,42 @@ curl -X POST http://localhost:8000/ingest/api/v1/data \
 python scripts/generate_adapters.py
 ```
 
-Windows 上用 `scripts\generate_adapters.ps1`。
-
 生成的四个 `generated_*_adapter.py` 是提交进仓库的，跟本体不一致时测试会报错。
 
 ## 测试
 
 ```bash
-cd semantic-layer && python -m pytest tests -q && cd ..
-cd connectivity  && python -m pytest tests -q && cd ..
-cd backend       && python -m pytest tests -q && cd ..
-cd analytics     && python -m pytest tests -q && cd ..
-cd dashboard     && npx vitest run && cd ..
+python -m pytest backend/tests connectivity/tests semantic-layer/tests analytics/tests shared/tests benchmark/tests validation/tests -q
+cd firmware && python -m pytest tests -q && cd ..
+cd dashboard && npm test -- --run && npm run build && cd ..
+python scripts/generate_adapters.py --check
+python scripts/validate_sample_data.py
 ```
+
+## openEuler 部署
+
+唯一支持的国产操作系统部署目标是 **openEuler 24.03 LTS**（x86_64 / AArch64）。
+使用 systemd 原生部署，不要求购买 UOS 或麒麟：
+
+```bash
+sudo bash deploy/openeuler/install.sh
+sudoedit /etc/xa202606/backend.env
+sudoedit /etc/xa202606/connectivity.env
+sudo bash deploy/openeuler/verify.sh
+```
+
+详细步骤、离线 wheelhouse 和 OPC UA 证书配置见 `deploy/openeuler/README.md`。
+修改绑定或阈值后运行 `sudo xa202606-reload`；它会先校验再执行无进程重启的协调重载。
+提交材料中的原创性/保密性声明核对稿见
+`docs/originality-confidentiality-declaration-template.md`；必须用组委会正式表格签署，
+仓库模板不能替代正式文件。
+
+## 五条示例数据的性质
+
+`data/samples/five_subsystems.jsonl` 是经过消息契约、SHACL 和协议绑定三重校验的
+**合成演示夹具**，不是传感器实测原始数据。运行 `python scripts/seed_sample_data.py
+--dry-run` 可以复核。实测精度、性能和稳定性必须按 `validation/EVIDENCE_PROTOCOL.md`
+采集，不能用这五个手填数值代替。
 
 三类配置校验用例：
 
@@ -131,7 +167,7 @@ python validation/run_validation.py
 
 合法地址通过并生成代码，非法地址和类型不一致在加载阶段被拒绝，都在 100ms 以内。
 
-人工配置对比：
+可复现的已知类型设备接入检查：
 
 ```bash
 python validation/run_benchmark.py
@@ -141,7 +177,7 @@ python validation/run_benchmark.py
 
 ```
 firmware/          ESP32 固件
-connectivity/      四个协议适配器，不含任何绑定常量
+connectivity/      四个协议适配器，运行计划由 bindings.ttl 构造
 backend/           FastAPI，接入、校验、存储
 semantic-layer/    本体解析、SHACL 校验、代码生成、RDF 映射
 analytics/         阈值规则、趋势预测
@@ -154,22 +190,26 @@ bindings.ttl       设备参数，唯一事实来源
 
 | 板子 | 传感器 | 子系统 | 协议 |
 |---|---|---|---|
-| ESP32_001 | DHT22 | 温湿度 | Modbus / MQTT / OPC UA |
+| ESP32_001 | DHT22 | 温湿度 | Modbus / MQTT / OPC UA（绑定已定义） |
 | ESP32_002 | 红外对射 | 货物计数 | REST |
 | ESP32_003 | PIR + 继电器 | 照明 | REST |
 | ESP32_004 | HC-SR04 | AGV 避障 | OPC UA |
+| ESP32_005 | MQ-2 / MQ-7 | 危险气体 | Modbus |
 
-气体和 AGV 子系统在本体里声明了但还没接硬件。这是故意留着的——硬件到了以后接
-进来不需要写代码。
+上表描述的是绑定拓扑，不等同于硬件完成状态。五块板已有参考采集固件，其中
+ESP32_004 通过 openEuler 串口网关暴露 OPC UA 节点；所有草图仍需在实际板卡上编译、
+接线、校准和留存端到端证据。
 
 ## 还没做完的
 
 - 报文里没有设备自己的时间戳，用的是服务器收到的时间。断网重连后一批数据会挤在
   同一时刻。
-- 仓库里只有 ESP32_001 的固件，另外三块板子的还没提交。
-- 固件版本号、MAC、运行时长、报文数固件没上报，界面上这几列是空的。
-- 没跑过完整的硬件端到端测试。
-- 接入延迟、CPU、内存、连续运行稳定性还没测。
+- 固件版本号和 MAC 尚未统一上报；部分参考固件只把运行时长放在 `raw_payload`。
+- 没跑过完整的硬件端到端测试；已有 openEuler 安装和自检脚本，但尚无目标机执行日志。
+- 接入延迟、采集精度、跨平台通信效率、CPU、内存和连续运行稳定性还没测。
+- OPC UA 适配器支持 Basic256Sha256、SignAndEncrypt、客户端证书和服务端证书固定；
+  现场仍必须签发证书并按 `deploy/openeuler/connectivity.env.example` 配置，未配置时不能
+  作为生产安全链路使用。
 
 ## 常见问题
 
@@ -177,10 +217,9 @@ bindings.ttl       设备参数，唯一事实来源
 
 不在仓库根目录启动的。`cd` 到根目录再跑 uvicorn。
 
-**返回 kg_written: False**
+**返回 kg_write: queued**
 
-Fuseki 没起，或者 `FUSEKI_ENDPOINT` 被环境变量覆盖成了错的地址。清掉环境变量，
-用默认值。
+写入在后台执行。检查 `SEMANTIC_WRITE_ENABLED`、Fuseki 健康状态和后端日志确认结果。
 
 **界面一直显示未检测到设备**
 

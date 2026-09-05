@@ -111,7 +111,9 @@ def _referenced_properties(query: str, properties: list[str]) -> list[str]:
     return [p for p in properties if p.lower() in lowered]
 
 
-def guard(query: str, properties: list[str], subsystems: list[str]) -> tuple[bool, list[str]]:
+def guard(
+    query: str, properties: list[str], subsystems: list[str]
+) -> tuple[bool, list[str]]:
     violations: list[str] = []
     if not query.strip():
         return False, ["empty query"]
@@ -211,7 +213,7 @@ async def call_llm(prompt: str, client: Optional[httpx.AsyncClient] = None) -> s
         raise RuntimeError("LLM_API_KEY is not set")
 
     owns = client is None
-    active = client if client is not None else httpx.AsyncClient()
+    active = client if client is not None else httpx.AsyncClient(trust_env=False)
     try:
         response = await active.post(
             LLM_ENDPOINT,
@@ -288,5 +290,7 @@ async def translate(
         source="llm",
         violations=violations,
         used_properties=_referenced_properties(sparql, properties),
-        explanation="由模型生成，已通过本体词汇与只读约束校验" if ok else "已被约束层拦截",
+        explanation="由模型生成，已通过本体词汇与只读约束校验"
+        if ok
+        else "已被约束层拦截",
     )

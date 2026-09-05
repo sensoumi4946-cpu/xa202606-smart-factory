@@ -1,36 +1,12 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
-#include <Preferences.h>
 #include <esp_task_wdt.h>
 #include <time.h>
 #include <mbedtls/md.h>
 #include <ArduinoJson.h>
+#include <DHT.h>
+#include "device_config.h"
 #include "sensor_dht22.h"
-
-static const char* WIFI_SSID = "FACTORY_AP";
-static const char* WIFI_PASS = "changeme";
-static const char* MQTT_HOST = "192.168.1.50";
-static const uint16_t MQTT_PORT = 1883;
-static const char* DEVICE_ID = "ESP32_001_dht22";
-static const char* SUBSYSTEM = "temp_humidity";
-static const char* SIGNING_KEY = "changeme-must-match-backend";
-
-static const char* NTP_1 = "ntp.aliyun.com";
-static const char* NTP_2 = "cn.pool.ntp.org";
-
-static const uint32_t WDT_TIMEOUT_S = 30;
-static const uint32_t PUBLISH_INTERVAL_MS = 2000;
-static const uint32_t HEARTBEAT_TIMEOUT_MS = 15000;
-static const uint32_t MAX_CLOCK_SKEW_S = 30;
-
-static const uint16_t RING_CAPACITY = 200;
-static const uint8_t BACKFILL_PER_CYCLE = 10;
-
-static const uint32_t MQ2_BURN_IN_MS = 180000UL;
-static const uint32_t MQ2_RECALIBRATION_INTERVAL_S = 2592000UL;
-
-static const uint8_t RELAY_PIN = 26;
-static const uint8_t RELAY_DE_ENERGISED = LOW;
 
 enum DeviceStatus : uint16_t {
   DEV_NORMAL = 0,
@@ -45,8 +21,7 @@ enum ErrorCode : uint16_t {
   ERR_READ_TIMEOUT = 1,
   ERR_CHECKSUM = 2,
   ERR_WIFI_LOST = 3,
-  ERR_LOW_VOLTAGE = 4,
-  ERR_CALIBRATION_DUE = 5
+  ERR_LOW_VOLTAGE = 4
 };
 
 enum SensorStatus : uint16_t {
@@ -89,23 +64,20 @@ struct RingBuffer {
 
 WiFiClient netClient;
 PubSubClient mqtt(netClient);
-Preferences prefs;
 RingBuffer buffer;
 
 uint16_t deviceStatus = DEV_STARTING;
 uint16_t errorCode = ERR_NONE;
 uint16_t sensorStatus = SEN_WARMING_UP;
 
-uint32_t bootMillis = 0;
 uint32_t lastPublish = 0;
 uint32_t lastHeartbeat = 0;
 bool timeSynced = false;
 bool failSafeEngaged = false;
 
-float mq2R0 = 0.0f;
-uint32_t mq2CalibratedAt = 0;
-
-char lastNonce[24] = {0};
+char recentNonces[64][25] = {};
+uint32_t nonceTimes[64] = {};
+uint8_t nonceCursor = 0;
 
 static void applyFailSafe(const char* reason) {
   if (!failSafeEngaged) {
@@ -128,7 +100,7 @@ static uint32_t nowEpoch() {
 }
 
 static void syncTime() {
-  configTime(8 * 3600, 0, NTP_1, NTP_2);
+  configTime(0, 0, NTP_1, NTP_2);
   uint32_t deadline = millis() + 10000;
   while (millis() < deadline) {
     if (nowEpoch() > 0) {
@@ -173,17 +145,21 @@ static bool verifyCommand(JsonDocument& doc) {
     Serial.println("[cmd] rejected: unsigned");
     return false;
   }
-  if (strcmp(nonce, lastNonce) == 0) {
-    Serial.println("[cmd] rejected: nonce replay");
-    return false;
+  if (strcmp(doc["device_id"] | "", DEVICE_ID) != 0 || strlen(nonce) != 24 || !timeSynced) return false;
+  for (uint8_t i = 0; i < 64; i++) {
+    if (strcmp(nonce, recentNonces[i]) == 0) return false;
   }
 
-  char canonical[384];
+  char paramsJson[192];
+  serializeJson(doc["params"], paramsJson, sizeof(paramsJson));
+
+  char canonical[576];
   snprintf(canonical, sizeof(canonical),
-           "%s|%s|%s|%s|%s",
+           "%s|%s|%s|%s|%s|%s",
            doc["command_id"] | "",
            doc["device_id"] | "",
            doc["action"] | "",
+           paramsJson,
            issuedAt,
            nonce);
 
@@ -195,46 +171,20 @@ static bool verifyCommand(JsonDocument& doc) {
     return false;
   }
 
-  if (timeSynced && strlen(issuedAt) >= 19) {
-    struct tm tmv = {0};
-    if (strptime(issuedAt, "%Y-%m-%dT%H:%M:%S", &tmv) != nullptr) {
-      uint32_t issued = (uint32_t)mktime(&tmv);
-      uint32_t current = nowEpoch();
-      uint32_t skew = (current > issued) ? (current - issued) : (issued - current);
-      if (skew > MAX_CLOCK_SKEW_S) {
-        Serial.printf("[cmd] rejected: stale by %lus\n", (unsigned long)skew);
-        return false;
-      }
-    }
-  }
-
-  strncpy(lastNonce, nonce, sizeof(lastNonce) - 1);
+  if (strlen(issuedAt) < 20) return false;
+  struct tm tmv = {};
+  if (strptime(issuedAt, "%Y-%m-%dT%H:%M:%S", &tmv) == nullptr) return false;
+  const size_t stampLength = strlen(issuedAt);
+  if (issuedAt[stampLength - 1] != 'Z' && (stampLength < 6 || strcmp(issuedAt + stampLength - 6, "+00:00") != 0)) return false;
+  const time_t issued = mktime(&tmv);
+  const time_t current = nowEpoch();
+  if (llabs((long long)current - issued) > MAX_CLOCK_SKEW_S) return false;
+  if (recentNonces[nonceCursor][0] && current <= nonceTimes[nonceCursor] + MAX_CLOCK_SKEW_S * 2) return false;
+  strncpy(recentNonces[nonceCursor], nonce, 24);
+  recentNonces[nonceCursor][24] = '\0';
+  nonceTimes[nonceCursor] = current;
+  nonceCursor = (nonceCursor + 1) % 64;
   return true;
-}
-
-static void calibrateMq2() {
-  prefs.begin("cal", false);
-  mq2R0 = prefs.getFloat("mq2_r0", 0.0f);
-  mq2CalibratedAt = prefs.getUInt("mq2_at", 0);
-  prefs.end();
-
-  uint32_t current = nowEpoch();
-  bool due = (mq2R0 <= 0.0f) ||
-             (current > 0 && mq2CalibratedAt > 0 &&
-              (current - mq2CalibratedAt) > MQ2_RECALIBRATION_INTERVAL_S);
-
-  if (due) {
-    errorCode = ERR_CALIBRATION_DUE;
-    Serial.println("[cal] MQ-2 calibration due");
-  }
-}
-
-static void finishBurnIn() {
-  if (sensorStatus == SEN_WARMING_UP && millis() - bootMillis > MQ2_BURN_IN_MS) {
-    sensorStatus = SEN_OK;
-    deviceStatus = DEV_NORMAL;
-    Serial.println("[cal] burn-in complete, readings now trusted");
-  }
 }
 
 static bool readSensor(Reading& out) {
@@ -266,15 +216,38 @@ static bool readSensor(Reading& out) {
 }
 
 static void buildPayload(const Reading& r, char* out, size_t len) {
-  snprintf(out, len,
-           "{\"schema_version\":\"v1\",\"device_id\":\"%s\",\"subsystem\":\"%s\","
-           "\"protocol\":\"mqtt\",\"measurements\":["
-           "{\"type\":\"temperature\",\"value\":%.1f,\"unit\":\"celsius\"},"
-           "{\"type\":\"humidity\",\"value\":%.1f,\"unit\":\"percent\"}],"
-           "\"device_status\":%u,\"error_code\":%u,\"sensor_status\":%u,"
-           "\"buffered\":%u}",
-           DEVICE_ID, SUBSYSTEM, r.temperature, r.humidity,
-           deviceStatus, errorCode, sensorStatus, buffer.size());
+  JsonDocument doc;
+  doc["schema_version"] = "v1";
+  doc["device_id"] = DEVICE_ID;
+  doc["subsystem"] = SUBSYSTEM;
+  doc["protocol"] = "mqtt";
+  if (r.epoch > 0) {
+    time_t epoch = r.epoch;
+    struct tm utc;
+    gmtime_r(&epoch, &utc);
+    char stamp[24];
+    strftime(stamp, sizeof(stamp), "%Y-%m-%dT%H:%M:%SZ", &utc);
+    doc["timestamp"] = stamp;
+  }
+  JsonArray values = doc["measurements"].to<JsonArray>();
+  JsonObject temperature = values.add<JsonObject>();
+  temperature["type"] = "temperature";
+  temperature["value"] = r.temperature;
+  temperature["unit"] = "celsius";
+  JsonObject humidity = values.add<JsonObject>();
+  humidity["type"] = "humidity";
+  humidity["value"] = r.humidity;
+  humidity["unit"] = "percent";
+  const char* names[] = {"device_status", "error_code", "sensor_status"};
+  uint16_t statuses[] = {deviceStatus, errorCode, sensorStatus};
+  for (uint8_t i = 0; i < 3; i++) {
+    JsonObject status = values.add<JsonObject>();
+    status["type"] = names[i];
+    status["value"] = statuses[i];
+    status["unit"] = "status";
+  }
+  doc["raw_payload"]["buffered"] = buffer.size();
+  serializeJson(doc, out, len);
 }
 
 static bool publish(const Reading& r) {
@@ -282,7 +255,7 @@ static bool publish(const Reading& r) {
   char topic[128];
   snprintf(topic, sizeof(topic), "factory/%s/sensors/%s/reading",
            SUBSYSTEM, DEVICE_ID);
-  char payload[512];
+  char payload[1024];
   buildPayload(r, payload, sizeof(payload));
   return mqtt.publish(topic, payload);
 }
@@ -305,17 +278,11 @@ static void onCommand(char* topic, byte* payload, unsigned int length) {
   StaticJsonDocument<512> doc;
   if (deserializeJson(doc, payload, length) != DeserializationError::Ok) return;
 
-  lastHeartbeat = millis();
-
-  const char* type = doc["type"] | "";
-  if (strcmp(type, "heartbeat") == 0) {
-    releaseFailSafe();
-    return;
-  }
-
   if (!verifyCommand(doc)) return;
-
+  lastHeartbeat = millis();
+  releaseFailSafe();
   const char* action = doc["action"] | "";
+  if (strcmp(action, "heartbeat") == 0) return;
   if (strcmp(action, "on") == 0) {
     digitalWrite(RELAY_PIN, HIGH);
   } else if (strcmp(action, "off") == 0 || strcmp(action, "close") == 0) {
@@ -362,7 +329,6 @@ void setup() {
   pinMode(RELAY_PIN, OUTPUT);
   digitalWrite(RELAY_PIN, RELAY_DE_ENERGISED);
 
-  bootMillis = millis();
   deviceStatus = DEV_STARTING;
   sensorStatus = SEN_WARMING_UP;
 
@@ -375,8 +341,9 @@ void setup() {
   esp_task_wdt_add(NULL);
 
   initSensor();
+  sensorStatus = SEN_OK;
+  deviceStatus = DEV_NORMAL;
   connectWifi();
-  calibrateMq2();
 
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setCallback(onCommand);
@@ -390,8 +357,6 @@ void loop() {
   connectWifi();
   connectMqtt();
   mqtt.loop();
-
-  finishBurnIn();
 
   if (millis() - lastHeartbeat > HEARTBEAT_TIMEOUT_MS) {
     applyFailSafe("no platform heartbeat");

@@ -1,4 +1,5 @@
 import json
+import hmac
 import sys
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -40,6 +41,15 @@ def log_json(event: str, level: str = "info", **kwargs):
 def parse_payload(payload: dict[str, Any]) -> UnifiedMessage:
     if not isinstance(payload, dict):
         raise ValueError("unknown payload format")
+
+    if {
+        "schema_version",
+        "device_id",
+        "subsystem",
+        "protocol",
+        "measurements",
+    } <= payload.keys():
+        return UnifiedMessage.model_validate(payload)
 
     is_lighting = "device" in payload and "metrics" in payload
     is_counting = "d" in payload and "v" in payload
@@ -107,6 +117,9 @@ def create_app() -> FastAPI:
 
     @app.post("/adapter/rest/ingest")
     async def ingest(request: Request):
+        key = connectivity_models.BACKEND_API_KEY
+        if key and not hmac.compare_digest(request.headers.get("X-API-Key", ""), key):
+            raise HTTPException(status_code=401, detail="Invalid or missing API key")
         try:
             payload = await request.json()
             msg = parse_payload(payload)

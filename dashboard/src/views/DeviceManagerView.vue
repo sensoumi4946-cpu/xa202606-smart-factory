@@ -58,6 +58,7 @@ const rows = computed(() => {
       protocolKey: meta?.protocol ?? '',
       subsystem: subsystemLabel(meta?.subsystem),
       subsystemKey: meta?.subsystem ?? '',
+      controllable: meta?.protocol === 'mqtt',
       online: age !== null && age < FRESH_MS,
       age,
       ageText: shortAge(age),
@@ -129,9 +130,10 @@ async function sendControl(deviceId: string, action: string) {
       subsystem: DEVICE_META[deviceId]?.subsystem ?? 'actuator',
     })
     const body = res.body as { command_id?: string; status?: string } | null
-    controlMsg.value = res.ok
+    const dispatched = res.ok && body?.status === 'dispatched'
+    controlMsg.value = dispatched
       ? `${deviceId} ${action} 已下发 · ${body?.status ?? ''} · ${body?.command_id?.slice(0, 8) ?? ''}`
-      : `下发失败 HTTP ${res.status}`
+      : `下发失败：MQTT 服务或设备未连接（HTTP ${res.status}）`
   } catch {
     controlMsg.value = '下发失败：无法连接后端'
   } finally {
@@ -198,7 +200,8 @@ onUnmounted(() => {
       @retry="load"
     />
 
-    <table v-else>
+    <div v-else class="table-scroll">
+    <table>
       <thead>
         <tr>
           <th class="s" @click="sortBy('id')">设备号{{ arrow('id') }}</th>
@@ -229,8 +232,10 @@ onUnmounted(() => {
           <td class="c-msg mono">{{ r.messages || '--' }}</td>
           <td class="mono sum">{{ r.summary }}</td>
           <td class="c-ops">
-            <button :disabled="busy === `${r.id}:on`" @click="sendControl(r.id, 'on')">开启</button>
-            <button :disabled="busy === `${r.id}:off`" @click="sendControl(r.id, 'off')">关闭</button>
+            <template v-if="r.controllable">
+              <button :disabled="busy === `${r.id}:on`" @click="sendControl(r.id, 'on')">开启</button>
+              <button :disabled="busy === `${r.id}:off`" @click="sendControl(r.id, 'off')">关闭</button>
+            </template>
             <button @click="drawerDev = r.id">详情</button>
           </td>
         </tr>
@@ -241,6 +246,7 @@ onUnmounted(() => {
         </tr>
       </tbody>
     </table>
+    </div>
 
     <DeviceDrawer :device-id="drawerDev" @close="drawerDev = null" />
   </div>
@@ -248,6 +254,8 @@ onUnmounted(() => {
 
 <style scoped>
 .dm { padding: 12px 16px 20px; }
+.table-scroll { width: 100%; overflow-x: auto; }
+table { min-width: 980px; }
 .bar {
   display: flex;
   align-items: center;

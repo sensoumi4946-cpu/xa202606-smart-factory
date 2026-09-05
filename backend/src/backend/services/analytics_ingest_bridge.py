@@ -1,4 +1,4 @@
-# Bridges the ingest pipeline to the analytics layer.
+
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def analyse_after_ingest(
     measurements: list[dict],
 ) -> list[dict]:
     
-    # Returns list of any correlated alerts that fired
+    
     if not _analytics_available:
         return []
 

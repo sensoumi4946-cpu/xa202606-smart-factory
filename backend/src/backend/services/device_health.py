@@ -121,6 +121,8 @@ def diagnose(health: dict[str, Any], reachable: bool) -> dict[str, str]:
             "label": "预热中",
             "advice": "气体传感器预热期读数不可信，通常需要数分钟",
         }
+    if health.get("healthy") is None:
+        return {"verdict": "unknown", "label": "待上报", "advice": "尚无设备状态数据"}
     return {"verdict": "healthy", "label": "正常", "advice": ""}
 
 

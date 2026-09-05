@@ -3,60 +3,79 @@ import asyncio
 import pytest
 
 from connectivity.adapters import modbus_adapter
-from connectivity.adapters.modbus_adapter import ModbusAdapter, parse_registers
+from connectivity.adapters.modbus_adapter import ModbusAdapter
+from connectivity.generated_adapters import GeneratedAdapterSet
+from semantic_layer.protocol_binding import BindingRegistry
+
+GAS_BINDINGS = """
+@prefix sf: <http://example.org/smart-factory#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+sf:smoke a sf:ProtocolBinding ; sf:bindsProperty sf:measuresSmoke ;
+  sf:transportProtocol "modbus" ; sf:deviceId "gas-1" ;
+  sf:belongsToSubsystem sf:GasSubsystem ; sf:hasUnit "ppm" ;
+  sf:registerAddress 40001 ; sf:registerBase 40001 ; sf:functionCode 3 ;
+  sf:registerType "uint16" ; sf:scaleFactor "0.1"^^xsd:double ; sf:slaveId 1 .
+sf:co a sf:ProtocolBinding ; sf:bindsProperty sf:measuresCo ;
+  sf:transportProtocol "modbus" ; sf:deviceId "gas-1" ;
+  sf:belongsToSubsystem sf:GasSubsystem ; sf:hasUnit "ppm" ;
+  sf:registerAddress 40002 ; sf:registerBase 40001 ; sf:functionCode 3 ;
+  sf:registerType "uint16" ; sf:scaleFactor "0.1"^^xsd:double ; sf:slaveId 1 .
+sf:gas a sf:ProtocolBinding ; sf:bindsProperty sf:measuresCombustibleGas ;
+  sf:transportProtocol "modbus" ; sf:deviceId "gas-1" ;
+  sf:belongsToSubsystem sf:GasSubsystem ; sf:hasUnit "ppm" ;
+  sf:registerAddress 40003 ; sf:registerBase 40001 ; sf:functionCode 3 ;
+  sf:registerType "uint16" ; sf:scaleFactor "0.1"^^xsd:double ; sf:slaveId 1 .
+"""
 
 
-def by_type(msg, measurement_type: str):
-    return {m.type.value: m for m in msg.measurements}[measurement_type]
+@pytest.fixture
+def adapter():
+    registry = BindingRegistry()
+    result = registry.load_turtle(GAS_BINDINGS)
+    assert result.accepted, result.violations
+    return ModbusAdapter(GeneratedAdapterSet(registry))
 
 
-def test_modbus_registers_parsed():
-    msg = parse_registers([3, 12, 0], device_id="sensor_mq2_01")
-    assert msg.schema_version == "v1"
-    assert msg.device_id == "sensor_mq2_01"
-    assert msg.subsystem.value == "gas"
-    assert msg.protocol.value == "modbus"
-    assert by_type(msg, "smoke").value == 3.0
-    assert by_type(msg, "co").value == 12.0
-    assert by_type(msg, "combustible_gas").value == 0.0
-    assert msg.raw_payload == {"registers": [3, 12, 0], "base_address": 1}
+def by_type(message, measurement_type: str):
+    return {m.type.value: m for m in message.measurements}[measurement_type]
 
 
-def test_modbus_short_registers_rejected():
-    with pytest.raises(ValueError):
-        parse_registers([3, 12])
+def test_read_plan_is_ontology_driven(adapter):
+    assert adapter.bindings.modbus_read_plans()[0]["address"] == 0
+    assert adapter.bindings.modbus_read_plans()[0]["count"] == 3
 
 
-def test_modbus_connection_refused():
+def test_modbus_connection_refused(adapter):
     class FakeClient:
         async def connect(self):
             return False
 
-    adapter = ModbusAdapter()
     assert asyncio.run(adapter._connect(FakeClient())) is False
 
 
-def test_modbus_forward_to_backend(monkeypatch):
+def test_modbus_forward_to_backend(adapter, monkeypatch):
     class FakeResult:
-        registers = [3, 12, 0]
+        registers = [30, 120, 0]
 
         def isError(self):
             return False
 
     class FakeClient:
-        async def read_holding_registers(self, address, count):
-            assert address == 1
-            assert count == 3
+        async def read_holding_registers(self, address, count, device_id):
+            assert (address, count, device_id) == (0, 3, 1)
             return FakeResult()
 
     captured = []
 
-    async def fake_forward(msg):
-        captured.append(msg)
+    async def fake_forward(message):
+        captured.append(message)
         return True
 
     monkeypatch.setattr(modbus_adapter, "forward_to_backend", fake_forward)
-    msg = asyncio.run(ModbusAdapter().poll_once(FakeClient()))
-    assert msg is not None
-    assert captured[0].protocol.value == "modbus"
-    assert by_type(captured[0], "co").value == 12.0
+    message = asyncio.run(adapter.poll_once(FakeClient()))
+    assert message is not None
+    assert by_type(message, "smoke").value == pytest.approx(3.0)
+    assert by_type(message, "co").value == pytest.approx(12.0)
+    assert by_type(message, "combustible_gas").value == pytest.approx(0.0)
+    assert captured == [message]

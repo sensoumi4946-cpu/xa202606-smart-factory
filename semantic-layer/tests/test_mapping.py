@@ -98,10 +98,7 @@ def test_all_measurement_types_mapped():
         assert prop is not None
         assert (None, SOSA.observedProperty, prop) in g
 
-        if mtype == MeasurementType.LIGHT_STATE:
-            assert mtype not in TYPE_TO_SENSOR_CLASS
-        else:
-            assert mtype in TYPE_TO_SENSOR_CLASS
+        assert mtype in TYPE_TO_SENSOR_CLASS
 
 
 def test_multiple_measurements_produce_multiple_observations():

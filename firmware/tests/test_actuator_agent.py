@@ -1,5 +1,3 @@
-# Tests for the device-side actuator agent.
-
 import json
 import sys
 from pathlib import Path
@@ -7,9 +5,9 @@ from types import SimpleNamespace
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "sim"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sim.actuator_agent import ActuatorAgent  # noqa: E402
+from sim.actuator_agent import ActuatorAgent  
 
 
 @pytest.fixture
@@ -145,14 +143,14 @@ class TestMessageHandling:
         assert acks == []
 
     def test_backend_down_does_not_crash_agent(self, agent, monkeypatch):
-        import actuator_agent
+        import sim.actuator_agent as actuator_agent
 
         def _boom(*args, **kwargs):
             raise actuator_agent.requests.RequestException("connection refused")
 
         monkeypatch.setattr(actuator_agent.requests, "post", _boom)
         agent._on_message(None, None, _message(agent, "on"))
-        # The relay still switched — losing the ack must not lose the action.
+        
         assert agent.relay_state == "on"
 
     def test_api_key_is_sent_when_configured(self, agent, monkeypatch):
@@ -162,7 +160,7 @@ class TestMessageHandling:
             captured["headers"] = headers
             return SimpleNamespace(status_code=200, text="")
 
-        import actuator_agent
+        import sim.actuator_agent as actuator_agent
 
         monkeypatch.setattr(actuator_agent.requests, "post", _capture)
         agent.api_key = "secret-key"

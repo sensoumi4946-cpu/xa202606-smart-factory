@@ -1,21 +1,8 @@
-# Core data contract for the XA-202606 Smart Factory platform.
-#
-# UnifiedMessage is the ONLY wire format between connectivity adapters
-# and the backend API. Every sensor reading, regardless of origin
-# protocol (MQTT, Modbus, OPC UA, REST), must be normalised into this
-# structure before ingestion.
-#
-# Protocol versioning: schema_version is required (no default) so
-# clients must explicitly declare which version they speak.
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
-
-
-# ── Enumeration tables for the five sensor subsystems ──
-
+from pydantic import BaseModel, Field, field_validator
 
 class Subsystem(str, Enum):
     TEMP_HUMIDITY = "temp_humidity"
@@ -43,6 +30,9 @@ class MeasurementType(str, Enum):
     CO = "co"
     DISTANCE = "distance"
     COUNT = "count"
+    DEVICE_STATUS = "device_status"
+    ERROR_CODE = "error_code"
+    SENSOR_STATUS = "sensor_status"
 
 
 class Unit(str, Enum):
@@ -52,11 +42,12 @@ class Unit(str, Enum):
     PPM = "ppm"
     CM = "cm"
     COUNT = "count"
+    STATUS = "status"
 
 
 class Measurement(BaseModel):
     type: MeasurementType
-    value: float
+    value: float = Field(allow_inf_nan=False)
     unit: Unit
 
 
@@ -68,3 +59,17 @@ class UnifiedMessage(BaseModel):
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     measurements: list[Measurement] = Field(..., min_length=1)
     raw_payload: Optional[dict] = None
+
+    @field_validator("timestamp")
+    @classmethod
+    def utc_timestamp(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
+            raise ValueError("timestamp must include a timezone")
+        return value.astimezone(timezone.utc)
+
+    @field_validator("device_id")
+    @classmethod
+    def nonblank_device(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("device_id must not be blank")
+        return value

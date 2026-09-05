@@ -61,7 +61,7 @@ const violations = ref<string[]>([])
 const generated = ref('')
 const bindingsAdded = ref<string[]>([])
 
-function usePreset(name: string) {
+async function usePreset(name: string) {
   turtle.value = PRESETS[name]
   accepted.value = null
   violations.value = []
@@ -104,9 +104,9 @@ async function validate() {
     </header>
 
     <div class="presets">
-      <button v-for="(_, name) in PRESETS" :key="name" class="preset" @click="usePreset(name)">
-        {{ name }}
-      </button>
+      <button v-for="(_, name) in PRESETS" :key="name" class="preset" @click="usePreset(String(name))">
+  {{ name }}
+  </button>
       <button class="run" :disabled="running" @click="validate">
         {{ running ? '校验中…' : '校验' }}
       </button>

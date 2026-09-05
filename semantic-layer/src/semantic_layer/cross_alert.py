@@ -1,7 +1,7 @@
 import httpx
 
 TEMP_THRESHOLD = 35.0
-GAS_THRESHOLD  = 35.0
+GAS_THRESHOLD = 35.0
 
 _QUERY = (
     "PREFIX sosa: <http://www.w3.org/ns/sosa/> "
@@ -27,16 +27,15 @@ def _local(uri: str) -> str:
 
 
 async def check_fire_risk(fuseki_url: str) -> dict | None:
-    """Query Fuseki for a simultaneous high-temperature + high-gas condition.
-    """
+    """Query Fuseki for a simultaneous high-temperature + high-gas condition."""
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with httpx.AsyncClient(timeout=5.0, trust_env=False) as client:
             resp = await client.post(
                 fuseki_url,
                 content=_QUERY.encode(),
                 headers={
                     "Content-Type": "application/sparql-query",
-                    "Accept":       "application/sparql-results+json",
+                    "Accept": "application/sparql-results+json",
                 },
             )
         resp.raise_for_status()
@@ -49,10 +48,10 @@ async def check_fire_risk(fuseki_url: str) -> dict | None:
 
     row = bindings[0]
     return {
-        "risk":        "fire",
+        "risk": "fire",
         "temp_sensor": _local(row["tempSensor"]["value"]),
-        "temp_val":    float(row["tempVal"]["value"]),
-        "gas_sensor":  _local(row["gasSensor"]["value"]),
-        "gas_val":     float(row["gasVal"]["value"]),
-        "thresholds":  {"temperature": TEMP_THRESHOLD, "gas": GAS_THRESHOLD},
+        "temp_val": float(row["tempVal"]["value"]),
+        "gas_sensor": _local(row["gasSensor"]["value"]),
+        "gas_val": float(row["gasVal"]["value"]),
+        "thresholds": {"temperature": TEMP_THRESHOLD, "gas": GAS_THRESHOLD},
     }

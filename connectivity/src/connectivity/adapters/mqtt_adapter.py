@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -15,10 +16,11 @@ from smart_factory_contracts.messages import (
 )
 
 from connectivity.adapters.base import BaseAdapter
+from connectivity.generated_adapters import GeneratedAdapterSet, load_adapter_set
 from connectivity.models import MQTT_BROKER_HOST, MQTT_BROKER_PORT
 from connectivity.router import forward_to_backend
 
-SENSOR_TOPIC = "factory/+/sensors/#"
+SENSOR_TOPIC = os.getenv("MQTT_SENSOR_TOPIC", "factory/+/sensors/#")
 
 
 def log_json(event: str, level: str = "info", **kwargs):
@@ -33,20 +35,23 @@ def log_json(event: str, level: str = "info", **kwargs):
 
 
 class MQTTAdapter(BaseAdapter):
-    def __init__(self):
+    def __init__(self, bindings: GeneratedAdapterSet | None = None):
+        self.bindings = bindings or load_adapter_set()
         self._client: Optional[Any] = None
-        self._queue: asyncio.Queue[UnifiedMessage] = asyncio.Queue()
+        self._queue: asyncio.Queue[UnifiedMessage] = asyncio.Queue(maxsize=int(os.getenv("MQTT_QUEUE_SIZE", "4096")))
+        self._loop: asyncio.AbstractEventLoop | None = None
         self._running = False
 
     async def start(self) -> None:
         import paho.mqtt.client as mqtt
 
         self._running = True
+        self._loop = asyncio.get_running_loop()
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self._client.on_connect = self._on_connect
         self._client.on_message = self._on_message
 
-        self._client.connect(MQTT_BROKER_HOST, MQTT_BROKER_PORT, keepalive=60)
+        self._client.connect_async(MQTT_BROKER_HOST, MQTT_BROKER_PORT, keepalive=60)
         self._client.loop_start()
         log_json("mqtt_started", broker=f"{MQTT_BROKER_HOST}:{MQTT_BROKER_PORT}")
 
@@ -69,17 +74,31 @@ class MQTTAdapter(BaseAdapter):
 
     def _on_connect(self, client, userdata, flags, reason_code, properties):
         if reason_code == 0:
-            client.subscribe(SENSOR_TOPIC)
-            log_json("mqtt_subscribed", topic=SENSOR_TOPIC)
+            client.subscribe(SENSOR_TOPIC, qos=1)
+            subscriptions = self.bindings.mqtt_subscriptions()
+            if subscriptions:
+                for topic, qos in subscriptions:
+                    client.subscribe(topic, qos=qos)
+                    log_json("mqtt_subscribed", topic=topic, qos=qos)
+            else:
+                client.subscribe(SENSOR_TOPIC)
+                log_json("mqtt_subscribed", topic=SENSOR_TOPIC)
         else:
             log_json("mqtt_connect_failed", level="error", reason_code=str(reason_code))
 
     def _on_message(self, client, userdata, msg):
-        device_id = msg.topic.split("/")[3]
+        binding = self.bindings.mqtt_entry(msg.topic)
+        parts = msg.topic.split("/")
+        device_id = (
+            binding["device_id"]
+            if binding
+            else (parts[3] if len(parts) > 3 else "unknown")
+        )
         try:
             parsed = self._parse_payload(msg.topic, msg.payload.decode("utf-8"))
             if parsed is not None:
-                self._queue.put_nowait(parsed)
+                if self._loop is not None:
+                    self._loop.call_soon_threadsafe(self._enqueue, parsed)
         except ValidationError:
             log_json(
                 "payload_validation_failed",
@@ -95,20 +114,43 @@ class MQTTAdapter(BaseAdapter):
                 topic=msg.topic,
             )
 
+    def _enqueue(self, message: UnifiedMessage) -> None:
+        if self._queue.full():
+            log_json("mqtt_queue_overflow", level="error", device_id=message.device_id)
+            return
+        self._queue.put_nowait(message)
+
     def _parse_payload(self, topic: str, payload_str: str) -> Optional[UnifiedMessage]:
         raw = json.loads(payload_str)
         parts = topic.split("/")
-        if len(parts) < 4 or "control" in topic:
+        binding = self.bindings.mqtt_entry(topic)
+        if "control" in parts or (binding is None and len(parts) < 4):
             return None
-        subsystem = parts[1]
-        device_id = parts[3]
+        subsystem = binding["subsystem"] if binding else parts[1]
+        device_id = binding["device_id"] if binding else parts[3]
+
+        if isinstance(raw, dict) and "measurements" in raw:
+            message = UnifiedMessage.model_validate(raw)
+            resolved = self.bindings.registry.resolve_device_id(message.device_id)
+            expected = self.bindings.registry.resolve_device_id(device_id)
+            if resolved != expected or message.subsystem.value != subsystem or message.protocol != Protocol.MQTT:
+                raise ValueError("MQTT topic and payload identity disagree")
+            return message.model_copy(update={"device_id": resolved})
 
         measurements: list[Measurement] = []
         mdata = raw if isinstance(raw, dict) else {"value": raw}
-        mtype_val = mdata.get("type", parts[-1] if len(parts) > 4 else "unknown")
-        mvalue = float(mdata.get("value", 0))
-        munit = mdata.get("unit", "count")
-
+        mtype_val = (
+            binding["property_name"]
+            if binding
+            else mdata.get("type", parts[-1] if len(parts) > 4 else "unknown")
+        )
+        raw_value = float(mdata["value"])
+        mvalue = (
+            raw_value * binding["scale_factor"] + binding["offset"]
+            if binding
+            else raw_value
+        )
+        munit = binding["unit"] if binding else mdata.get("unit", "count")
         try:
             mtype = MeasurementType(mtype_val)
             unit = Unit(munit)

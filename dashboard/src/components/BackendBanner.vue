@@ -1,32 +1,27 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { computed } from 'vue'
+import { usePoll } from '../usePoll'
 import { rawRequest } from '../api'
 
-const online = ref(true)
-const checked = ref(false)
-const lastError = ref('')
-let timer: ReturnType<typeof setInterval> | undefined
+interface Probe {
+  ok: boolean
+  detail: string
+}
 
-async function probe() {
+async function probeHealth(): Promise<Probe> {
   try {
     const res = await rawRequest('GET', '/health')
-    online.value = res.ok
-    lastError.value = res.ok ? '' : `HTTP ${res.status}`
+    return { ok: res.ok, detail: res.ok ? '' : `HTTP ${res.status}` }
   } catch (err) {
-    online.value = false
-    lastError.value = String(err).slice(0, 80)
-  } finally {
-    checked.value = true
+    return { ok: false, detail: String(err).slice(0, 80) }
   }
 }
 
-onMounted(() => {
-  probe()
-  timer = setInterval(probe, 5000)
-})
-onUnmounted(() => {
-  if (timer) clearInterval(timer)
-})
+const { data, refresh } = usePoll<Probe>('health', probeHealth, 5000)
+
+const checked = computed(() => data.value !== null)
+const online = computed(() => data.value?.ok ?? true)
+const lastError = computed(() => data.value?.detail ?? '')
 </script>
 
 <template>
@@ -36,7 +31,7 @@ onUnmounted(() => {
     <span class="detail mono">
       请确认 backend 已启动（端口 8000）{{ lastError ? ' · ' + lastError : '' }}
     </span>
-    <button class="retry" @click="probe">重试</button>
+    <button class="retry" @click="refresh">重试</button>
   </div>
 </template>
 

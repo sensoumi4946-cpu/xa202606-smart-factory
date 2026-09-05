@@ -19,6 +19,7 @@ sf:binding_dht22_temperature a sf:ProtocolBinding ;
     sf:transportProtocol "modbus" ;
     sf:deviceId "ESP32_001_dht22" ;
     sf:belongsToSubsystem sf:TempHumiditySubsystem ;
+    sf:hasUnit "celsius" ;
     sf:registerAddress 0 ; sf:registerCount 1 ; sf:registerType "int16" ;
     sf:scaleFactor "0.01"^^xsd:double ; sf:slaveId 1 ; sf:pollIntervalMs 2000 .
 
@@ -27,6 +28,7 @@ sf:binding_dht22_humidity a sf:ProtocolBinding ;
     sf:transportProtocol "modbus" ;
     sf:deviceId "ESP32_001_dht22" ;
     sf:belongsToSubsystem sf:TempHumiditySubsystem ;
+    sf:hasUnit "percent" ;
     sf:registerAddress 1 ; sf:registerCount 1 ; sf:registerType "uint16" ;
     sf:scaleFactor "0.01"^^xsd:double ; sf:slaveId 1 ; sf:pollIntervalMs 2000 .
 
@@ -35,6 +37,7 @@ sf:binding_hcsr04 a sf:ProtocolBinding ;
     sf:transportProtocol "opcua" ;
     sf:deviceId "ESP32_004_hcsr04" ;
     sf:belongsToSubsystem sf:AgvSubsystem ;
+    sf:hasUnit "cm" ;
     sf:nodeId "AGV.Distance" ; sf:namespaceIndex 2 ;
     sf:scaleFactor "1.0"^^xsd:double ; sf:pollIntervalMs 500 .
 
@@ -43,6 +46,7 @@ sf:binding_dht22_mqtt a sf:ProtocolBinding ;
     sf:transportProtocol "mqtt" ;
     sf:deviceId "ESP32_001_dht22" ;
     sf:belongsToSubsystem sf:TempHumiditySubsystem ;
+    sf:hasUnit "celsius" ;
     sf:mqttTopic "factory/temp_humidity/sensors/ESP32_001_dht22/temperature" ;
     sf:mqttQos 1 ; sf:scaleFactor "1.0"^^xsd:double ; sf:pollIntervalMs 2000 .
 
@@ -51,6 +55,7 @@ sf:binding_ir_count a sf:ProtocolBinding ;
     sf:transportProtocol "rest" ;
     sf:deviceId "ESP32_002_ir" ;
     sf:belongsToSubsystem sf:CountingSubsystem ;
+    sf:hasUnit "count" ;
     sf:restPath "/adapter/rest/ingest" ; sf:restMethod "POST" ;
     sf:scaleFactor "1.0"^^xsd:double ; sf:pollIntervalMs 2000 .
 """
@@ -175,6 +180,7 @@ sf:binding_vib a sf:ProtocolBinding ;
     sf:transportProtocol "modbus" ;
     sf:deviceId "ESP32_005_vib" ;
     sf:belongsToSubsystem sf:VibrationSubsystem ;
+    sf:hasUnit "mm_per_sec" ;
     sf:registerAddress 5 ; sf:registerCount 2 ; sf:registerType "float32" ;
     sf:scaleFactor "1.0"^^xsd:double ; sf:slaveId 1 ; sf:pollIntervalMs 1000 .
 """
@@ -195,6 +201,7 @@ sf:binding_vib a sf:ProtocolBinding ;
     sf:transportProtocol "modbus" ;
     sf:deviceId "ESP32_005_vib" ;
     sf:belongsToSubsystem sf:VibrationSubsystem ;
+    sf:hasUnit "mm_per_sec" ;
     sf:registerAddress 5 ; sf:registerCount 2 ; sf:registerType "float32" ;
     sf:scaleFactor "1.0"^^xsd:double ; sf:slaveId 1 ; sf:pollIntervalMs 1000 .
 """

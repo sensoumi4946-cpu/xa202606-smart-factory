@@ -14,11 +14,13 @@ def _init_db(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_gate_status_404_before_any_ingest():
+async def test_gate_status_waits_before_any_ingest():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.get("/api/v1/semantic/gate-status")
-    assert resp.status_code == 404
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "waiting"
+    assert resp.json()["reason"] == "no ingest activity yet"
 
 
 @pytest.mark.asyncio

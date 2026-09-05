@@ -129,8 +129,7 @@ def build_property_query(local_property: str, limit: int = 50) -> str:
     )
     safe_limit = max(1, min(int(limit), 1000))
     return (
-        PREFIXES
-        + "SELECT ?sensor ?value ?time WHERE {\n"
+        PREFIXES + "SELECT ?sensor ?value ?time WHERE {\n"
         "  ?obs a sosa:Observation ;\n"
         "       sosa:madeBySensor ?sensor ;\n"
         "       sosa:observedProperty ?prop ;\n"
@@ -256,7 +255,7 @@ class FederationCoordinator:
             )
 
         owns_client = client is None
-        client = client or httpx.AsyncClient()
+        client = client or httpx.AsyncClient(trust_env=False)
         try:
             results = await asyncio.gather(
                 *(

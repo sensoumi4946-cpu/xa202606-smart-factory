@@ -1,4 +1,4 @@
-# Publishes control commands onto MQTT so a device can act on them.
+
 
 import asyncio
 import json
@@ -9,7 +9,7 @@ from backend import config
 
 logger = logging.getLogger(__name__)
 
-CONTROL_TIMEOUT = 5.0
+CONTROL_TIMEOUT = 2.0
 
 
 def control_topic(device_id: str, subsystem: str = "actuator") -> str:
@@ -33,7 +33,7 @@ def _publish_blocking(topic: str, payload: dict) -> None:
 
     publish.single(
         topic,
-        payload=json.dumps(payload),
+        payload=json.dumps(payload, sort_keys=True, separators=(",", ":")),
         qos=1,
         hostname=config.MQTT_BROKER_HOST,
         port=config.MQTT_BROKER_PORT,
@@ -47,19 +47,14 @@ async def dispatch(
     action: str,
     params: dict,
     subsystem: str = "actuator",
+    payload: dict | None = None,
 ) -> bool:
-    """Push one command to the broker. Returns False if the broker is down.
-
-    Never raises: a broker outage must not turn a button press into a 500.
-    The command stays 'pending' in the database and the retry loop or the
-    operator can deal with it.
-    """
     topic = control_topic(device_id, subsystem)
-    payload = build_payload(command_id, device_id, action, params)
+    outbound = payload or build_payload(command_id, device_id, action, params)
 
     try:
         await asyncio.wait_for(
-            asyncio.to_thread(_publish_blocking, topic, payload),
+            asyncio.to_thread(_publish_blocking, topic, outbound),
             timeout=CONTROL_TIMEOUT,
         )
     except Exception as exc:

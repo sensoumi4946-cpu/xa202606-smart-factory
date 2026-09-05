@@ -1,12 +1,13 @@
-# Device-side agent for the remote-control loop.
-
-
 import argparse
+import hashlib
+import hmac
 import json
 import logging
 import os
 import sys
 import time
+from datetime import datetime, timezone
+from urllib.parse import quote
 
 import paho.mqtt.client as mqtt
 import requests
@@ -18,17 +19,29 @@ logging.basicConfig(
 )
 log = logging.getLogger("actuator")
 
-# Whatever the board can actually do
+
 SUPPORTED_ACTIONS = {"on", "off", "toggle", "dim", "reset"}
 
 
 class ActuatorAgent:
-    def __init__(self, device_id, subsystem, broker_host, broker_port, api_key=""):
+    def __init__(
+        self,
+        device_id,
+        subsystem,
+        broker_host,
+        broker_port,
+        api_key="",
+        signing_key="",
+        backend_url=None,
+    ):
         self.device_id = device_id
         self.subsystem = subsystem
         self.broker_host = broker_host
         self.broker_port = broker_port
         self.api_key = api_key
+        self.signing_key = signing_key
+        self.backend_url = (backend_url or os.getenv("BACKEND_URL", "http://localhost:8000")).rstrip("/")
+        self._nonces = {}
         self.topic = f"factory/{subsystem}/control/{device_id}"
         self.relay_state = "off"
 
@@ -59,6 +72,8 @@ class ActuatorAgent:
             log.warning("dropped an unparseable payload on %s", msg.topic)
             return
 
+        if not isinstance(cmd, dict):
+            return
         command_id = cmd.get("command_id")
         action = cmd.get("action")
         params = cmd.get("params") or {}
@@ -68,12 +83,57 @@ class ActuatorAgent:
             log.warning("command missing command_id or action, ignoring")
             return
 
+        if self.signing_key and (cmd.get("device_id") != self.device_id or not self._valid_signature(cmd)):
+            log.warning("command %s has an invalid signature", command_id[:8])
+            return
+
         log.info("got '%s' (command_id=%s)", action, command_id[:8])
         ok, detail = self._actuate(action, params)
         log.info("  -> %s | %s", "OK" if ok else "FAILED", detail)
 
         if ack_url:
-            self._send_ack(ack_url, ok, detail)
+            self._send_ack(f"{self.backend_url}/api/v1/control/{quote(str(command_id), safe='')}/ack", ok, detail)
+
+    def _valid_signature(self, command):
+        params = json.dumps(
+            command.get("params") or {},
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+        canonical = "|".join(
+            [
+                str(command.get("command_id", "")),
+                str(command.get("device_id", "")),
+                str(command.get("action", "")),
+                params,
+                str(command.get("issued_at", "")),
+                str(command.get("nonce", "")),
+            ]
+        )
+        expected = hmac.new(
+            self.signing_key.encode(), canonical.encode(), hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(expected, str(command.get("signature", ""))):
+            return False
+        try:
+            issued = datetime.fromisoformat(command["issued_at"])
+            if issued.tzinfo is None:
+                return False
+            now = time.time()
+            skew = int(os.getenv("COMMAND_MAX_SKEW_S", "30"))
+            if abs(now - issued.timestamp()) > skew:
+                return False
+            nonce = command["nonce"]
+            if not isinstance(nonce, str) or not nonce:
+                return False
+        except (KeyError, TypeError, ValueError):
+            return False
+        self._nonces = {n: t for n, t in self._nonces.items() if now - t <= skew * 2}
+        if nonce in self._nonces or len(self._nonces) >= 4096:
+            return False
+        self._nonces[nonce] = now
+        return True
 
     def _actuate(self, action, params):
         if action not in SUPPORTED_ACTIONS:
@@ -93,7 +153,7 @@ class ActuatorAgent:
         elif action == "reset":
             self.relay_state = "off"
 
-        # A real relay takes a few tens of milliseconds to settle
+        
         time.sleep(0.15)
         return True, f"relay={self.relay_state}"
 
@@ -109,7 +169,9 @@ class ActuatorAgent:
                 timeout=5,
             )
             if resp.status_code != 200:
-                log.warning("ack rejected: HTTP %s %s", resp.status_code, resp.text[:120])
+                log.warning(
+                    "ack rejected: HTTP %s %s", resp.status_code, resp.text[:120]
+                )
         except requests.RequestException as exc:
             log.warning("could not reach backend for ack: %s", exc)
 
@@ -118,10 +180,17 @@ def main():
     parser = argparse.ArgumentParser(description="Simulated actuator device")
     parser.add_argument("--device-id", default="relay_lighting_01")
     parser.add_argument("--subsystem", default="lighting")
-    parser.add_argument("--broker-host", default=os.getenv("MQTT_BROKER_HOST", "localhost"))
-    parser.add_argument("--broker-port", type=int, default=int(os.getenv("MQTT_BROKER_PORT", "1883")))
+    parser.add_argument(
+        "--broker-host", default=os.getenv("MQTT_BROKER_HOST", "localhost")
+    )
+    parser.add_argument(
+        "--broker-port", type=int, default=int(os.getenv("MQTT_BROKER_PORT", "1883"))
+    )
     parser.add_argument("--api-key", default=os.getenv("API_KEY", ""))
+    parser.add_argument("--signing-key", default=os.getenv("COMMAND_SIGNING_KEY", ""))
     args = parser.parse_args()
+    if not args.signing_key:
+        parser.error("COMMAND_SIGNING_KEY is required")
 
     agent = ActuatorAgent(
         device_id=args.device_id,
@@ -129,6 +198,7 @@ def main():
         broker_host=args.broker_host,
         broker_port=args.broker_port,
         api_key=args.api_key,
+        signing_key=args.signing_key,
     )
     try:
         agent.run()

@@ -1,25 +1,28 @@
-import { defineConfig } from 'vitest/config'
-import vue from '@vitejs/plugin-vue'
-
+import { defineConfig } from 'vitest/config';
+import vue from '@vitejs/plugin-vue';
 export default defineConfig({
-  plugins: [vue()],
-  server: {
-    proxy: {
-      '/api': {
-        target: process.env.BACKEND_URL || 'http://localhost:8000',
-        changeOrigin: true,
-      },
-      '/ingest': {
-        target: process.env.BACKEND_URL || 'http://localhost:8000',
-        changeOrigin: true,
-      }, 
-      '/health': {
-        target: process.env.BACKEND_URL || 'http://localhost:8000',
-        changeOrigin: true,
-      },
+    plugins: [vue()],
+    server: {
+        proxy: {
+            '/analytics': {
+                target: process.env.BACKEND_URL || 'http://localhost:8000',
+                changeOrigin: true,
+            },
+            '/api': {
+                target: process.env.BACKEND_URL || 'http://localhost:8000',
+                changeOrigin: true,
+            },
+            '/ingest': {
+                target: process.env.BACKEND_URL || 'http://localhost:8000',
+                changeOrigin: true,
+            },
+            '/health': {
+                target: process.env.BACKEND_URL || 'http://localhost:8000',
+                changeOrigin: true,
+            },
+        },
     },
-  },
-  test: {
-    environment: 'jsdom',
-  },
-})
+    test: {
+        environment: 'jsdom',
+    },
+});

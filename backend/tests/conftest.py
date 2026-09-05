@@ -12,6 +12,7 @@ def _disable_semantic_write(monkeypatch):
 def _disable_auth(monkeypatch):
     monkeypatch.setattr("backend.security.auth._AUTH_DISABLED", True)
 
+
 import pytest as _pytest
 
 
@@ -23,3 +24,13 @@ def _reset_rate_limiter():
     metrics.reset()
     yield
     limiter.reset()
+    metrics.reset()
+
+
+@pytest.fixture(autouse=True)
+def _reset_semantic_gate_status():
+    from backend.services import gate_status_tracker
+
+    gate_status_tracker.reset()
+    yield
+    gate_status_tracker.reset()

@@ -4,16 +4,17 @@ import logging
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from typing import Optional
+from typing import Deque, Optional
 
+from analytics import trend_forecast
 from analytics.thresholds import resolver
 
 logger = logging.getLogger(__name__)
 
-MIN_POINTS = 4
-MAX_POINTS = 30
-MAX_HORIZON_S = 300.0
-MIN_R_SQUARED = 0.55
+MIN_POINTS = 6
+MAX_POINTS = 60
+MAX_HORIZON_S = 3600.0
+MIN_SPAN_S = 5.0
 
 
 @dataclass
@@ -23,65 +24,98 @@ class Prediction:
     current_value: float
     threshold: float
     slope_per_s: float
+    slope_ci_per_s: tuple[float, float]
     seconds_to_threshold: Optional[float]
+    seconds_to_threshold_earliest: Optional[float]
+    seconds_to_threshold_latest: Optional[float]
     r_squared: float
+    samples: int
+    window_seconds: float
     confidence: str
     will_breach: bool
     message: str
+
+    def to_dict(self) -> dict:
+        return {
+            "device_id": self.device_id,
+            "property_name": self.property_name,
+            "current_value": round(self.current_value, 3),
+            "threshold": self.threshold,
+            "slope_per_s": round(self.slope_per_s, 6),
+            "slope_ci_per_s": [
+                round(self.slope_ci_per_s[0], 6),
+                round(self.slope_ci_per_s[1], 6),
+            ],
+            "seconds_to_threshold": _round_opt(self.seconds_to_threshold),
+            "seconds_to_threshold_earliest": _round_opt(
+                self.seconds_to_threshold_earliest
+            ),
+            "seconds_to_threshold_latest": _round_opt(self.seconds_to_threshold_latest),
+            "r_squared": round(self.r_squared, 3),
+            "samples": self.samples,
+            "window_seconds": round(self.window_seconds, 1),
+            "confidence": self.confidence,
+            "will_breach": self.will_breach,
+            "message": self.message,
+        }
+
+
+def _round_opt(value: Optional[float]) -> Optional[float]:
+    return None if value is None else round(value, 1)
 
 
 def THRESHOLDS() -> dict[str, tuple[float, str]]:
     return resolver.thresholds()
 
 
-def _linear_fit(points: list[tuple[float, float]]) -> tuple[float, float, float]:
-    n = len(points)
-    mean_t = sum(p[0] for p in points) / n
-    mean_v = sum(p[1] for p in points) / n
-
-    sxx = sum((p[0] - mean_t) ** 2 for p in points)
-    if sxx == 0.0:
-        return 0.0, mean_v, 0.0
-
-    sxy = sum((p[0] - mean_t) * (p[1] - mean_v) for p in points)
-    slope = sxy / sxx
-    intercept = mean_v - slope * mean_t
-
-    syy = sum((p[1] - mean_v) ** 2 for p in points)
-    if syy == 0.0:
-        return slope, intercept, 1.0
-
-    ss_res = sum((p[1] - (slope * p[0] + intercept)) ** 2 for p in points)
-    r_squared = max(0.0, 1.0 - ss_res / syy)
-    return slope, intercept, r_squared
-
-
-def _confidence(r_squared: float, seconds: float) -> str:
-    if r_squared >= 0.85 and seconds <= 60:
+def _confidence(fit, seconds: Optional[float], horizon: float) -> str:
+    if seconds is None:
+        return "low"
+    width = fit.slope_ci_high - fit.slope_ci_low
+    relative = abs(width / fit.slope) if fit.slope else float("inf")
+    near = seconds <= horizon * 0.25
+    if fit.r_squared >= 0.85 and relative <= 0.30 and near:
         return "high"
-    if r_squared >= 0.70:
+    if fit.r_squared >= 0.60 and relative <= 0.80:
         return "medium"
     return "low"
+
+
+def _time_to(gap: float, rate: float) -> Optional[float]:
+    if rate == 0.0:
+        return None
+    seconds = gap / rate
+    return seconds if seconds > 0 else None
 
 
 class FaultPredictor:
     def __init__(
         self,
-        thresholds: Optional[dict[str, tuple[float, str]]] = None,
+        min_points: int = MIN_POINTS,
         max_points: int = MAX_POINTS,
         max_horizon_s: float = MAX_HORIZON_S,
-        min_r_squared: float = MIN_R_SQUARED,
+        min_span_s: float = MIN_SPAN_S,
+        thresholds: Optional[dict[str, tuple[float, str]]] = None,
     ) -> None:
-        self._override = dict(thresholds) if thresholds else None
-        self.max_points = max_points
+        self.min_points = min_points
         self.max_horizon_s = max_horizon_s
-        self.min_r_squared = min_r_squared
-        self._series: dict[tuple[str, str], deque] = defaultdict(
-            lambda: deque(maxlen=self.max_points)
+        self.min_span_s = min_span_s
+        self._override = thresholds
+        self._series: dict[tuple[str, str], Deque[tuple[float, float]]] = defaultdict(
+            lambda: deque(maxlen=max_points)
         )
 
     def reset(self) -> None:
         self._series.clear()
+
+    def series_length(self, device_id: str, property_name: str) -> int:
+        return len(self._series.get((device_id, property_name.lower()), ()))
+
+    def tracked(self) -> list[dict]:
+        return [
+            {"device_id": d, "property_name": p, "samples": len(s)}
+            for (d, p), s in sorted(self._series.items())
+        ]
 
     def push(
         self,
@@ -100,53 +134,88 @@ class FaultPredictor:
         self._series[key].append((ts, float(value)))
         points = list(self._series[key])
 
-        if len(points) < MIN_POINTS:
-            return None
-
         threshold, direction = table[prop]
-        slope, intercept, r_squared = _linear_fit(points)
         current = points[-1][1]
 
-        breached_now = (
+        breached = (
             current >= threshold if direction == "above" else current <= threshold
         )
-        if breached_now:
+        if breached:
             return Prediction(
                 device_id=device_id,
                 property_name=prop,
                 current_value=current,
                 threshold=threshold,
-                slope_per_s=slope,
+                slope_per_s=0.0,
+                slope_ci_per_s=(0.0, 0.0),
                 seconds_to_threshold=0.0,
-                r_squared=r_squared,
+                seconds_to_threshold_earliest=0.0,
+                seconds_to_threshold_latest=0.0,
+                r_squared=1.0,
+                samples=len(points),
+                window_seconds=points[-1][0] - points[0][0],
                 confidence="high",
                 will_breach=True,
-                message=f"{prop} {current:.1f} already at or past {threshold:.1f}",
+                message=f"{prop} {current:.1f} 已达到阈值 {threshold:.1f}",
             )
 
-        moving_toward = slope > 0 if direction == "above" else slope < 0
-        if not moving_toward or abs(slope) < 1e-9:
+        if len(points) < self.min_points:
             return None
 
-        seconds = (threshold - current) / slope
-        if seconds <= 0 or seconds > self.max_horizon_s:
+        span = points[-1][0] - points[0][0]
+        if span < self.min_span_s:
             return None
-        if r_squared < self.min_r_squared:
+
+        fitted = trend_forecast.fit(points, min_samples=self.min_points)
+        if fitted is None:
             return None
+
+        if not fitted.significant:
+            return None
+
+        moving_toward = fitted.slope > 0 if direction == "above" else fitted.slope < 0
+        if not moving_toward:
+            return None
+
+        gap = threshold - current
+        seconds = _time_to(gap, fitted.slope)
+        if seconds is None or seconds > self.max_horizon_s:
+            return None
+
+        fastest = fitted.slope_ci_high if gap > 0 else fitted.slope_ci_low
+        slowest = fitted.slope_ci_low if gap > 0 else fitted.slope_ci_high
+        earliest = _time_to(gap, fastest)
+        latest = _time_to(gap, slowest)
+        if latest is not None and latest > self.max_horizon_s:
+            latest = None
+
+        confidence = _confidence(fitted, seconds, self.max_horizon_s)
+
+        if earliest is not None and latest is not None:
+            window = f"，95% 区间 {earliest:.0f}–{latest:.0f}s"
+        elif earliest is not None:
+            window = f"，最快 {earliest:.0f}s"
+        else:
+            window = ""
 
         return Prediction(
             device_id=device_id,
             property_name=prop,
             current_value=current,
             threshold=threshold,
-            slope_per_s=slope,
+            slope_per_s=fitted.slope,
+            slope_ci_per_s=(fitted.slope_ci_low, fitted.slope_ci_high),
             seconds_to_threshold=seconds,
-            r_squared=r_squared,
-            confidence=_confidence(r_squared, seconds),
+            seconds_to_threshold_earliest=earliest,
+            seconds_to_threshold_latest=latest,
+            r_squared=fitted.r_squared,
+            samples=fitted.n,
+            window_seconds=span,
+            confidence=confidence,
             will_breach=True,
             message=(
-                f"{prop} rising {slope:+.2f}/s — predicted to reach "
-                f"{threshold:.1f} in {seconds:.0f}s"
+                f"{prop} 以 {fitted.slope:+.3f}/s 变化，预计 {seconds:.0f}s 后"
+                f"达到 {threshold:.1f}{window}"
             ),
         )
 

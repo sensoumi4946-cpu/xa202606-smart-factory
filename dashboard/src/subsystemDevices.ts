@@ -9,6 +9,7 @@ export interface ResolvedDevice {
 
 const _bySubsystem = ref<Record<string, ResolvedDevice>>({})
 const _latest = ref<LatestDevice[]>([])
+const _error = ref<Error | null>(null)
 let _timer: ReturnType<typeof setInterval> | undefined
 let _refs = 0
 
@@ -55,8 +56,9 @@ async function refresh(): Promise<void> {
     }
     _bySubsystem.value = map
     _latest.value = latest
-  } catch {
-    
+    _error.value = null
+  } catch (error) {
+    _error.value = error instanceof Error ? error : new Error(String(error))
   }
 }
 
@@ -76,5 +78,6 @@ export function useSubsystemDevices(intervalMs = 2000) {
       }
     },
     refresh,
+    error: _error,
   }
 }

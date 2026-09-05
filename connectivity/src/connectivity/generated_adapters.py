@@ -1,9 +1,16 @@
+
+
+
+
+
+
 from __future__ import annotations
 
 import logging
+import json
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from semantic_layer.protocol_binding import (
     BindingRegistry,
@@ -13,54 +20,44 @@ from semantic_layer.protocol_binding import (
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_BINDINGS = os.getenv("BINDINGS_TTL", "bindings.ttl")
 
-UNIT_BY_PROPERTY = {
-    "temperature": "celsius",
-    "humidity": "percent",
-    "co": "ppm",
-    "smoke": "ppm",
-    "combustible_gas": "ppm",
-    "distance": "cm",
-    "count": "count",
-    "occupancy": "boolean",
-    "light_state": "boolean",
-    "vibration": "mm_per_sec",
-    "pressure": "kpa",
-}
-
-SUBSYSTEM_ALIAS = {
-    "temp_humidity_subsystem": "temp_humidity",
-    "gas_subsystem": "gas",
-    "agv_subsystem": "agv",
-    "counting_subsystem": "counting",
-    "lighting_subsystem": "lighting",
-    "vibration_subsystem": "vibration",
-}
-
-
-def _subsystem(binding: ProtocolBinding) -> str:
-    return SUBSYSTEM_ALIAS.get(binding.subsystem, binding.subsystem)
-
-
-def _unit(property_name: str) -> str:
-    return UNIT_BY_PROPERTY.get(property_name, "")
+def _default_bindings_path() -> Path:
+    configured = os.getenv("BINDINGS_TTL")
+    if configured:
+        return Path(configured)
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / "bindings.ttl"
+        if candidate.exists():
+            return candidate
+    return Path("bindings.ttl")
 
 
 class GeneratedAdapterSet:
+    pass
+
     def __init__(self, registry: BindingRegistry) -> None:
         self.registry = registry
+        self.active_devices = json.loads(os.getenv("ACTIVE_PROTOCOL_DEVICES", "{}"))
+        if not isinstance(self.active_devices, dict) or any(not isinstance(v, list) or any(not isinstance(d, str) for d in v) for v in self.active_devices.values()):
+            raise ValueError("ACTIVE_PROTOCOL_DEVICES must map protocol names to device-ID lists")
+
+    def _for_protocol(self, protocol: str):
+        bindings = self.registry.for_protocol(protocol)
+        if not self.active_devices:
+            return bindings
+        allowed = {self.registry.resolve_device_id(d) for d in self.active_devices.get(protocol, [])}
+        return [b for b in bindings if b.device_id in allowed]
 
     @property
     def empty(self) -> bool:
         return len(self.registry) == 0
 
     def modbus_plan(self) -> list[dict[str, Any]]:
-        plan = []
-        for binding in self.registry.for_protocol("modbus"):
-            if binding.register_address is None:
+        plan: list[dict[str, Any]] = []
+        for binding in self._for_protocol("modbus"):
+            if binding.wire_address is None:
                 logger.warning(
-                    "modbus binding %s has no register address, skipped",
+                    "modbus binding %s has no register address; skipped",
                     binding.binding_id,
                 )
                 continue
@@ -68,9 +65,10 @@ class GeneratedAdapterSet:
                 {
                     "device_id": binding.device_id,
                     "property_name": binding.property_name,
-                    "subsystem": _subsystem(binding),
-                    "unit": _unit(binding.property_name),
-                    "address": binding.register_address,
+                    "subsystem": binding.canonical_subsystem,
+                    "unit": binding.unit,
+                    "address": binding.wire_address,
+                    "declared_address": binding.register_address,
                     "count": binding.register_count,
                     "register_type": binding.register_type,
                     "word_order": binding.word_order,
@@ -78,13 +76,55 @@ class GeneratedAdapterSet:
                     "scale_factor": binding.scale_factor,
                     "offset": binding.offset,
                     "slave_id": binding.slave_id,
+                    "function_code": binding.function_code,
                     "poll_interval_ms": binding.poll_interval_ms,
                 }
             )
-        plan.sort(key=lambda e: (e["slave_id"], e["address"]))
-        return plan
+        return sorted(
+            plan,
+            key=lambda item: (
+                item["poll_interval_ms"],
+                item["slave_id"],
+                item["function_code"],
+                item["address"],
+            ),
+        )
 
-    def modbus_read_span(self, slave_id: int) -> Optional[tuple[int, int]]:
+    def modbus_read_plans(self) -> list[dict[str, Any]]:
+        groups: dict[tuple[int, int, int], list[dict[str, Any]]] = {}
+        for entry in self.modbus_plan():
+            key = (
+                entry["slave_id"],
+                entry["function_code"],
+                entry["poll_interval_ms"],
+            )
+            groups.setdefault(key, []).append(entry)
+
+        plans: list[dict[str, Any]] = []
+        for (slave_id, function_code, interval_ms), entries in groups.items():
+            start = min(entry["address"] for entry in entries)
+            end = max(entry["address"] + entry["count"] for entry in entries)
+            plans.append(
+                {
+                    "slave_id": slave_id,
+                    "function_code": function_code,
+                    "poll_interval_ms": interval_ms,
+                    "address": start,
+                    "count": end - start,
+                    "entries": entries,
+                }
+            )
+        return sorted(
+            plans,
+            key=lambda item: (
+                item["poll_interval_ms"],
+                item["slave_id"],
+                item["function_code"],
+                item["address"],
+            ),
+        )
+
+    def modbus_read_span(self, slave_id: int) -> tuple[int, int] | None:
         entries = [e for e in self.modbus_plan() if e["slave_id"] == slave_id]
         if not entries:
             return None
@@ -93,19 +133,24 @@ class GeneratedAdapterSet:
         return start, end - start
 
     def decode_modbus_block(
-        self, slave_id: int, words: list[int], start_address: int
+        self,
+        slave_id: int,
+        words: list[int],
+        start_address: int,
+        function_code: int | None = None,
     ) -> list[dict[str, Any]]:
-        readings = []
+        readings: list[dict[str, Any]] = []
         for entry in self.modbus_plan():
             if entry["slave_id"] != slave_id:
+                continue
+            if function_code is not None and entry["function_code"] != function_code:
                 continue
             offset = entry["address"] - start_address
             if offset < 0 or offset + entry["count"] > len(words):
                 continue
-            slice_ = words[offset : offset + entry["count"]]
             try:
                 value = decode_registers(
-                    slice_,
+                    words[offset : offset + entry["count"]],
                     register_type=entry["register_type"],
                     word_order=entry["word_order"],
                     byte_order=entry["byte_order"],
@@ -113,24 +158,24 @@ class GeneratedAdapterSet:
                     offset=entry["offset"],
                 )
             except ValueError as exc:
-                logger.warning("decode failed for %s: %s", entry["property_name"], exc)
+                logger.warning(
+                    "decode failed for binding %s: %s", entry["property_name"], exc
+                )
                 continue
-            readings.append(
-                {
-                    "device_id": entry["device_id"],
-                    "subsystem": entry["subsystem"],
-                    "property_name": entry["property_name"],
-                    "value": round(value, 4),
-                    "unit": entry["unit"],
-                }
-            )
+            readings.append({**entry, "value": round(value, 6)})
         return readings
 
     def messages_from_modbus_block(
-        self, slave_id: int, words: list[int], start_address: int
+        self,
+        slave_id: int,
+        words: list[int],
+        start_address: int,
+        function_code: int | None = None,
     ) -> list[dict[str, Any]]:
-        grouped: dict[tuple[str, str], list[dict]] = {}
-        for reading in self.decode_modbus_block(slave_id, words, start_address):
+        grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        for reading in self.decode_modbus_block(
+            slave_id, words, start_address, function_code
+        ):
             key = (reading["device_id"], reading["subsystem"])
             grouped.setdefault(key, []).append(
                 {
@@ -153,61 +198,81 @@ class GeneratedAdapterSet:
     def opcua_nodes(self) -> list[dict[str, Any]]:
         return [
             {
-                "device_id": b.device_id,
-                "property_name": b.property_name,
-                "subsystem": _subsystem(b),
-                "unit": _unit(b.property_name),
-                "node_id": f"ns={b.namespace_index};s={b.node_id}",
-                "scale_factor": b.scale_factor,
-                "offset": b.offset,
-                "poll_interval_ms": b.poll_interval_ms,
+                "device_id": binding.device_id,
+                "property_name": binding.property_name,
+                "subsystem": binding.canonical_subsystem,
+                "unit": binding.unit,
+                "node_id": f"ns={binding.namespace_index};s={binding.node_id}",
+                "scale_factor": binding.scale_factor,
+                "offset": binding.offset,
+                "poll_interval_ms": binding.poll_interval_ms,
             }
-            for b in self.registry.for_protocol("opcua")
-            if b.node_id
+            for binding in self._for_protocol("opcua")
+            if binding.node_id
         ]
 
     def message_from_opcua(
         self, node_id: str, raw_value: float
-    ) -> Optional[dict[str, Any]]:
-        for node in self.opcua_nodes():
-            if node["node_id"] != node_id:
+    ) -> dict[str, Any] | None:
+        for entry in self.opcua_nodes():
+            if entry["node_id"] != node_id:
                 continue
-            value = float(raw_value) * node["scale_factor"] + node["offset"]
             return {
                 "schema_version": "v1",
-                "device_id": node["device_id"],
-                "subsystem": node["subsystem"],
+                "device_id": entry["device_id"],
+                "subsystem": entry["subsystem"],
                 "protocol": "opcua",
                 "measurements": [
                     {
-                        "type": node["property_name"],
-                        "value": round(value, 4),
-                        "unit": node["unit"],
+                        "type": entry["property_name"],
+                        "value": round(
+                            float(raw_value) * entry["scale_factor"] + entry["offset"],
+                            6,
+                        ),
+                        "unit": entry["unit"],
                     }
                 ],
             }
         return None
 
-    def mqtt_subscriptions(self) -> list[tuple[str, int]]:
-        subs = []
-        for b in self.registry.for_protocol("mqtt"):
-            topic = (
-                b.topic
-                or f"factory/{_subsystem(b)}/sensors/{b.device_id}/{b.property_name}"
+    def mqtt_entries(self) -> list[dict[str, Any]]:
+        entries: list[dict[str, Any]] = []
+        for binding in self._for_protocol("mqtt"):
+            topic = binding.topic or (
+                f"factory/{binding.canonical_subsystem}/sensors/"
+                f"{binding.device_id}/{binding.property_name}"
             )
-            subs.append((topic, b.qos))
-        return sorted(set(subs))
+            entries.append(
+                {
+                    "device_id": binding.device_id,
+                    "property_name": binding.property_name,
+                    "subsystem": binding.canonical_subsystem,
+                    "unit": binding.unit,
+                    "topic": topic,
+                    "qos": binding.qos,
+                    "scale_factor": binding.scale_factor,
+                    "offset": binding.offset,
+                }
+            )
+        return entries
+
+    def mqtt_subscriptions(self) -> list[tuple[str, int]]:
+        return sorted({(e["topic"], e["qos"]) for e in self.mqtt_entries()})
+
+    def mqtt_entry(self, topic: str) -> dict[str, Any] | None:
+        return next((e for e in self.mqtt_entries() if e["topic"] == topic), None)
 
     def rest_routes(self) -> list[dict[str, Any]]:
         return [
             {
-                "device_id": b.device_id,
-                "property_name": b.property_name,
-                "subsystem": _subsystem(b),
-                "path": b.path or "/adapter/rest/ingest",
-                "method": b.method,
+                "device_id": binding.device_id,
+                "property_name": binding.property_name,
+                "subsystem": binding.canonical_subsystem,
+                "unit": binding.unit,
+                "path": binding.path or "/adapter/rest/ingest",
+                "method": binding.method,
             }
-            for b in self.registry.for_protocol("rest")
+            for binding in self._for_protocol("rest")
         ]
 
     def summary(self) -> dict[str, Any]:
@@ -222,28 +287,16 @@ class GeneratedAdapterSet:
 
 
 def load_adapter_set(path: str | Path | None = None) -> GeneratedAdapterSet:
-    target = Path(path or DEFAULT_BINDINGS)
+    target = Path(path) if path is not None else _default_bindings_path()
     registry = BindingRegistry()
-
     if not target.exists():
-        logger.warning(
-            "bindings file %s not found — generated adapters disabled, "
-            "falling back to hand-written mapping",
-            target,
-        )
+        logger.error("bindings file %s not found; protocol adapters disabled", target)
         return GeneratedAdapterSet(registry)
 
     result = registry.load_turtle(target.read_text(encoding="utf-8"))
     if not result.accepted:
         logger.error("bindings file %s rejected: %s", target, result.violations)
         return GeneratedAdapterSet(BindingRegistry())
-
-    logger.info(
-        "loaded %d protocol bindings from %s covering devices %s",
-        len(registry),
-        target,
-        registry.devices(),
-    )
     return GeneratedAdapterSet(registry)
 
 

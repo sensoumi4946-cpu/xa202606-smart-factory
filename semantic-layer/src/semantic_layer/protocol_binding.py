@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import logging
+import io
+import tokenize
+import pprint
 import struct
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -399,9 +402,26 @@ class BindingRegistry:
         if not accepted:
             return BindingLoadResult(False, [], violations)
 
+        parsed = parse_bindings(graph)
+        duplicate_ids = sorted(
+            binding.binding_id
+            for binding in parsed
+            if binding.binding_id in self._bindings
+        )
+        if duplicate_ids:
+            return BindingLoadResult(
+                False,
+                [],
+                [f"duplicate binding id: {binding_id}" for binding_id in duplicate_ids],
+            )
+
+        collisions = _modbus_collisions([*self._bindings.values(), *parsed])
+        if collisions:
+            return BindingLoadResult(False, [], collisions)
+
         self._graph += graph
         added = []
-        for binding in parse_bindings(graph):
+        for binding in parsed:
             self._bindings[binding.binding_id] = binding
             added.append(binding.binding_id)
         logger.info("protocol bindings loaded: %s", added)
@@ -441,34 +461,59 @@ class BindingRegistry:
         return len(self._bindings)
 
 
+def _modbus_collisions(bindings: list[ProtocolBinding]) -> list[str]:
+    occupied: dict[tuple[int, int, int], str] = {}
+    violations: list[str] = []
+    for binding in sorted(bindings, key=lambda item: item.binding_id):
+        if binding.protocol != "modbus" or binding.wire_address is None:
+            continue
+        for address in range(
+            binding.wire_address, binding.wire_address + binding.register_count
+        ):
+            key = (binding.slave_id, binding.function_code, address)
+            previous = occupied.get(key)
+            if previous is not None:
+                violations.append(
+                    "Modbus address collision: "
+                    f"slave={binding.slave_id}, function={binding.function_code}, "
+                    f"wire_address={address} used by {previous} and {binding.binding_id}"
+                )
+            else:
+                occupied[key] = binding.binding_id
+    return violations
+
+
+def _literal_table(rows: list[dict[str, Any]]) -> str:
+    return pprint.pformat(rows, width=100, sort_dicts=False)
+
+
 def generate_modbus_adapter(bindings: list[ProtocolBinding]) -> str:
-    rows = []
+    rows: list[dict[str, Any]] = []
     for b in bindings:
         rows.append(
-            "    {"
-            f'"device_id": "{b.device_id}", '
-            f'"property_name": "{b.property_name}", '
-            f'"subsystem": "{b.canonical_subsystem}", '
-            f'"address": {b.wire_address}, '
-            f'"declared_address": {b.register_address}, '
-            f'"register_base": {b.register_base}, '
-            f'"function_code": {b.function_code}, '
-            f'"count": {b.register_count}, '
-            f'"register_type": "{b.register_type}", '
-            f'"word_order": "{b.word_order}", '
-            f'"byte_order": "{b.byte_order}", '
-            f'"scale_factor": {b.scale_factor}, '
-            f'"offset": {b.offset}, '
-            f'"slave_id": {b.slave_id}, '
-            f'"poll_interval_ms": {b.poll_interval_ms}'
-            "},"
+            {
+                "device_id": b.device_id,
+                "property_name": b.property_name,
+                "subsystem": b.canonical_subsystem,
+                "unit": b.unit,
+                "address": b.wire_address,
+                "declared_address": b.register_address,
+                "register_base": b.register_base,
+                "function_code": b.function_code,
+                "count": b.register_count,
+                "register_type": b.register_type,
+                "word_order": b.word_order,
+                "byte_order": b.byte_order,
+                "scale_factor": b.scale_factor,
+                "offset": b.offset,
+                "slave_id": b.slave_id,
+                "poll_interval_ms": b.poll_interval_ms,
+            }
         )
-    table = "\n".join(rows)
-    return f'''from semantic_layer.protocol_binding import decode_registers
+    table = _literal_table(rows)
+    return f"""from semantic_layer.protocol_binding import decode_registers
 
-REGISTER_MAP = [
-{table}
-]
+REGISTER_MAP = {table}
 
 
 FUNCTION_CODE_CALLS = {{
@@ -517,7 +562,7 @@ def decode_entry(entry, words):
     )
 
 
-def build_message(entry, words, unit=""):
+def build_message(entry, words):
     return {{
         "schema_version": "v1",
         "device_id": entry["device_id"],
@@ -527,31 +572,30 @@ def build_message(entry, words, unit=""):
             {{
                 "type": entry["property_name"],
                 "value": decode_entry(entry, words),
-                "unit": unit,
+                "unit": entry["unit"],
             }}
         ],
     }}
-'''
+"""
 
 
 def generate_opcua_adapter(bindings: list[ProtocolBinding]) -> str:
-    rows = []
+    rows: list[dict[str, Any]] = []
     for b in bindings:
         rows.append(
-            "    {"
-            f'"device_id": "{b.device_id}", '
-            f'"property_name": "{b.property_name}", '
-            f'"subsystem": "{b.canonical_subsystem}", '
-            f'"node_id": "ns={b.namespace_index};s={b.node_id}", '
-            f'"scale_factor": {b.scale_factor}, '
-            f'"offset": {b.offset}, '
-            f'"poll_interval_ms": {b.poll_interval_ms}'
-            "},"
+            {
+                "device_id": b.device_id,
+                "property_name": b.property_name,
+                "subsystem": b.canonical_subsystem,
+                "unit": b.unit,
+                "node_id": f"ns={b.namespace_index};s={b.node_id}",
+                "scale_factor": b.scale_factor,
+                "offset": b.offset,
+                "poll_interval_ms": b.poll_interval_ms,
+            }
         )
-    table = "\n".join(rows)
-    return f'''NODE_MAP = [
-{table}
-]
+    table = _literal_table(rows)
+    return f"""NODE_MAP = {table}
 
 
 def node_ids():
@@ -562,7 +606,7 @@ def scale(entry, raw_value):
     return float(raw_value) * entry["scale_factor"] + entry["offset"]
 
 
-def build_message(entry, raw_value, unit=""):
+def build_message(entry, raw_value):
     return {{
         "schema_version": "v1",
         "device_id": entry["device_id"],
@@ -572,35 +616,33 @@ def build_message(entry, raw_value, unit=""):
             {{
                 "type": entry["property_name"],
                 "value": scale(entry, raw_value),
-                "unit": unit,
+                "unit": entry["unit"],
             }}
         ],
     }}
-'''
+"""
 
 
 def generate_mqtt_adapter(bindings: list[ProtocolBinding]) -> str:
-    rows = []
+    rows: list[dict[str, Any]] = []
     for b in bindings:
         topic = (
-            b.topic
-            or f"factory/{b.subsystem}/sensors/{b.device_id}/{b.property_name}"
+            b.topic or f"factory/{b.subsystem}/sensors/{b.device_id}/{b.property_name}"
         )
         rows.append(
-            "    {"
-            f'"device_id": "{b.device_id}", '
-            f'"property_name": "{b.property_name}", '
-            f'"subsystem": "{b.canonical_subsystem}", '
-            f'"topic": "{topic}", '
-            f'"qos": {b.qos}, '
-            f'"scale_factor": {b.scale_factor}, '
-            f'"offset": {b.offset}'
-            "},"
+            {
+                "device_id": b.device_id,
+                "property_name": b.property_name,
+                "subsystem": b.canonical_subsystem,
+                "unit": b.unit,
+                "topic": topic,
+                "qos": b.qos,
+                "scale_factor": b.scale_factor,
+                "offset": b.offset,
+            }
         )
-    table = "\n".join(rows)
-    return f'''TOPIC_MAP = [
-{table}
-]
+    table = _literal_table(rows)
+    return f"""TOPIC_MAP = {table}
 
 
 def subscriptions():
@@ -616,29 +658,28 @@ def entry_for_topic(topic):
 
 def scale(entry, raw_value):
     return float(raw_value) * entry["scale_factor"] + entry["offset"]
-'''
+"""
 
 
 def generate_rest_adapter(bindings: list[ProtocolBinding]) -> str:
-    rows = []
+    rows: list[dict[str, Any]] = []
     for b in bindings:
         path = b.path or "/adapter/rest/ingest"
         rows.append(
-            "    {"
-            f'"device_id": "{b.device_id}", '
-            f'"property_name": "{b.property_name}", '
-            f'"subsystem": "{b.canonical_subsystem}", '
-            f'"path": "{path}", '
-            f'"method": "{b.method}", '
-            f'"scale_factor": {b.scale_factor}, '
-            f'"offset": {b.offset}, '
-            f'"poll_interval_ms": {b.poll_interval_ms}'
-            "},"
+            {
+                "device_id": b.device_id,
+                "property_name": b.property_name,
+                "subsystem": b.canonical_subsystem,
+                "unit": b.unit,
+                "path": path,
+                "method": b.method,
+                "scale_factor": b.scale_factor,
+                "offset": b.offset,
+                "poll_interval_ms": b.poll_interval_ms,
+            }
         )
-    table = "\n".join(rows)
-    return f'''ROUTE_MAP = [
-{table}
-]
+    table = _literal_table(rows)
+    return f"""ROUTE_MAP = {table}
 
 
 def routes():
@@ -660,7 +701,7 @@ def scale(entry, raw_value):
     return float(raw_value) * entry["scale_factor"] + entry["offset"]
 
 
-def build_message(entry, raw_value, unit=""):
+def build_message(entry, raw_value):
     return {{
         "schema_version": "v1",
         "device_id": entry["device_id"],
@@ -670,11 +711,11 @@ def build_message(entry, raw_value, unit=""):
             {{
                 "type": entry["property_name"],
                 "value": scale(entry, raw_value),
-                "unit": unit,
+                "unit": entry["unit"],
             }}
         ],
     }}
-'''
+"""
 
 
 GENERATORS = {
@@ -700,6 +741,9 @@ def generate_all(registry: BindingRegistry) -> dict[str, str]:
         selected = registry.for_protocol(protocol)
         if selected:
             out[protocol] = GENERATORS[protocol](selected)
+    for protocol, source in out.items():
+        tokens = [t for t in tokenize.generate_tokens(io.StringIO(source).readline) if t.type != tokenize.COMMENT]
+        out[protocol] = tokenize.untokenize(tokens)
     return out
 
 

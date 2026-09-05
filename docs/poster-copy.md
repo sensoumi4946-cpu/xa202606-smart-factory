@@ -7,8 +7,8 @@ Text for the XA-202606 architecture poster. Bilingual.
 **智慧工厂安全监控与控制平台**
 *Smart Factory Safety Monitoring & Control Platform*
 
-Built on a domestic operating system.
-基于国产操作系统。
+Deployment target: openEuler 24.03 LTS (qualification evidence pending).
+国产操作系统目标：openEuler 24.03 LTS（待实机验收）。
 
 Topic XA-202606 · 挑战杯揭榜挂帅擂台赛 · ArcherMind Technology (诚迈科技)
 
@@ -29,7 +29,7 @@ A shared SOSA/SSN ontology plus Apache Jena Fuseki map every
 reading into a standardised Observation triple. Devices are
 queried by meaning (SPARQL), not by raw format. Cross-device
 correlation — e.g. gas concentration + temperature rise →
-fire risk — is a query, not custom code.
+fire risk — uses explicit rules in the analytics pipeline and semantic queries.
 
 ### AAS Digital Twin
 
@@ -43,18 +43,17 @@ Descriptor-ready for Eclipse BaSyx runtime.
 
 | Concern | Tools |
 |---|---|
-| OS target | 统信 UOS / openEuler / HongZOS |
-| Firmware | ESP32 / Raspberry Pi / Arduino (DHT22, PIR, MQ-2/7, HC-SR04, IR) |
+| OS target | openEuler 24.03 LTS（x86_64 / AArch64，待实机验收） |
+| Firmware | 五路参考固件已提交；编译、标定、接线和实机证据待完成 |
 | Protocols | MQTT, Modbus, OPC UA, HTTP/REST |
 | Semantics | Apache Jena Fuseki, SOSA/SSN, RDFlib |
 | AAS | Asset Administration Shell (descriptor-ready) |
 | Backend | FastAPI + SQLite + rule engine |
 | Dashboard | Vue 3 + Apache ECharts |
-| Operations | Docker Compose, JSON Lines logging |
+| Operations | openEuler systemd, Docker Compose, JSON Lines logging |
 
 ---
 
 ## Repository
 
-gitee.com/sensoumi/xa202606-smart-factory
-[ QR code placeholder ]
+github.com/sensoumi4946-cpu/xa202606-smart-factory

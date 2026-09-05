@@ -1,0 +1,5 @@
+{"schema_version":"v1","device_id":"ESP32_001","subsystem":"temp_humidity","protocol":"mqtt","measurements":[{"type":"temperature","value":26.5,"unit":"celsius"},{"type":"humidity","value":60.0,"unit":"percent"}]}
+{"schema_version":"v1","device_id":"ESP32_002","subsystem":"counting","protocol":"rest","measurements":[{"type":"count","value":3,"unit":"count"}]}
+{"schema_version":"v1","device_id":"ESP32_003","subsystem":"lighting","protocol":"rest","measurements":[{"type":"occupancy","value":1.0,"unit":"boolean"},{"type":"light_state","value":0.0,"unit":"boolean"}]}
+{"schema_version":"v1","device_id":"ESP32_004","subsystem":"agv","protocol":"opcua","measurements":[{"type":"distance","value":13.6,"unit":"cm"}]}
+{"schema_version":"v1","device_id":"ESP32_005","subsystem":"gas","protocol":"modbus","measurements":[{"type":"co","value":7.3,"unit":"ppm"},{"type":"smoke","value":6.3,"unit":"ppm"},{"type":"combustible_gas","value":6.3,"unit":"ppm"}]}

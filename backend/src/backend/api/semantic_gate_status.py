@@ -26,7 +26,7 @@ async def semantic_query(body: dict):
         raise HTTPException(status_code=422, detail="missing 'query' field")
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=10.0, trust_env=False) as client:
             resp = await client.post(
                 config.FUSEKI_QUERY_URL,
                 data={"query": query},

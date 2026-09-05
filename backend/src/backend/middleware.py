@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import os
@@ -17,9 +18,10 @@ from starlette.middleware.base import BaseHTTPMiddleware
 logger = logging.getLogger(__name__)
 
 MAX_BODY_BYTES = int(os.getenv("MAX_BODY_BYTES", str(64 * 1024)))
-RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "600"))
-RATE_LIMIT_BURST = int(os.getenv("RATE_LIMIT_BURST", "60"))
+RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "6000"))
+RATE_LIMIT_BURST = int(os.getenv("RATE_LIMIT_BURST", "400"))
 SLOW_REQUEST_MS = float(os.getenv("SLOW_REQUEST_MS", "500"))
+RATE_LIMIT_TRUST_LOCAL = os.getenv("RATE_LIMIT_TRUST_LOCAL", "false").lower() == "true"
 
 EXEMPT_PATHS = ("/health", "/metrics")
 
@@ -113,7 +115,6 @@ metrics = Metrics()
 
 
 class TokenBucket:
-
     def __init__(self, rate_per_minute: int, burst: int) -> None:
         self.rate = rate_per_minute / 60.0
         self.burst = burst
@@ -139,12 +140,26 @@ class TokenBucket:
 limiter = TokenBucket(RATE_LIMIT_PER_MINUTE, RATE_LIMIT_BURST)
 
 
+def _is_loopback(host: str) -> bool:
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return host in ("localhost", "")
+
+
 def _client_key(request: Request) -> str:
     api_key = request.headers.get("X-API-Key")
     if api_key:
         return f"key:{api_key[:16]}"
     client = request.client
     return f"ip:{client.host}" if client else "ip:unknown"
+
+
+def _rate_limit_exempt(request: Request) -> bool:
+    if not RATE_LIMIT_TRUST_LOCAL:
+        return False
+    client = request.client
+    return bool(client and _is_loopback(client.host))
 
 
 class RequestContextMiddleware(BaseHTTPMiddleware):
@@ -168,13 +183,13 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                 )
                 return JSONResponse(
                     status_code=413,
-                    content={
-                        "detail": f"request body exceeds {MAX_BODY_BYTES} bytes"
-                    },
+                    content={"detail": f"request body exceeds {MAX_BODY_BYTES} bytes"},
                     headers={"X-Request-ID": request_id},
                 )
 
-            if not limiter.allow(_client_key(request)):
+            if not _rate_limit_exempt(request) and not limiter.allow(
+                _client_key(request)
+            ):
                 metrics.note_rate_limited()
                 log_event(
                     "request_rejected",
@@ -186,10 +201,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                 return JSONResponse(
                     status_code=429,
                     content={"detail": "too many requests"},
-                    headers={
-                        "X-Request-ID": request_id,
-                        "Retry-After": "1",
-                    },
+                    headers={"X-Request-ID": request_id, "Retry-After": "1"},
                 )
 
         try:

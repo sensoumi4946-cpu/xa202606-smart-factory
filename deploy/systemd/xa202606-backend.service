@@ -1,0 +1,34 @@
+[Unit]
+Description=XA-202606 smart factory backend
+After=network-online.target xa202606-bindingd.service
+Wants=network-online.target
+Wants=xa202606-bindingd.service
+
+[Service]
+Type=simple
+User=xa202606
+Group=xa202606
+WorkingDirectory=/opt/xa202606
+EnvironmentFile=-/etc/xa202606/backend.env
+Environment=BINDINGS_TTL=/etc/xa202606/bindings.ttl
+Environment=THRESHOLDS_TTL=/etc/xa202606/thresholds.ttl
+Environment=DATABASE_PATH=/var/lib/xa202606/smart_factory.db
+Environment=PROVENANCE_AUDIT_DB=/var/lib/xa202606/prov_audit.db
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/xa202606/venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=5s
+StateDirectory=xa202606
+StateDirectoryMode=0750
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/xa202606
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+MemoryMax=1G
+
+[Install]
+WantedBy=multi-user.target

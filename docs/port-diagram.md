@@ -1,38 +1,15 @@
-# Port Topology
+# Data and control paths
 
-Communication flow across the Docker Compose stack. Port assignments are registered in `docs/port-registry.md`.
+| Origin | Destination | Endpoint |
+|---|---|---|
+| DHT22 | MQTT broker | Configured broker, normally TCP 1883 |
+| MQTT adapter | Backend | POST /ingest/api/v1/data |
+| PIR/counting firmware | REST adapter or backend | POST /adapter/rest/ingest or /ingest/api/v1/data, with API key |
+| Gas adapter | Gas hardware | Configured Modbus TCP endpoint and register map |
+| AGV sensor | Serial gateway | Configured serial device |
+| OPC UA adapter | Serial gateway | Configured OPC UA endpoint and certificates |
+| Dashboard | Backend | Same-origin reverse proxy |
+| Backend | MQTT receiver | factory/{subsystem}/control/{device_id} |
+| Physical receiver | Backend | POST /api/v1/control/{command_id}/ack |
 
-## Data flow
-
-```
-simulators ──(native protocol)──▶ adapters ──(POST /api/v1/data)──▶ backend
-                                                                       │
-                                                             ┌─ SQLite
-                                                             └─ Fuseki (SPARQL)
-
-dashboard ──(REST /api/v1/*)──▶ backend
-```
-
-## Service communication
-
-| From | To | Protocol | Direction |
-|---|---|---|---|
-| mosquitto | connectivity-mqtt | MQTT (sub) | Sim → Adapter |
-| modbus-sim | connectivity-modbus | Modbus TCP (poll) | Sim → Adapter |
-| opcua-sim | connectivity-opcua | OPC UA (sub) | Sim → Adapter |
-| rest-pusher | connectivity-rest | HTTP POST | Sim → Adapter |
-| connectivity-* | backend | HTTP POST /api/v1/data | Adapter → Core |
-| backend | fuseki | HTTP SPARQL | Core → Knowledge |
-| dashboard | backend | HTTP REST /api/v1/* | UI → Core |
-
-## Externally exposed ports
-
-| Port | Service |
-|---:|---|
-| 1883 | mosquitto |
-| 1502 | modbus-sim |
-| 4840 | opcua-sim |
-| 8100 | connectivity-rest |
-| 8000 | backend |
-| 3030 | fuseki |
-| 5173 | dashboard |
+Docker exposes the backend on loopback by default. Set BACKEND_BIND_ADDRESS and the reachable PUBLIC_BACKEND_URL/HOST_LAN_IP when hardware posts directly. Restrict access on the test network. Fuseki stays inside the container network.

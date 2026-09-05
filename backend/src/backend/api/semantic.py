@@ -1,3 +1,5 @@
+import asyncio
+import time
 from typing import Any, Optional
 
 import httpx
@@ -9,7 +11,10 @@ from semantic_layer.mapping import SUBSYSTEM_TO_RESOURCE, TYPE_TO_PROPERTY
 
 router = APIRouter()
 
-_TIMEOUT = 10.0
+_TIMEOUT = 2.0
+_CACHE_TTL = 15.0
+_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+_inflight: dict[str, asyncio.Task[list[dict[str, Any]]]] = {}
 
 _PREFIX = (
     "PREFIX sosa: <http://www.w3.org/ns/sosa/> "
@@ -17,8 +22,7 @@ _PREFIX = (
 )
 
 _BASE_QUERY = (
-    _PREFIX
-    + "SELECT DISTINCT ?sensor ?subsystem ?protocol ?prop WHERE { "
+    _PREFIX + "SELECT DISTINCT ?sensor ?subsystem ?protocol ?prop WHERE { "
     "?obs a sosa:Observation ; sosa:madeBySensor ?sensor ; "
     "sosa:observedProperty ?prop . "
     "OPTIONAL { ?sensor sf:belongsToSubsystem ?subsystem } "
@@ -38,9 +42,7 @@ _FIRE_RISK_FILTER = (
     "sf:measuresSmoke sf:measuresCombustibleGas }"
 )
 
-_GAS_DETAIL_FILTER = (
-    "?sensor sf:belongsToSubsystem sf:GasMonitoringSubsystem ."
-)
+_GAS_DETAIL_FILTER = "?sensor sf:belongsToSubsystem sf:GasMonitoringSubsystem ."
 
 _PRODUCTION_FILTER = (
     "VALUES ?prop { "
@@ -50,18 +52,18 @@ _PRODUCTION_FILTER = (
 
 VIEWS: dict[str, str] = {
     "sensor-observations": _BASE_QUERY % "",
-    "co-temp-sensors":     _BASE_QUERY % _CO_TEMP_FILTER,
-    "fire-risk-sensors":   _BASE_QUERY % _FIRE_RISK_FILTER,
+    "co-temp-sensors": _BASE_QUERY % _CO_TEMP_FILTER,
+    "fire-risk-sensors": _BASE_QUERY % _FIRE_RISK_FILTER,
     "gas-subsystem-detail": _BASE_QUERY % _GAS_DETAIL_FILTER,
-    "production-sensors":  _BASE_QUERY % _PRODUCTION_FILTER,
+    "production-sensors": _BASE_QUERY % _PRODUCTION_FILTER,
 }
 
 DESCRIPTIONS: dict[str, str] = {
-    "sensor-observations":  "All sensors with their observed properties and subsystems",
-    "co-temp-sensors":      "Sensors observing CO or temperature — cross-device fire risk correlation",
-    "fire-risk-sensors":    "All fire-safety sensors (temperature + CO + smoke + combustible gas) across all protocols",
+    "sensor-observations": "All sensors with their observed properties and subsystems",
+    "co-temp-sensors": "Sensors observing CO or temperature — cross-device fire risk correlation",
+    "fire-risk-sensors": "All fire-safety sensors (temperature + CO + smoke + combustible gas) across all protocols",
     "gas-subsystem-detail": "Gas monitoring subsystem: all three hazardous-gas properties via Modbus TCP",
-    "production-sensors":   "Production-floor sensors: AGV distance (OPC UA), counting (REST), occupancy/lighting (REST)",
+    "production-sensors": "Production-floor sensors: AGV distance (OPC UA), counting (REST), occupancy/lighting (REST)",
 }
 
 
@@ -78,7 +80,7 @@ SUBSYS_NAMES: dict[str, str] = {
 
 
 async def _run_sparql(query: str) -> list[dict[str, Any]]:
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+    async with httpx.AsyncClient(timeout=_TIMEOUT, trust_env=False) as client:
         resp = await client.post(
             config.FUSEKI_QUERY_URL,
             content=query.encode("utf-8"),
@@ -91,6 +93,24 @@ async def _run_sparql(query: str) -> list[dict[str, Any]]:
     return resp.json()["results"]["bindings"]
 
 
+async def _cached_sparql(view: str) -> list[dict[str, Any]]:
+    cached = _cache.get(view)
+    now = time.monotonic()
+    if cached and now - cached[0] < _CACHE_TTL:
+        return cached[1]
+    task = _inflight.get(view)
+    if task is None:
+        task = asyncio.create_task(_run_sparql(VIEWS[view]))
+        _inflight[view] = task
+    try:
+        bindings = await task
+        _cache[view] = (time.monotonic(), bindings)
+        return bindings
+    finally:
+        if _inflight.get(view) is task:
+            _inflight.pop(view, None)
+
+
 def _aggregate(bindings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     order: list[str] = []
     by_sensor: dict[str, dict[str, Any]] = {}
@@ -99,10 +119,10 @@ def _aggregate(bindings: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if sensor not in by_sensor:
             subsys = _local(b["subsystem"]["value"]) if "subsystem" in b else ""
             by_sensor[sensor] = {
-                "sensor":    sensor,
+                "sensor": sensor,
                 "subsystem": SUBSYS_NAMES.get(subsys, subsys),
-                "observes":  [],
-                "protocol":  b.get("protocol", {}).get("value", ""),
+                "observes": [],
+                "protocol": b.get("protocol", {}).get("value", ""),
             }
             order.append(sensor)
         if "prop" in b:
@@ -120,7 +140,7 @@ async def semantic(view: Optional[str] = Query(None)):
             detail=f"Unknown view '{view}'. Valid options: {sorted(VIEWS.keys())}",
         )
     try:
-        bindings = await _run_sparql(VIEWS[view])
+        bindings = await _cached_sparql(view)
     except httpx.HTTPError:
         return {
             "view": view,

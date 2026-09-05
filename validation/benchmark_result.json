@@ -1,29 +1,24 @@
 {
-  "manual": {
-    "python_lines": 85,
-    "config_entries": 11,
-    "files_touched": 3,
-    "source": "本项目 2026-07 版本手写 modbus_adapter.py 接入一台 DHT22 的实测值"
-  },
-  "ontology_driven": {
-    "python_lines": 0,
-    "config_entries": 16,
-    "files_touched": 1,
-    "onboard_ms": 51.3,
-    "generated_lines": 160,
-    "protocols": [
-      "modbus",
-      "mqtt",
-      "opcua",
-      "rest"
-    ]
-  },
-  "hardcoded_binding_constants": [
-    "connectivity/src/connectivity/adapters/modbus_adapter.py:20",
-    "connectivity/src/connectivity/adapters/modbus_adapter.py:21",
-    "connectivity/src/connectivity/adapters/modbus_adapter.py:40",
-    "connectivity/src/connectivity/adapters/modbus_adapter.py:66",
-    "connectivity/src/connectivity/adapters/modbus_adapter.py:67",
-    "connectivity/src/connectivity/adapters/modbus_adapter.py:129"
+  "benchmark": "BM-BIND-1 new device using a known measurement type",
+  "evidence_level": "machine-measured local validation and in-memory generation",
+  "existing_bindings": 17,
+  "new_bindings": 1,
+  "elapsed_ms": 15.7,
+  "binding_files_edited": 1,
+  "business_code_files_edited": 0,
+  "generated_lines": 365,
+  "protocols_generated": [
+    "modbus",
+    "mqtt",
+    "opcua",
+    "rest"
+  ],
+  "process_restart_required": false,
+  "configuration_reload_required": true,
+  "hardcoded_device_binding_locations": [],
+  "limitations": [
+    "The measurement type must already exist in the strict message contract.",
+    "Live processes must receive the implemented authenticated/SIGHUP configuration reload.",
+    "Elapsed time is software execution time, not an operator onboarding study."
   ]
 }

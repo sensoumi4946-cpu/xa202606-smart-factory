@@ -1,4 +1,3 @@
-#   docker compose -f deploy/docker-compose.yml up -d --build
 name: xa202606
 
 services:
@@ -6,7 +5,7 @@ services:
   fuseki:
     image: apache/jena-fuseki:4.10.0
     environment:
-      ADMIN_PASSWORD: "${FUSEKI_ADMIN_PASSWORD:?set FUSEKI_ADMIN_PASSWORD}"
+      ADMIN_PASSWORD: "${FUSEKI_ADMIN_PASSWORD:-}"
       JVM_ARGS: "-Xmx1g"
       FUSEKI_DATASET_1: "factory"
     volumes:
@@ -28,6 +27,8 @@ services:
     restart: unless-stopped
 
   backend:
+    ports:
+      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:8000:8000"
     build:
       context: ..
       dockerfile: backend/Dockerfile
@@ -37,11 +38,13 @@ services:
       MQTT_BROKER_HOST: "mosquitto"
       MQTT_BROKER_PORT: "1883"
       DATABASE_PATH: "/data/smart_factory.db"
+      PROVENANCE_AUDIT_DB: "/data/prov_audit.db"
       SEMANTIC_WRITE_ENABLED: "true"
       HARDWARE_PROFILE: "${HARDWARE_PROFILE:-mock}"
       BINDINGS_TTL: "/app/bindings.ttl"
-      API_KEY: "${API_KEY:?set API_KEY}"
-      COMMAND_SIGNING_KEY: "${COMMAND_SIGNING_KEY:?set COMMAND_SIGNING_KEY}"
+      THRESHOLDS_TTL: "/app/thresholds.ttl"
+      API_KEY: "${API_KEY:-}"
+      COMMAND_SIGNING_KEY: "${COMMAND_SIGNING_KEY:-}"
       PUBLIC_BACKEND_URL: "http://${HOST_LAN_IP:-backend}:8000"
       LLM_API_KEY: "${LLM_API_KEY:-}"
       LLM_MODEL: "${LLM_MODEL:-qwen-plus}"
@@ -49,6 +52,7 @@ services:
     volumes:
       - backend_data:/data
       - ../bindings.ttl:/app/bindings.ttl:ro
+      - ../thresholds.ttl:/app/thresholds.ttl:ro
     depends_on:
       fuseki:
         condition: service_healthy
@@ -70,6 +74,7 @@ services:
     environment:
       MQTT_BROKER_HOST: "mosquitto"
       BACKEND_URL: "http://backend:8000"
+      ACTIVE_PROTOCOL_DEVICES: '${ACTIVE_PROTOCOL_DEVICES:-{}}'
       BINDINGS_TTL: "/app/bindings.ttl"
       API_KEY: "${API_KEY}"
     volumes:
@@ -80,12 +85,15 @@ services:
     restart: unless-stopped
 
   connectivity-rest:
+    ports:
+      - "${REST_BIND_ADDRESS:-0.0.0.0}:8100:8100"
     build:
       context: ..
       dockerfile: connectivity/Dockerfile
     command: ["python", "-m", "connectivity.runner", "--adapter", "rest"]
     environment:
       BACKEND_URL: "http://backend:8000"
+      ACTIVE_PROTOCOL_DEVICES: '${ACTIVE_PROTOCOL_DEVICES:-{}}'
       BINDINGS_TTL: "/app/bindings.ttl"
       API_KEY: "${API_KEY}"
     volumes:
@@ -95,7 +103,58 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  connectivity-modbus:
+    profiles: ["hardware"]
+    build:
+      context: ..
+      dockerfile: connectivity/Dockerfile
+    command: ["python", "-m", "connectivity.runner", "--adapter", "modbus"]
+    environment:
+      MODBUS_HOST: "${MODBUS_HOST:-host.docker.internal}"
+      MODBUS_PORT: "${MODBUS_PORT:-1502}"
+      BACKEND_URL: "http://backend:8000"
+      ACTIVE_PROTOCOL_DEVICES: '${ACTIVE_PROTOCOL_DEVICES:-{}}'
+      BINDINGS_TTL: "/app/bindings.ttl"
+      API_KEY: "${API_KEY}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ../bindings.ttl:/app/bindings.ttl:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  connectivity-opcua:
+    profiles: ["hardware"]
+    build:
+      context: ..
+      dockerfile: connectivity/Dockerfile
+    command: ["python", "-m", "connectivity.runner", "--adapter", "opcua"]
+    environment:
+      OPCUA_ENDPOINT: "${OPCUA_ENDPOINT:-opc.tcp://host.docker.internal:4840/}"
+      OPCUA_SECURITY_STRING: "${OPCUA_SECURITY_STRING:-}"
+      OPCUA_USERNAME: "${OPCUA_USERNAME:-}"
+      OPCUA_PASSWORD: "${OPCUA_PASSWORD:-}"
+      OPCUA_USER_CERTIFICATE: "${OPCUA_USER_CERTIFICATE:-}"
+      OPCUA_USER_PRIVATE_KEY: "${OPCUA_USER_PRIVATE_KEY:-}"
+      OPCUA_USER_PRIVATE_KEY_PASSWORD: "${OPCUA_USER_PRIVATE_KEY_PASSWORD:-}"
+      BACKEND_URL: "http://backend:8000"
+      ACTIVE_PROTOCOL_DEVICES: '${ACTIVE_PROTOCOL_DEVICES:-{}}'
+      BINDINGS_TTL: "/app/bindings.ttl"
+      API_KEY: "${API_KEY}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ../bindings.ttl:/app/bindings.ttl:ro
+      - ./openeuler/certificates:/etc/xa202606/certificates:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
   actuator-valve:
+    profiles: ["simulation"]
     build:
       context: ..
       dockerfile: connectivity/Dockerfile
@@ -108,7 +167,9 @@ services:
       - "gas"
     environment:
       MQTT_BROKER_HOST: "mosquitto"
+      BACKEND_URL: "http://backend:8000"
       API_KEY: "${API_KEY}"
+      COMMAND_SIGNING_KEY: "${COMMAND_SIGNING_KEY}"
     volumes:
       - ../firmware:/app/firmware:ro
     depends_on:
@@ -117,6 +178,7 @@ services:
     restart: unless-stopped
 
   actuator-hvac:
+    profiles: ["simulation"]
     build:
       context: ..
       dockerfile: connectivity/Dockerfile
@@ -129,7 +191,9 @@ services:
       - "hvac"
     environment:
       MQTT_BROKER_HOST: "mosquitto"
+      BACKEND_URL: "http://backend:8000"
       API_KEY: "${API_KEY}"
+      COMMAND_SIGNING_KEY: "${COMMAND_SIGNING_KEY}"
     volumes:
       - ../firmware:/app/firmware:ro
     depends_on:

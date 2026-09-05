@@ -2,7 +2,7 @@
 
 ## Overview
 
-This monorepo implements the XA-202606 Smart Factory Safety Monitoring & Control Platform. It features a **tab-based console dashboard** (monitoring / API debugging / device management / system status), a **rule-based alert engine**, **multi-protocol adapters** (MQTT / REST / Modbus / OPC UA) for heterogeneous device normalisation, a **Fuseki-powered semantic runtime** with SOSA/SSN for cross-device SPARQL queries, and **AAS digital-twin descriptors** — all running on a Docker Compose stack.
+This monorepo implements the software prototype for the XA-202606 Smart Factory Safety Monitoring & Control Platform. It features a **tab-based console dashboard** (monitoring / API debugging / device management / system status), a **rule-based alert engine**, **multi-protocol adapters** (MQTT / REST / Modbus / OPC UA) for heterogeneous device normalisation, a **Fuseki-powered semantic runtime** with SOSA/SSN for cross-device SPARQL queries, and **AAS digital-twin descriptors**. Modbus and OPC UA are optional hardware-profile services; their previously documented simulators are not present in this revision. See `docs/competition-requirements-audit.md` before treating a diagram or checklist as completed evidence.
 
 ### Architecture
 
@@ -28,7 +28,7 @@ OPC UA Sim ──────────▶ OPC UA Adapter ──────�
 |---|---|---|---|---|
 | Data contract (shared) | `shared/` | Import-only | — |
 | Backend API | `backend/` | FastAPI + SQLite, 6 endpoints + rules engine | 8000 |
-| Connectivity | `connectivity/` | MQTT adapter → HTTP forward | — |
+| Connectivity | `connectivity/` | MQTT / REST / Modbus / OPC UA → `UnifiedMessage` → HTTP forward | — |
 | Mock generator | `analytics/mock/` | CLI tool | — |
 | Semantic layer | `semantic-layer/` | RDF mapping + Fuseki write path | — |
 | Knowledge graph | `deploy/fuseki/` | Apache Jena Fuseki, SPARQL endpoint | 3030 |
@@ -64,6 +64,7 @@ cd dashboard && npx vitest run && cd ..
 
 ```bash
 docker compose -f deploy/docker-compose.yml up -d
+# Add --profile hardware after configuring real MODBUS_HOST / OPCUA_ENDPOINT
 ```
 
 This starts Mosquitto (1883), Backend (8000), Dashboard (5173), Fuseki (3030), 4 protocol adapters, and 3 simulators. All simulators auto-push data; no manual mock needed.
@@ -160,7 +161,7 @@ One poll cycle produces a single `UnifiedMessage` with all three measurements. `
 python -m connectivity.runner --adapter modbus
 ```
 
-Modbus simulator (`analytics/src/analytics/mock/modbus_server.py`): serves holding registers on `MODBUS_PORT`, auto-updating values periodically.
+The repository does not currently contain the older documented Modbus simulator. Use a real endpoint or add a separately tested simulator before running the `hardware` Compose profile.
 
 ---
 
@@ -170,11 +171,11 @@ All 5 subsystems enter through different protocols. Backend only sees `UnifiedMe
 
 | Subsystem | Protocol | Adapter Port | Simulator |
 |---|---|---|---|
-| Temp/Humidity | MQTT | — | `analytics.mock.generator --subsystem temp_humidity` |
-| Lighting | REST | 8100 | `analytics.mock.rest_pusher` |
-| Gas | Modbus TCP | — | `analytics.mock.modbus_server` (port 1502) |
-| AGV | OPC UA | — | `analytics.mock.opcua_server` (port 4840) |
-| Counting | REST | 8100 | `analytics.mock.rest_pusher` |
+| Temp/Humidity | MQTT / Modbus / OPC UA | — | Real DHT22 firmware; configure endpoint |
+| Lighting | REST | 8100 | Canonical or legacy REST payload |
+| Gas | Modbus TCP | — | Real endpoint required (default port 1502) |
+| AGV | OPC UA | — | Real endpoint required (default port 4840) |
+| Counting | REST | 8100 | Canonical or legacy REST payload |
 
 All adapters output `UnifiedMessage` with `schema_version="v1"` and their respective `Protocol` enum.
 For protocol-specific payload formats and response codes, see each adapter's module docstring.
@@ -391,10 +392,7 @@ xa202606-smart-factory/
 ├── analytics/                     Mock data & future analysis
 │   ├── pyproject.toml             + pymodbus, asyncua, httpx
 │   ├── src/analytics/mock/
-│   │   ├── generator.py           CLI MQTT mock (--subsystem filter)
-│   │   ├── rest_pusher.py         REST pusher, POSTs lighting + counting payloads
-│   │   ├── modbus_server.py       Modbus TCP simulator, periodic register updates
-│   │   └── opcua_server.py        OPC UA simulator, periodic node value updates
+│   │   └── (mock generators are not present in this revision)
 │   └── tests/                     23 tests (generator 8 + rest_pusher 2 + modbus_server 11 + opcua_server 2)
 │
 ├── semantic-layer/                Shared vocabulary + RDF mapping + Fuseki write
@@ -450,7 +448,7 @@ xa202606-smart-factory/
 
 ## Completion Criteria
 
-- [x] Mock generator publishes to MQTT for all 5 subsystems
+- [ ] Mock generator for all 5 subsystems (not present)
 - [x] MQTT adapter subscribes `factory/+/sensors/#` and parses payloads
 - [x] Backend ingests, stores (SQLite), and queries sensor data
 - [x] Alert rules engine evaluates inline, 5 rules with 30s dedup
@@ -460,9 +458,9 @@ xa202606-smart-factory/
 - [x] REST adapter: FastAPI server (port 8100), lighting + counting payload parsing, 202/400/502 semantics
 - [x] Modbus TCP adapter: polling registers, parse_registers() pure function, pymodbus 3.6–3.12
 - [x] OPC UA adapter: subscription to distance node, async queue → forward pattern
-- [x] REST pusher: periodic lighting + counting POSTs, retry on connection refused
-- [x] Modbus simulator: periodic register updates, 3.x/4.x compatibility
-- [x] OPC UA simulator: periodic node value updates
+- [ ] REST pusher (not present)
+- [ ] Modbus simulator (not present; use real endpoint)
+- [ ] OPC UA simulator (not present; use real endpoint)
 - [x] Runner: --adapter mqtt|rest|modbus|opcua|all
 - [x] Docker Compose: 4 protocols + 3 simulators + Fuseki running simultaneously
 - [x] Port registry: 1502 (Modbus), 4840 (OPC UA), 8100 (REST), 3030 (Fuseki)

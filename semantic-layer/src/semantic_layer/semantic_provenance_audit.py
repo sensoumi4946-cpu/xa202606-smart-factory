@@ -49,7 +49,6 @@ def _db_conn(db_path: Path):
 
 
 class ProvenanceAuditLog:
-
     def __init__(self, db_path: Path = DEFAULT_AUDIT_DB) -> None:
         self._db = db_path
         self._init()
@@ -115,11 +114,7 @@ class ProvenanceAuditLog:
         return [dict(r) for r in rows]
 
     def completeness_ratio(self, window_hours: int = 24) -> "CompletenessReport":
-        cutoff = (
-            datetime.now(timezone.utc)
-            .replace(microsecond=0)
-            .isoformat()
-        )
+        cutoff = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
         with _db_conn(self._db) as conn:
             total = conn.execute(
                 "SELECT COUNT(*) FROM prov_audit WHERE timestamp >= datetime('now', ?)",
@@ -154,7 +149,7 @@ class CompletenessReport:
     written: int
     failed_permanently: int
     pending_retry: int
-    completeness_ratio: float   
+    completeness_ratio: float
 
     def to_dict(self) -> dict:
         return {
@@ -196,7 +191,7 @@ async def kg_observation_count(
 ) -> Optional[int]:
     query = _PROV_COUNT_QUERY.replace("{hours}", str(window_hours))
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with httpx.AsyncClient(timeout=5.0, trust_env=False) as client:
             resp = await client.post(
                 fuseki_query_url,
                 content=query.encode(),
@@ -213,12 +208,13 @@ async def kg_observation_count(
     except (httpx.HTTPError, KeyError, ValueError):
         return None
 
+
 async def retry_pending_writes(
     audit: ProvenanceAuditLog,
-    write_fn,       # async callable(ingest_id: str) -> bool
+    write_fn,  # async callable(ingest_id: str) -> bool
     max_per_run: int = 20,
 ) -> dict:
-    
+
     pending = audit.pending_retries(limit=max_per_run)
     stats = {"attempted": 0, "succeeded": 0, "failed": 0}
 

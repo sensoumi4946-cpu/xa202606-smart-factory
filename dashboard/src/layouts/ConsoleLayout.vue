@@ -5,14 +5,13 @@ import BackendBanner from '../components/BackendBanner.vue'
 
 const TABS = [
   { key: 'monitor', label: '监控' },
-  { key: 'lab', label: '验证' },
   { key: 'console', label: '调试' },
   { key: 'devices', label: '设备' },
   { key: 'system', label: '系统' },
 ]
 
 const active = defineModel<string>('active', { default: 'monitor' })
-const emit = defineEmits<{ refresh: [] }>()
+const emit = defineEmits<{ refresh: []; logout: [] }>()
 
 const clock = ref(new Date().toLocaleTimeString())
 let timer: ReturnType<typeof setInterval> | undefined
@@ -50,6 +49,7 @@ onUnmounted(() => {
       <div class="right">
         <span class="clock mono">{{ clock }}</span>
         <button class="refresh" @click="emit('refresh')">刷新</button>
+        <button class="refresh" @click="emit('logout')">退出</button>
       </div>
     </header>
 
@@ -65,7 +65,9 @@ onUnmounted(() => {
 .console {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
 }
 .top-bar {
   display: flex;
@@ -162,6 +164,8 @@ onUnmounted(() => {
   flex-direction: column;
   padding: var(--gap) 24px;
   min-height: 0;
+  min-width: 0;
+  overflow: auto;
 }
 @media (max-width: 700px) {
   .title {

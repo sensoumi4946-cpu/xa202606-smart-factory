@@ -19,6 +19,10 @@ dev = [
     "requests>=2.31.0",
 ]
 
+[project.scripts]
+sf-binding = "semantic_layer.binding_client:main"
+sf-bindingd = "semantic_layer.binding_service:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -29,3 +33,6 @@ testpaths = ["tests"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/semantic_layer"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"aas" = "semantic_layer/aas"

@@ -1,8 +1,8 @@
-# SQLite-based storage layer.
-#
-# Uses a single-file SQLite database with WAL journaling for concurrent
-# read/write safety. The schema is designed so that replacing SQLite with
-# InfluxDB / IoTDB only requires rewriting this module — no API change.
+
+
+
+
+
 import json
 import os
 import sqlite3
@@ -19,15 +19,15 @@ from backend.rules import evaluate
 
 
 class _PooledConnection:
-    """Adapter so existing call sites keep working.
+    pass
 
-    Every function in this module was written as
-        conn = _get_connection() ... conn.close()
-    Rewriting all of them at once is risky, so close() returns the
-    connection to the pool instead of tearing it down. The path is resolved
-    per call, which is what stops tables being created in one file and read
-    from another after configuration changes.
-    """
+
+
+
+
+
+
+
 
     def __init__(self):
         self._ctx = connection()
@@ -53,7 +53,7 @@ def _add_column_if_missing(
 
 
 def init_db() -> None:
-    """Create or upgrade the schema for the currently configured database."""
+    pass
     ensure_schema(config.DATABASE_PATH)
 
 
@@ -176,6 +176,18 @@ def query_sensor_data(
     return results
 
 
+def get_sensor_record(record_id: str) -> Optional[dict[str, Any]]:
+    with connection() as conn:
+        row = conn.execute("SELECT * FROM sensor_data WHERE id = ?", (record_id,)).fetchone()
+    if row is None:
+        return None
+    record = dict(row)
+    record["measurements"] = json.loads(record["measurements"])
+    if record["raw_payload"]:
+        record["raw_payload"] = json.loads(record["raw_payload"])
+    return record
+
+
 def get_devices() -> list[str]:
     conn = _get_connection()
     rows = conn.execute(
@@ -185,11 +197,11 @@ def get_devices() -> list[str]:
     return [row["device_id"] for row in rows]
 
 
-# Command lifecycle:
-#   pending    row written, not yet on the broker
-#   dispatched published to MQTT, waiting for the device
-#   executed   device confirmed it did the thing
-#   failed     broker unreachable, or the device reported an error
+
+
+
+
+
 VALID_COMMAND_STATUS = ("pending", "dispatched", "executed", "failed")
 
 
@@ -208,7 +220,7 @@ def insert_control_command(device_id: str, action: str, params: dict) -> str:
 
 
 def mark_command_dispatched(command_id: str, ok: bool) -> None:
-    """Called straight after the MQTT publish attempt."""
+    pass
     now = datetime.now(timezone.utc).isoformat()
     conn = _get_connection()
     if ok:
@@ -232,11 +244,11 @@ def mark_command_dispatched(command_id: str, ok: bool) -> None:
 def ack_control_command(
     command_id: str, success: bool, detail: str = ""
 ) -> Optional[dict[str, Any]]:
-    """Record the device's confirmation. Returns None if the id is unknown.
+    pass
 
-    Acks are idempotent — a device that retries its POST must not flip an
-    already-executed command back to something else.
-    """
+
+
+
     now = datetime.now(timezone.utc).isoformat()
     conn = _get_connection()
     row = conn.execute(
@@ -299,11 +311,11 @@ def get_control_status(command_id: str) -> Optional[dict[str, Any]]:
 
 
 def get_latest(device_id: Optional[str] = None, since: Optional[str] = None) -> list[dict[str, Any]]:
-    """Return the latest measurement per (device_id, measurement_type).
+    pass
 
-    When `since` is None (default), scans the last LATEST_WINDOW_MINUTES.
-    Pass an explicit ISO timestamp to override (e.g. old dates in tests).
-    """
+
+
+
     window = since if since is not None else (
         datetime.now(timezone.utc) - timedelta(minutes=LATEST_WINDOW_MINUTES)
     ).isoformat()
@@ -429,7 +441,11 @@ def query_alerts(
 def get_device_registry() -> list[dict[str, Any]]:
     conn = _get_connection()
     rows = conn.execute(
-        "SELECT device_id, subsystem, protocol, timestamp FROM sensor_data ORDER BY timestamp ASC"
+        """SELECT device_id, subsystem, protocol, timestamp FROM (
+            SELECT device_id, subsystem, protocol, timestamp,
+                   ROW_NUMBER() OVER (PARTITION BY device_id ORDER BY timestamp DESC, rowid DESC) AS rank
+            FROM sensor_data
+        ) WHERE rank = 1"""
     ).fetchall()
     conn.close()
 

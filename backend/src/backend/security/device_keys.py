@@ -1,4 +1,4 @@
-# Per-device credentials.
+
 
 from __future__ import annotations
 
@@ -60,7 +60,7 @@ def _now() -> str:
 def enroll_device(
     device_id: str, scopes: Optional[list[str]] = None
 ) -> dict[str, Any]:
-    """Mint a key for one device. The plaintext is returned exactly once."""
+    pass
     scopes = scopes or [SCOPE_INGEST]
     for s in scopes:
         if s not in VALID_SCOPES:

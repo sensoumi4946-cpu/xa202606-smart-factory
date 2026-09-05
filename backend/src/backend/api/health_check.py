@@ -1,8 +1,9 @@
-# Deep health check endpoint
+
 
 from __future__ import annotations
 
 import sqlite3
+from urllib.parse import urlsplit
 import time
 import logging
 from typing import Any
@@ -20,9 +21,9 @@ logger = logging.getLogger(__name__)
 async def _check_fuseki() -> dict:
     t0 = time.perf_counter()
     try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
+        async with httpx.AsyncClient(timeout=3.0, trust_env=False) as client:
             resp = await client.get(
-                config.FUSEKI_QUERY_URL.replace("/sparql", "/$/ping")
+                urlsplit(config.FUSEKI_QUERY_URL)._replace(path="/$/ping", query="", fragment="").geturl()
             )
         ok = resp.status_code == 200
     except httpx.HTTPError as exc:
@@ -43,6 +44,7 @@ def _check_sqlite() -> dict:
 
 async def _check_mqtt() -> dict:
     import asyncio
+
     t0 = time.perf_counter()
     try:
         reader, writer = await asyncio.wait_for(
@@ -58,18 +60,18 @@ async def _check_mqtt() -> dict:
 
 @router.get("/health/live")
 async def liveness():
-    # Always 200 if the process is running.
+    
     return {"status": "alive"}
 
 
 @router.get("/health/ready")
 async def readiness() -> JSONResponse:
-    # Returns 200 if all services reachable, 503 otherwise
+    
 
     checks: dict[str, Any] = {
-        "fuseki": await _check_fuseki(),
+        "fuseki": await _check_fuseki() if config.SEMANTIC_WRITE_ENABLED else {"ok": True, "disabled": True},
         "sqlite": _check_sqlite(),
-        "mqtt":   await _check_mqtt(),
+        "mqtt": await _check_mqtt(),
     }
     all_ok = all(v["ok"] for v in checks.values())
     return JSONResponse(

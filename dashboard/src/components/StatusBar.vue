@@ -1,69 +1,55 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
-import { fetchLatestDeduped, fetchAlerts, fetchDevices, probeFuseki } from '../api'
+import { computed } from 'vue'
+import { usePoll } from '../usePoll'
+import {
+  fetchLatestDeduped,
+  fetchAlerts,
+  fetchDevices,
+  probeFuseki,
+  type LatestDevice,
+} from '../api'
 import { FRESH_MS } from '../constants'
 
-const mqttOn = ref(false)
-const restOn = ref(false)
-const modbusOn = ref(false)
-const opcuaOn = ref(false)
-const fusekiOn = ref(false)
-const deviceCount = ref(0)
-const alertCount = ref(0)
-
-let fastTimer: ReturnType<typeof setInterval> | undefined
-let slowTimer: ReturnType<typeof setInterval> | undefined
-
-// A device is "fresh" if any measurement timestamp is within FRESH_MS.
 function isFresh(ts: string | undefined): boolean {
   if (!ts) return false
   return Date.now() - new Date(ts).getTime() < FRESH_MS
 }
 
-async function refreshFast() {
-  try {
-    const latest = await fetchLatestDeduped()
-    const freshIds = new Set(
-      latest
-        .filter((d) => d.measurements.some((m) => isFresh(m.timestamp)))
-        .map((d) => d.device_id),
-    )
-    mqttOn.value = freshIds.has('sensor_dht22_01')
-    restOn.value = freshIds.has('sensor_pir_01') || freshIds.has('sensor_ir_01')
-    modbusOn.value = freshIds.has('sensor_mq2_01')
-    opcuaOn.value = freshIds.has('sensor_hcsr04_01')
-  } catch {
-    mqttOn.value = restOn.value = modbusOn.value = opcuaOn.value = false
-  }
-  try {
-    const alerts = await fetchAlerts({ limit: 1 })
-    alertCount.value = alerts.total
-  } catch {
-    alertCount.value = 0
-  }
-}
+const { data: latest } = usePoll<LatestDevice[]>(
+  'latest:deduped',
+  fetchLatestDeduped,
+  3000,
+)
 
-async function refreshSlow() {
-  fusekiOn.value = await probeFuseki()
-  try {
-    const devices = await fetchDevices()
-    deviceCount.value = devices.length
-  } catch {
-    deviceCount.value = 0
-  }
-}
+const { data: alerts } = usePoll<{ total: number }>(
+  'alerts:count',
+  () => fetchAlerts({ limit: 1 }),
+  3000,
+)
 
-onMounted(() => {
-  refreshFast()
-  refreshSlow()
-  fastTimer = setInterval(refreshFast, 3000)
-  slowTimer = setInterval(refreshSlow, 10000)
+const { data: fuseki } = usePoll<boolean>('fuseki', probeFuseki, 10000)
+
+const { data: devices } = usePoll<string[]>('devices', fetchDevices, 10000)
+
+const liveProtocols = computed(() => {
+  const set = new Set<string>()
+  for (const d of latest.value ?? []) {
+    if (d.measurements.some((m) => isFresh(m.timestamp))) {
+      const p = (d as LatestDevice & { protocol?: string }).protocol
+      if (p) set.add(p.toLowerCase())
+    }
+  }
+  return set
 })
 
-onUnmounted(() => {
-  if (fastTimer) clearInterval(fastTimer)
-  if (slowTimer) clearInterval(slowTimer)
-})
+const mqttOn = computed(() => liveProtocols.value.has('mqtt'))
+const restOn = computed(() => liveProtocols.value.has('rest'))
+const modbusOn = computed(() => liveProtocols.value.has('modbus'))
+const opcuaOn = computed(() => liveProtocols.value.has('opcua'))
+const fusekiOn = computed(() => fuseki.value === true)
+
+const deviceCount = computed(() => (devices.value ?? []).length)
+const alertCount = computed(() => alerts.value?.total ?? 0)
 </script>
 
 <template>
@@ -78,7 +64,9 @@ onUnmounted(() => {
     <div class="counts">
       <span>backend :8000</span>
       <span>{{ deviceCount }} devices</span>
-      <span class="alerts" :class="{ zero: alertCount === 0 }">{{ alertCount }} alerts</span>
+      <span class="alerts" :class="{ zero: alertCount === 0 }">
+        {{ alertCount }} alerts
+      </span>
     </div>
   </footer>
 </template>
@@ -90,10 +78,10 @@ onUnmounted(() => {
   align-items: center;
   gap: 16px;
   padding: 6px 16px;
-  background: #1e293b;
-  border-top: 1px solid #334155;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
   font-size: 0.78rem;
-  color: #94a3b8;
+  color: var(--text-faint);
   flex-wrap: wrap;
 }
 .lamps {
@@ -110,7 +98,7 @@ onUnmounted(() => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #475569;
+  background: var(--line-strong);
   display: inline-block;
 }
 .lamp i.on {
@@ -124,6 +112,7 @@ onUnmounted(() => {
 .alerts {
   color: #fbbf24;
 }
-
-.zero { color: var(--text-faint) !important; }
+.zero {
+  color: var(--text-faint) !important;
+}
 </style>

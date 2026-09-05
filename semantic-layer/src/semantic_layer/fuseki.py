@@ -33,7 +33,7 @@ async def write_to_fuseki(msg: UnifiedMessage, endpoint: str) -> bool:
     """
     turtle = to_turtle(msg)
     try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT, trust_env=False) as client:
             resp = await client.post(
                 endpoint,
                 content=turtle.encode("utf-8"),

@@ -1,6 +1,19 @@
-TOPIC_MAP = [
-    {"device_id": "esp32_01_dht22", "property_name": "temperature", "subsystem": "temp_humidity_subsystem", "topic": "factory/temp_humidity/sensors/esp32_01_dht22/temperature", "qos": 1, "scale_factor": 1.0, "offset": 0.0},
-]
+TOPIC_MAP = [{'device_id': 'ESP32_001',
+  'property_name': 'humidity',
+  'subsystem': 'temp_humidity',
+  'unit': 'percent',
+  'topic': 'factory/temp_humidity/sensors/ESP32_001/humidity',
+  'qos': 1,
+  'scale_factor': 1.0,
+  'offset': 0.0},
+ {'device_id': 'ESP32_001',
+  'property_name': 'temperature',
+  'subsystem': 'temp_humidity',
+  'unit': 'celsius',
+  'topic': 'factory/temp_humidity/sensors/ESP32_001/temperature',
+  'qos': 1,
+  'scale_factor': 1.0,
+  'offset': 0.0}]
 
 
 def subscriptions():

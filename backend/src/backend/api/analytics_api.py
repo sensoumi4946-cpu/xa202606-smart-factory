@@ -1,8 +1,9 @@
-# REST endpoints for the analytics layer
+
 
 from __future__ import annotations
 
 import time
+from collections import deque
 import logging
 from typing import Any
 
@@ -16,11 +17,11 @@ from analytics.thresholds import resolver
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
-# Module-level singletons
+
 _detector = AnomalyDetector(window_size=30, z_threshold=3.0)
 _correlator = CrossSubsystemCorrelator(window_seconds=10.0, min_sources=2)
 
-_alert_history: list[dict] = []
+_alert_history = deque(maxlen=1000)
 
 
 class _ReadingIn:
@@ -85,7 +86,7 @@ async def analyse_reading(body: dict[str, Any]) -> dict[str, Any]:
 @router.get("/alerts")
 async def get_alerts(limit: int = 50) -> dict[str, Any]:
     
-    recent = _alert_history[-limit:]
+    recent = list(_alert_history)[-limit:]
     return {
         "total": len(_alert_history),
         "returned": len(recent),
@@ -131,7 +132,7 @@ async def trend(device_id: str, property_name: str, horizon_minutes: float = 10.
 async def trends():
     return {"series": trend_forecast.tracked_series()}
 
-# Public aliases
+
 detector = _detector
 correlator = _correlator
 alert_history = _alert_history

@@ -21,6 +21,9 @@ TYPE_TO_PROPERTY: dict[MeasurementType, URIRef] = {
     MeasurementType.COUNT: URIRef(f"{SF}measuresCount"),
     MeasurementType.OCCUPANCY: URIRef(f"{SF}measuresOccupancy"),
     MeasurementType.LIGHT_STATE: URIRef(f"{SF}measuresLightState"),
+    MeasurementType.DEVICE_STATUS: URIRef(f"{SF}measuresDeviceStatus"),
+    MeasurementType.ERROR_CODE: URIRef(f"{SF}measuresErrorCode"),
+    MeasurementType.SENSOR_STATUS: URIRef(f"{SF}measuresSensorStatus"),
 }
 
 TYPE_TO_SENSOR_CLASS: dict[MeasurementType, URIRef] = {
@@ -32,6 +35,10 @@ TYPE_TO_SENSOR_CLASS: dict[MeasurementType, URIRef] = {
     MeasurementType.DISTANCE: URIRef(f"{SF}ProximitySensor"),
     MeasurementType.COUNT: URIRef(f"{SF}CountSensor"),
     MeasurementType.OCCUPANCY: URIRef(f"{SF}OccupancySensor"),
+    MeasurementType.LIGHT_STATE: URIRef(f"{SF}ActuatorStateSensor"),
+    MeasurementType.DEVICE_STATUS: URIRef(f"{SF}DeviceStatusSensor"),
+    MeasurementType.ERROR_CODE: URIRef(f"{SF}DeviceStatusSensor"),
+    MeasurementType.SENSOR_STATUS: URIRef(f"{SF}DeviceStatusSensor"),
 }
 
 SUBSYSTEM_TO_RESOURCE: dict[Subsystem, URIRef] = {

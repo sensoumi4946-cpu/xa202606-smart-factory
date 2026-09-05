@@ -35,6 +35,8 @@ BACKEND_PORT: int = int(os.getenv("BACKEND_PORT", "8000"))
 PUBLIC_BACKEND_URL: str = os.getenv("PUBLIC_BACKEND_URL", "http://localhost:8000")
 
 API_KEY: str = os.getenv("API_KEY", "")
+SESSION_COOKIE_SECURE: bool = os.getenv("SESSION_COOKIE_SECURE", "false").lower() == "true"
+SESSION_TTL_SECONDS: int = int(os.getenv("SESSION_TTL_SECONDS", "28800"))
 
 HARDWARE_PROFILE: str = os.getenv("HARDWARE_PROFILE", "mock")
 

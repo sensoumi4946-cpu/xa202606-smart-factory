@@ -1,3 +1,5 @@
+import asyncio
+import time
 from typing import Any, Optional
 
 import httpx
@@ -9,7 +11,10 @@ from semantic_layer.mapping import SUBSYSTEM_TO_RESOURCE, TYPE_TO_PROPERTY
 
 router = APIRouter()
 
-_TIMEOUT = 10.0
+_TIMEOUT = 2.0
+_CACHE_TTL = 15.0
+_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+_inflight: dict[str, asyncio.Task[list[dict[str, Any]]]] = {}
 
 _PREFIX = (
     "PREFIX sosa: <http://www.w3.org/ns/sosa/> "
@@ -88,6 +93,24 @@ async def _run_sparql(query: str) -> list[dict[str, Any]]:
     return resp.json()["results"]["bindings"]
 
 
+async def _cached_sparql(view: str) -> list[dict[str, Any]]:
+    cached = _cache.get(view)
+    now = time.monotonic()
+    if cached and now - cached[0] < _CACHE_TTL:
+        return cached[1]
+    task = _inflight.get(view)
+    if task is None:
+        task = asyncio.create_task(_run_sparql(VIEWS[view]))
+        _inflight[view] = task
+    try:
+        bindings = await task
+        _cache[view] = (time.monotonic(), bindings)
+        return bindings
+    finally:
+        if _inflight.get(view) is task:
+            _inflight.pop(view, None)
+
+
 def _aggregate(bindings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     order: list[str] = []
     by_sensor: dict[str, dict[str, Any]] = {}
@@ -117,7 +140,7 @@ async def semantic(view: Optional[str] = Query(None)):
             detail=f"Unknown view '{view}'. Valid options: {sorted(VIEWS.keys())}",
         )
     try:
-        bindings = await _run_sparql(VIEWS[view])
+        bindings = await _cached_sparql(view)
     except httpx.HTTPError:
         return {
             "view": view,

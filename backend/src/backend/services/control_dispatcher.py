@@ -9,7 +9,7 @@ from backend import config
 
 logger = logging.getLogger(__name__)
 
-CONTROL_TIMEOUT = 5.0
+CONTROL_TIMEOUT = 2.0
 
 
 def control_topic(device_id: str, subsystem: str = "actuator") -> str:
@@ -49,12 +49,6 @@ async def dispatch(
     subsystem: str = "actuator",
     payload: dict | None = None,
 ) -> bool:
-    pass
-
-
-
-
-
     topic = control_topic(device_id, subsystem)
     outbound = payload or build_payload(command_id, device_id, action, params)
 

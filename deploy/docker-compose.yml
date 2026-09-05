@@ -5,7 +5,7 @@ services:
   fuseki:
     image: apache/jena-fuseki:4.10.0
     environment:
-      ADMIN_PASSWORD: "${FUSEKI_ADMIN_PASSWORD:?set FUSEKI_ADMIN_PASSWORD}"
+      ADMIN_PASSWORD: "${FUSEKI_ADMIN_PASSWORD:-}"
       JVM_ARGS: "-Xmx1g"
       FUSEKI_DATASET_1: "factory"
     volumes:
@@ -43,8 +43,8 @@ services:
       HARDWARE_PROFILE: "${HARDWARE_PROFILE:-mock}"
       BINDINGS_TTL: "/app/bindings.ttl"
       THRESHOLDS_TTL: "/app/thresholds.ttl"
-      API_KEY: "${API_KEY:?set API_KEY}"
-      COMMAND_SIGNING_KEY: "${COMMAND_SIGNING_KEY:?set COMMAND_SIGNING_KEY}"
+      API_KEY: "${API_KEY:-}"
+      COMMAND_SIGNING_KEY: "${COMMAND_SIGNING_KEY:-}"
       PUBLIC_BACKEND_URL: "http://${HOST_LAN_IP:-backend}:8000"
       LLM_API_KEY: "${LLM_API_KEY:-}"
       LLM_MODEL: "${LLM_MODEL:-qwen-plus}"
@@ -74,7 +74,7 @@ services:
     environment:
       MQTT_BROKER_HOST: "mosquitto"
       BACKEND_URL: "http://backend:8000"
-      ACTIVE_PROTOCOL_DEVICES: "${ACTIVE_PROTOCOL_DEVICES:?set ACTIVE_PROTOCOL_DEVICES}"
+      ACTIVE_PROTOCOL_DEVICES: '${ACTIVE_PROTOCOL_DEVICES:-{}}'
       BINDINGS_TTL: "/app/bindings.ttl"
       API_KEY: "${API_KEY}"
     volumes:
@@ -93,7 +93,7 @@ services:
     command: ["python", "-m", "connectivity.runner", "--adapter", "rest"]
     environment:
       BACKEND_URL: "http://backend:8000"
-      ACTIVE_PROTOCOL_DEVICES: "${ACTIVE_PROTOCOL_DEVICES:?set ACTIVE_PROTOCOL_DEVICES}"
+      ACTIVE_PROTOCOL_DEVICES: '${ACTIVE_PROTOCOL_DEVICES:-{}}'
       BINDINGS_TTL: "/app/bindings.ttl"
       API_KEY: "${API_KEY}"
     volumes:
@@ -113,7 +113,7 @@ services:
       MODBUS_HOST: "${MODBUS_HOST:-host.docker.internal}"
       MODBUS_PORT: "${MODBUS_PORT:-1502}"
       BACKEND_URL: "http://backend:8000"
-      ACTIVE_PROTOCOL_DEVICES: "${ACTIVE_PROTOCOL_DEVICES:?set ACTIVE_PROTOCOL_DEVICES}"
+      ACTIVE_PROTOCOL_DEVICES: '${ACTIVE_PROTOCOL_DEVICES:-{}}'
       BINDINGS_TTL: "/app/bindings.ttl"
       API_KEY: "${API_KEY}"
     extra_hosts:
@@ -140,7 +140,7 @@ services:
       OPCUA_USER_PRIVATE_KEY: "${OPCUA_USER_PRIVATE_KEY:-}"
       OPCUA_USER_PRIVATE_KEY_PASSWORD: "${OPCUA_USER_PRIVATE_KEY_PASSWORD:-}"
       BACKEND_URL: "http://backend:8000"
-      ACTIVE_PROTOCOL_DEVICES: "${ACTIVE_PROTOCOL_DEVICES:?set ACTIVE_PROTOCOL_DEVICES}"
+      ACTIVE_PROTOCOL_DEVICES: '${ACTIVE_PROTOCOL_DEVICES:-{}}'
       BINDINGS_TTL: "/app/bindings.ttl"
       API_KEY: "${API_KEY}"
     extra_hosts:

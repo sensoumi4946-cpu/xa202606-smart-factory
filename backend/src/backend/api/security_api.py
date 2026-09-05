@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
 
-from backend.security import command_audit, device_keys
+from backend import config
+from backend.security import auth, command_audit, device_keys
 
 router = APIRouter(prefix="/api/v1/security", tags=["security"])
 
@@ -15,6 +16,37 @@ router = APIRouter(prefix="/api/v1/security", tags=["security"])
 class EnrollRequest(BaseModel):
     device_id: str = Field(..., min_length=1)
     scopes: list[str] = Field(default_factory=lambda: [device_keys.SCOPE_INGEST])
+
+
+class BrowserSessionRequest(BaseModel):
+    api_key: str = ""
+
+
+@router.post("/session")
+async def create_session(req: BrowserSessionRequest, response: Response) -> dict[str, bool]:
+    if not auth._is_valid(req.api_key):
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    response.set_cookie(
+        key=auth.SESSION_COOKIE,
+        value=auth.create_browser_session(config.SESSION_TTL_SECONDS),
+        max_age=config.SESSION_TTL_SECONDS,
+        httponly=True,
+        secure=config.SESSION_COOKIE_SECURE,
+        samesite="strict",
+        path="/",
+    )
+    return {"authenticated": True}
+
+
+@router.get("/session")
+async def session_status(request: Request) -> dict[str, bool]:
+    return {"authenticated": auth.valid_browser_session(request.cookies.get(auth.SESSION_COOKIE))}
+
+
+@router.delete("/session")
+async def delete_session(response: Response) -> dict[str, bool]:
+    response.delete_cookie(auth.SESSION_COOKIE, path="/")
+    return {"authenticated": False}
 
 
 @router.post("/devices/enroll", status_code=status.HTTP_201_CREATED)
@@ -54,6 +86,8 @@ async def revoke_all(device_id: str) -> dict[str, Any]:
 
 @router.get("/whoami")
 async def whoami(request: Request) -> dict[str, Any]:
+    if getattr(request.state, "browser_session", False):
+        return {"device_id": "dashboard", "scopes": ["admin"], "type": "browser_session"}
     raw = request.headers.get("X-API-Key", "")
     identity = device_keys.resolve_key(raw)
     if identity is None:

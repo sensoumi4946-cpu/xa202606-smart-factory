@@ -26,6 +26,8 @@ def _init_db(tmp_path, monkeypatch):
     db_path = tmp_path / "test.db"
     monkeypatch.setattr("backend.store.DATABASE_PATH", str(db_path))
     monkeypatch.setattr("backend.config.DATABASE_PATH", str(db_path))
+    semantic_mod._cache.clear()
+    semantic_mod._inflight.clear()
     init_db()
 
 

@@ -105,7 +105,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(config.CORS_ORIGINS),
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["X-API-Key", "Content-Type"],
 )

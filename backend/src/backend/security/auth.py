@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import base64
+import json
 import logging
 import os
+import secrets
 import time
 from typing import Callable
 
@@ -42,6 +45,8 @@ def _load_valid_hashes() -> set[str]:
 _VALID_KEY_HASHES: set[str] = _load_valid_hashes()
 
 _AUTH_DISABLED = len(_VALID_KEY_HASHES) == 0
+SESSION_COOKIE = "factory_session"
+_FALLBACK_SESSION_SECRET = secrets.token_bytes(32)
 
 
 def _is_valid(key: str | None) -> bool:
@@ -51,6 +56,43 @@ def _is_valid(key: str | None) -> bool:
         return False
     candidate = _hash_key(key)
     return any(hmac.compare_digest(candidate, h) for h in _VALID_KEY_HASHES)
+
+
+def _session_secret() -> bytes:
+    configured = os.getenv("SESSION_SIGNING_KEY", "").strip()
+    if configured:
+        return hashlib.sha256(configured.encode()).digest()
+    if _VALID_KEY_HASHES:
+        return hashlib.sha256("|".join(sorted(_VALID_KEY_HASHES)).encode()).digest()
+    return _FALLBACK_SESSION_SECRET
+
+
+def create_browser_session(ttl_seconds: int) -> str:
+    payload = {
+        "exp": int(time.time()) + ttl_seconds,
+        "nonce": secrets.token_urlsafe(12),
+    }
+    raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
+    body = base64.urlsafe_b64encode(raw).rstrip(b"=")
+    signature = hmac.new(_session_secret(), body, hashlib.sha256).digest()
+    return f"{body.decode()}.{base64.urlsafe_b64encode(signature).rstrip(b'=').decode()}"
+
+
+def valid_browser_session(token: str | None) -> bool:
+    if not token or "." not in token:
+        return False
+    body_text, signature_text = token.split(".", 1)
+    try:
+        body = body_text.encode()
+        signature = base64.urlsafe_b64decode(signature_text + "=" * (-len(signature_text) % 4))
+        expected = hmac.new(_session_secret(), body, hashlib.sha256).digest()
+        if not hmac.compare_digest(signature, expected):
+            return False
+        raw = base64.urlsafe_b64decode(body_text + "=" * (-len(body_text) % 4))
+        payload = json.loads(raw)
+        return isinstance(payload.get("exp"), int) and payload["exp"] > int(time.time())
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return False
 
 
 async def require_api_key(key: str | None = Depends(_API_KEY_HEADER)) -> str:
@@ -72,7 +114,7 @@ async def require_api_key(key: str | None = Depends(_API_KEY_HEADER)) -> str:
     return key  
 
 
-_PUBLIC_PATHS = {"/", "/health", "/docs", "/openapi.json", "/redoc"}
+_PUBLIC_PATHS = {"/", "/health", "/docs", "/openapi.json", "/redoc", "/api/v1/security/session"}
 
 
 async def api_key_middleware(
@@ -89,6 +131,9 @@ async def api_key_middleware(
         return await call_next(request)
 
     key = request.headers.get("X-API-Key")
+    if not key and valid_browser_session(request.cookies.get(SESSION_COOKIE)):
+        request.state.browser_session = True
+        return await call_next(request)
     if not _is_valid(key):
         from backend.security import device_keys
         identity = device_keys.resolve_key(key) if key else None

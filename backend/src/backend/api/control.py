@@ -2,6 +2,7 @@ import hashlib
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse
 
 from backend.models import (
     ControlAckRequest,
@@ -85,11 +86,17 @@ async def control(req: ControlRequest, request: Request):
         source_ip=source_ip,
     )
 
-    return ControlResponse(
+    response = ControlResponse(
         command_id=command_id,
         status="dispatched" if published else "failed",
         dispatched=published,
     )
+    if not published:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content=response.model_dump(),
+        )
+    return response
 
 
 @router.post("/api/v1/control/{command_id}/ack", response_model=ControlStatusResponse)

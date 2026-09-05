@@ -181,7 +181,7 @@ async def test_broker_down_does_not_500(broker_down):
             "/api/v1/control", json={"device_id": "relay_06", "action": "on"}
         )
 
-    assert resp.status_code == 202
+    assert resp.status_code == 503
     body = resp.json()
     assert body["dispatched"] is False
     assert body["status"] == "failed"

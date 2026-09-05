@@ -175,8 +175,9 @@ onUnmounted(() => {
 .page {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 96px);
-  padding: 12px 16px 0;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
 }
 .ledger { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .lhead { border-bottom: 1px solid var(--line); padding-bottom: 8px; }

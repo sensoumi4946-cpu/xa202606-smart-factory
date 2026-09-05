@@ -10,8 +10,7 @@ function _cacheable(url: string, init?: RequestInit): boolean {
     return !init?.method || init.method.toUpperCase() === 'GET';
 }
 export async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
-    const headers = { 'X-API-Key': getApiKey(), ...(init?.headers || {}) };
-    const opts = { ...init, headers };
+    const opts = { ...init, credentials: 'same-origin' as RequestCredentials };
     if (!_cacheable(url, init))
         return fetch(url, opts);
     for (const [key, entry] of _cache) {
@@ -39,11 +38,26 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
         _inflight.delete(url);
     }
 }
-export function getApiKey(): string {
-    return sessionStorage.getItem('factory-api-key') ?? '';
+export async function createBrowserSession(apiKey: string): Promise<boolean> {
+    const response = await fetch('/api/v1/security/session', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: apiKey }),
+    });
+    if (response.ok)
+        _cache.clear();
+    return response.ok;
 }
-export function setApiKey(value: string): void {
-    sessionStorage.setItem('factory-api-key', value);
+export async function hasBrowserSession(): Promise<boolean> {
+    const response = await fetch('/api/v1/security/session', { credentials: 'same-origin' });
+    if (!response.ok)
+        return false;
+    const body = await response.json();
+    return body?.authenticated === true;
+}
+export async function clearBrowserSession(): Promise<void> {
+    await fetch('/api/v1/security/session', { method: 'DELETE', credentials: 'same-origin' });
     _cache.clear();
 }
 export interface SensorRecord {

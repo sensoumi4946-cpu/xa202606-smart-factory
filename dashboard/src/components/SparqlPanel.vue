@@ -1,10 +1,4 @@
 <script setup lang="ts">
-// SPARQL query panel. Preset chips mirror the five named views the backend
-// actually serves (backend/api/semantic.py VIEWS) and show their real
-// SPARQL text; Run executes GET /api/v1/semantic?view=X. The textarea is
-// editable: an edited query is sent to the proposed custom endpoint
-// POST /api/v1/semantic/query and the panel explains when that endpoint
-// is not yet wired up (it lives on the unmerged gate-integration branch).
 import { ref } from 'vue'
 import { runSemanticView, runSparqlQuery, type SparqlResult } from '../api'
 
@@ -72,6 +66,17 @@ const edited = ref(false)
 const running = ref(false)
 const error = ref('')
 const result = ref<SparqlResult | null>(null)
+
+const COLUMN_LABELS: Record<string, string> = {
+  sensor: '传感器',
+  subsystem: '子系统',
+  observes: '观测属性',
+  protocol: '通信协议',
+  prop: '观测属性',
+  value: '数值',
+  unit: '单位',
+  timestamp: '时间',
+}
 
 function pickPreset(i: number) {
   activePreset.value = i
@@ -145,7 +150,8 @@ async function run() {
       <table>
         <thead>
           <tr>
-            <th v-for="c in result.columns" :key="c">{{ c }}</th>
+            <th v-for="c in result.columns" :key="c">{{ COLUMN_LABELS[c] ?? c }}
+            </th>
           </tr>
         </thead>
         <tbody>

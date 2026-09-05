@@ -46,7 +46,7 @@ const protoLabel = computed(() => {
   min-width: 0;
   min-height: 0;
 }
-.panel.ok { border-left-color: var(--ok); }
+.panel.ok { border-left-color: var(--line-strong); }
 .panel.warn { border-left-color: var(--warn); }
 .panel.danger { border-left-color: var(--danger); }
 

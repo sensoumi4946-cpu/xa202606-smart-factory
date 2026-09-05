@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { rawRequest } from '../api'
+import SparqlPanel from '../components/SparqlPanel.vue'
 
 interface Assertion {
   label: string
@@ -134,18 +135,6 @@ const CASES: TestCase[] = [
     ],
   },
   {
-    id: 'control',
-    name: '远程控制指令下发',
-    protocol: 'MQTT',
-    method: 'POST',
-    path: '/api/v1/control',
-    body: { device_id: 'relay_lighting_01', action: 'on', subsystem: 'lighting' },
-    assertions: [
-      { label: 'HTTP 202', check: (s) => s === 202 },
-      { label: '返回指令号', check: (_s, b) => isObject(b) && !!b.command_id },
-    ],
-  },
-  {
     id: 'audit',
     name: '审计链完整性',
     protocol: 'AUDIT',
@@ -221,6 +210,7 @@ function outcomeOf(id: string): Outcome | undefined {
       </div>
     </header>
 
+    <div class="table-scroll">
     <table class="cases">
       <thead>
         <tr>
@@ -251,7 +241,7 @@ function outcomeOf(id: string): Outcome | undefined {
             </td>
             <td>{{ c.name }}</td>
             <td class="c-proto mono">{{ c.protocol }}</td>
-            <td class="c-path mono">{{ c.method }} {{ c.path }}</td>
+            <td class="c-path mono"><span class="endpoint"><span class="verb">{{ c.method }}</span><span>{{ c.path }}</span></span></td>
             <td class="c-code mono">{{ outcomeOf(c.id)?.status ?? '--' }}</td>
             <td class="c-ms mono">
               {{ outcomeOf(c.id) ? outcomeOf(c.id)!.ms + 'ms' : '--' }}
@@ -274,17 +264,22 @@ function outcomeOf(id: string): Outcome | undefined {
         </template>
       </tbody>
     </table>
+    </div>
 
     <p class="foot">
       拒绝类用例（单位错误、超量程）返回 4xx 才算通过——平台必须挡下不合规数据，而不是照单全收。
     </p>
   </div>
+  <section class="sparql-section">
+  <SparqlPanel />
+</section>
 </template>
 
 <style scoped>
 .conformance {
   padding: 12px 16px 20px;
 }
+.table-scroll { width: 100%; overflow-x: auto; }
 .bar {
   display: flex;
   align-items: flex-end;
@@ -329,6 +324,7 @@ h1 {
 
 .cases {
   width: 100%;
+  min-width: 980px;
   border-collapse: collapse;
   font-size: 12px;
 }
@@ -352,7 +348,9 @@ h1 {
 
 .c-status { width: 24px; text-align: center; }
 .c-proto { width: 70px; }
-.c-path { width: 210px; color: var(--text-faint) !important; }
+.c-path { width: 280px; color: var(--text-faint) !important; white-space: nowrap; }
+.endpoint { display: flex; align-items: center; gap: 10px; }
+.verb { min-width: 34px; color: var(--text-dim); font-weight: 600; }
 .c-code, .c-ms { width: 66px; }
 
 .dot { font-size: 12px; }
@@ -393,5 +391,10 @@ h1 {
   margin: 10px 0 0;
   font-size: 10px;
   color: var(--text-faint);
+}
+.sparql-section {
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
 }
 </style>

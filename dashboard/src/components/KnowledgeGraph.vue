@@ -24,6 +24,26 @@ let freshDevices = new Set<string>()
 const css = (name: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim()
 
+  const SUBSYSTEM_LABELS: Record<string, string> = {
+  temp_humidity: '温湿度',
+  counting: '货物计数',
+  lighting: '照明',
+  gas: '气体监测',
+  agv: 'AGV避障',
+}
+
+const PROPERTY_LABELS: Record<string, string> = {
+  temperature: '温度',
+  humidity: '湿度',
+  count: '计数',
+  occupancy: '人员状态',
+  light_state: '照明状态',
+  distance: '距离',
+  co: '一氧化碳',
+  smoke: '烟雾',
+  combustible_gas: '可燃气体',
+}
+
 function buildOption() {
   const C = {
     root: css('--warn'),
@@ -62,7 +82,7 @@ function buildOption() {
       subsystems.add(s.subsystem)
       nodes.push({
         id: `sub:${s.subsystem}`,
-        name: s.subsystem,
+        name: SUBSYSTEM_LABELS[s.subsystem] ?? s.subsystem,
         category: 1,
         symbolSize: 30,
         itemStyle: { color: C.subsystem },
@@ -99,7 +119,7 @@ function buildOption() {
       const pid = `${s.sensor}:${p}`
       nodes.push({
         id: pid,
-        name: p,
+        name: PROPERTY_LABELS[p] ?? p,
         category: 3,
         symbolSize: 10,
         itemStyle: { color: C.prop },
@@ -132,11 +152,12 @@ function buildOption() {
         },
         draggable: true,
         categories: [
-          { name: '工厂' },
-          { name: '子系统' },
-          { name: '传感器' },
-          { name: '观测属性' },
-        ],
+          { name: '工厂', itemStyle: { color: C.root } },
+          { name: '子系统', itemStyle: { color: C.subsystem } },
+          { name: '传感器', itemStyle: { color: C.sensor } },
+          { name: '观测属性', itemStyle: { color: C.prop } },
+],
+        
         label: { show: true, color: C.text, fontSize: 11, position: 'right' },
         lineStyle: { color: C.line, width: 1.4, curveness: 0.06 },
         emphasis: { focus: 'adjacency', lineStyle: { width: 3 } },

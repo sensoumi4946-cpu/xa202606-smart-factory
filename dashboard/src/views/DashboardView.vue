@@ -17,7 +17,7 @@ import CrossAlertBanner from '../components/CrossAlertBanner.vue'
 import DeviceDrawer from '../components/DeviceDrawer.vue'
 import EmptyState from '../components/EmptyState.vue'
 
-useSubsystemDevices()
+const subsystemDevices = useSubsystemDevices()
 const devices = devicesBySubsystem()
 const clock = useClock()
 const drawerDev = ref<string | null>(null)
@@ -79,7 +79,16 @@ const countRate = computed(() => {
   <template>
 
   <EmptyState
-    v-if="!anyData"
+    v-if="subsystemDevices.error.value"
+    kind="error"
+    title="监控数据加载失败"
+    detail="后端返回异常或访问密钥不一致。"
+    hint="请检查 GET /api/v1/latest"
+    @retry="subsystemDevices.refresh"
+  />
+
+  <EmptyState
+    v-else-if="!anyData"
     kind="offline"
     title="未检测到任何设备接入"
     detail="平台已启动，但尚未收到传感器数据。请确认后端服务、MQTT broker 与设备侧程序均在运行。"
@@ -209,7 +218,7 @@ const countRate = computed(() => {
   grid-template-columns: repeat(12, 1fr);
   grid-auto-rows: min-content;
   gap: 10px;
-  padding: 12px 16px 20px;
+  padding: 0;
   align-items: stretch;
 }
 

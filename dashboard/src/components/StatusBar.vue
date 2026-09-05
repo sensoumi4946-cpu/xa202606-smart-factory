@@ -78,10 +78,10 @@ const alertCount = computed(() => alerts.value?.total ?? 0)
   align-items: center;
   gap: 16px;
   padding: 6px 16px;
-  background: #1e293b;
-  border-top: 1px solid #334155;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
   font-size: 0.78rem;
-  color: #94a3b8;
+  color: var(--text-faint);
   flex-wrap: wrap;
 }
 .lamps {
@@ -98,7 +98,7 @@ const alertCount = computed(() => alerts.value?.total ?? 0)
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #475569;
+  background: var(--line-strong);
   display: inline-block;
 }
 .lamp i.on {

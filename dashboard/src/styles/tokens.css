@@ -1,29 +1,29 @@
 :root {
   
-  --bg: #111417;            
-  --surface: #191e24;       
-  --surface-2: #1f262e;     
-  --line: #2a313a;          
-  --line-strong: #3a434e;
+  --bg: #14181b;
+  --surface: #1c2125;
+  --surface-2: #252b30;
+  --line: #384047;
+  --line-strong: #4a545d;
 
-  --text: #e8eaed;
-  --text-dim: #9aa3af;
-  --text-faint: #6b7480;
+  --text: #f0f2f3;
+  --text-dim: #c2c8cd;
+  --text-faint: #929ca4;
 
   --ok: #4cc38a;
   --ok-bg: rgba(76, 195, 138, 0.12);
-  --warn: #f5a524;          
+  --warn: #d6a24b;
   --warn-bg: rgba(245, 165, 36, 0.12);
   --danger: #f04444;
   --danger-bg: rgba(240, 68, 68, 0.14);
 
   
-  --semantic: #8b8cf6;      
-  --semantic-bg: rgba(139, 140, 246, 0.12);
+  --semantic: #87a9bc;
+  --semantic-bg: rgba(135, 169, 188, 0.1);
 
-  --data-1: #56b4e9;        
-  --data-2: #e69f00;        
-  --data-3: #4cc38a; 
+  --data-1: #83aebe;
+  --data-2: #bea16f;
+  --data-3: #82aa96;
   
   --font-ui: 'HarmonyOS Sans SC', 'MiSans', 'Noto Sans SC', 'Segoe UI',
     system-ui, sans-serif;
@@ -42,6 +42,16 @@
   --pad: 14px;
 
   --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #app {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
 body {

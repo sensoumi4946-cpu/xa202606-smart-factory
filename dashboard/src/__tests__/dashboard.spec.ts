@@ -136,6 +136,14 @@ describe('DeviceManagerView', () => {
   })
 
   it('sends a real control command when 开启 is clicked', async () => {
+    vi.mocked(fetchDeviceRegistry).mockResolvedValue([
+      {
+        device_id: 'ESP32_001',
+        subsystem: 'temp_humidity',
+        protocol: 'mqtt',
+        last_seen: new Date().toISOString(),
+      },
+    ] as never)
     const w = mount(DeviceManagerView)
     await flush()
     const btn = w.findAll('button').find((b) => b.text() === '开启')
@@ -151,6 +159,14 @@ describe('DeviceManagerView', () => {
   })
 
   it('reports a failed control command instead of failing silently', async () => {
+    vi.mocked(fetchDeviceRegistry).mockResolvedValue([
+      {
+        device_id: 'ESP32_001',
+        subsystem: 'temp_humidity',
+        protocol: 'mqtt',
+        last_seen: new Date().toISOString(),
+      },
+    ] as never)
     vi.mocked(rawRequest).mockResolvedValue({
       status: 500,
       ok: false,
@@ -163,6 +179,21 @@ describe('DeviceManagerView', () => {
     await btn!.trigger('click')
     await flush()
     expect(w.text()).toContain('下发失败')
+    w.unmount()
+  })
+
+  it('does not offer MQTT controls for non-MQTT devices', async () => {
+    vi.mocked(fetchDeviceRegistry).mockResolvedValue([
+      {
+        device_id: 'ESP32_002',
+        subsystem: 'counting',
+        protocol: 'rest',
+        last_seen: new Date().toISOString(),
+      },
+    ] as never)
+    const w = mount(DeviceManagerView)
+    await flush()
+    expect(w.findAll('button').some((b) => b.text() === '开启')).toBe(false)
     w.unmount()
   })
 })

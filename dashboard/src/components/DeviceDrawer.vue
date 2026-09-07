@@ -7,7 +7,12 @@
 // Phase 3B: the recent history is charted with one MiniChart per numeric
 // measurement type (oldest->newest). A toggle still exposes the raw JSON.
 import { ref, watch, computed } from 'vue'
-import { fetchDeviceData, type SensorRecord } from '../api'
+import {
+  fetchDeviceData,
+  fetchForecastHistory,
+  type ForecastHistoryItem,
+  type SensorRecord,
+} from '../api'
 import { DEVICE_META, protoLabel } from '../deviceMeta'
 import JsonViewer from './JsonViewer.vue'
 import MiniChart from './MiniChart.vue'
@@ -16,6 +21,7 @@ const props = defineProps<{ deviceId: string | null; limit?: number }>()
 const emit = defineEmits<{ close: [] }>()
 
 const records = ref<SensorRecord[]>([])
+const forecasts = ref<ForecastHistoryItem[]>([])
 const error = ref('')
 const loading = ref(false)
 const showRaw = ref(false)
@@ -46,6 +52,17 @@ const series = computed<Series[]>(() => {
   return [...map.values()]
 })
 
+
+const forecastsByProperty = computed(() => {
+  const map = new Map<string, ForecastHistoryItem[]>()
+  for (const item of forecasts.value) {
+    const values = map.get(item.property_name) ?? []
+    values.push(item)
+    map.set(item.property_name, values)
+  }
+  return map
+})
+
 watch(
   () => props.deviceId,
   async (id) => {
@@ -54,10 +71,16 @@ watch(
     error.value = ''
     showRaw.value = false
     try {
-      records.value = await fetchDeviceData(id, props.limit ?? 20)
+      const [deviceRecords, forecastResult] = await Promise.all([
+        fetchDeviceData(id, props.limit ?? 100),
+        fetchForecastHistory(id, 100).catch(() => ({ items: [], total: 0 })),
+      ])
+      records.value = deviceRecords
+      forecasts.value = forecastResult.items
     } catch {
       error.value = '数据加载失败'
       records.value = []
+      forecasts.value = []
     } finally {
       loading.value = false
     }
@@ -104,6 +127,7 @@ watch(
           :label="s.type"
           :unit="s.unit"
           :points="s.points"
+          :forecasts="forecastsByProperty.get(s.type) ?? []"
         />
       </div>
     </aside>
@@ -120,8 +144,8 @@ watch(
   justify-content: flex-end;
 }
 .drawer {
-  width: 420px;
-  max-width: 90vw;
+  width: 560px;
+  max-width: 94vw;
   height: 100%;
   background: #1e293b;
   border-left: 1px solid #334155;

@@ -11,8 +11,8 @@ from semantic_layer.mapping import SUBSYSTEM_TO_RESOURCE, TYPE_TO_PROPERTY
 
 router = APIRouter()
 
-_TIMEOUT = 2.0
-_CACHE_TTL = 15.0
+_TIMEOUT = 8.0
+_CACHE_TTL = 60.0
 _cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 _inflight: dict[str, asyncio.Task[list[dict[str, Any]]]] = {}
 
@@ -27,7 +27,7 @@ _BASE_QUERY = (
     "sosa:observedProperty ?prop . "
     "OPTIONAL { ?sensor sf:belongsToSubsystem ?subsystem } "
     "OPTIONAL { ?sensor sf:transportedVia ?protocol } "
-    "%s } ORDER BY ?sensor ?prop"
+    "%s } LIMIT 100"
 )
 
 _CO_TEMP_FILTER = (
@@ -132,6 +132,58 @@ def _aggregate(bindings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [by_sensor[s] for s in order]
 
 
+def _binding_fallback(view: str) -> list[dict[str, Any]]:
+    from backend.api.innovation_api import binding_registry
+
+    allowed_properties = {
+        "temperature", "humidity", "count", "occupancy", "light_state",
+        "distance", "co", "smoke", "combustible_gas",
+    }
+    view_properties = {
+        "co-temp-sensors": {"co", "temperature"},
+        "fire-risk-sensors": {
+            "temperature", "co", "smoke", "combustible_gas"
+        },
+        "production-sensors": {
+            "distance", "count", "occupancy", "light_state"
+        },
+    }
+
+    grouped: dict[str, dict[str, Any]] = {}
+    for binding in binding_registry.all():
+        prop = binding.property_name
+        subsystem = binding.canonical_subsystem
+
+        if prop not in allowed_properties:
+            continue
+        if view == "gas-subsystem-detail" and subsystem != "gas":
+            continue
+        if view in view_properties and prop not in view_properties[view]:
+            continue
+
+        item = grouped.setdefault(
+            binding.device_id,
+            {
+                "sensor": binding.device_id,
+                "subsystem": subsystem,
+                "observes": [],
+                "_protocols": set(),
+            },
+        )
+        if prop not in item["observes"]:
+            item["observes"].append(prop)
+        item["_protocols"].add(binding.protocol)
+
+    results = []
+    for item in grouped.values():
+        protocols = sorted(item.pop("_protocols"))
+        item["protocol"] = ", ".join(protocols)
+        item["observes"].sort()
+        results.append(item)
+
+    return sorted(results, key=lambda item: item["sensor"])
+
+
 @router.get("/api/v1/semantic")
 async def semantic(view: Optional[str] = Query(None)):
     if view not in VIEWS:
@@ -145,13 +197,24 @@ async def semantic(view: Optional[str] = Query(None)):
         return {
             "view": view,
             "description": DESCRIPTIONS[view],
-            "results": [],
+            "results": _binding_fallback(view),
             "degraded": True,
-            "reason": "Fuseki 未启动，知识图谱查询暂不可用",
+            "reason": "Fuseki 查询超时，已使用本体协议绑定快照",
         }
+
+    results = _aggregate(bindings)
+    if not results:
+        return {
+            "view": view,
+            "description": DESCRIPTIONS[view],
+            "results": _binding_fallback(view),
+            "degraded": True,
+            "reason": "Fuseki 查询无结果，已使用本体协议绑定快照",
+        }
+
     return {
         "view": view,
         "description": DESCRIPTIONS[view],
-        "results": _aggregate(bindings),
+        "results": results,
         "degraded": False,
     }

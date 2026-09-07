@@ -11,7 +11,7 @@ import PanelFrame from '../components/PanelFrame.vue'
 import SensorGauge from '../components/SensorGauge.vue'
 import GasMonitor from '../components/GasMonitor.vue'
 import AlertsPanel from '../components/AlertsPanel.vue'
-import SparqlPanel from '../components/SparqlPanel.vue'
+import InlineForecast from '../components/InlineForecast.vue'
 import KnowledgeGraph from '../components/KnowledgeGraph.vue'
 import CrossAlertBanner from '../components/CrossAlertBanner.vue'
 import DeviceDrawer from '../components/DeviceDrawer.vue'
@@ -108,7 +108,8 @@ const countRate = computed(() => {
       :timestamp="tsOf('temp_humidity', 'temperature')"
       :state="tempState"
     >
-      <div class="gauges">
+      <div class="instrument-stack">
+        <div class="gauges">
         <SensorGauge
           label="温度"
           :value="temp"
@@ -130,26 +131,38 @@ const countRate = computed(() => {
           :size="132"
         />
       </div>
+        <InlineForecast
+          device-id="ESP32_001"
+          :properties="['temperature', 'humidity']"
+        />
+      </div>
     </PanelFrame>
 
     <PanelFrame
       class="p-gas"
-      title="危险气体（本体已声明，硬件未接入）"
+      title="危险气体"
       :protocol="protoOf('gas')"
       :timestamp="tsOf('gas', 'co')"
       :state="level(reading('gas', 'co')?.value ?? null, 20, 35)"
     >
-      <GasMonitor />
+      <div class="instrument-stack">
+        <GasMonitor />
+        <InlineForecast
+          device-id="ESP32_005"
+          :properties="['combustible_gas', 'co', 'smoke']"
+        />
+      </div>
     </PanelFrame>
 
     <PanelFrame
       class="p-agv"
-      title="AGV 避障（本体已声明，硬件未接入）"
+      title="AGV 避障"
       :protocol="protoOf('agv')"
       :timestamp="tsOf('agv', 'distance')"
       :state="distState"
     >
-      <div class="gauges">
+      <div class="instrument-stack">
+        <div class="gauges">
         <SensorGauge
           label="最近障碍物"
           :value="distance"
@@ -162,7 +175,12 @@ const countRate = computed(() => {
           :size="140"
         />
       </div>
-      <p class="hint">数值越小越危险；橙色为减速区，红色为停车区。</p>
+        <p class="hint">数值越小越危险；橙色为减速区，红色为停车区。</p>
+        <InlineForecast
+          device-id="ESP32_004"
+          :properties="['distance']"
+        />
+      </div>
     </PanelFrame>
 
     <PanelFrame
@@ -204,9 +222,6 @@ const countRate = computed(() => {
       <KnowledgeGraph />
     </PanelFrame>
 
-    <PanelFrame class="p-sparql" title="语义查询" dense>
-      <SparqlPanel />
-    </PanelFrame>
 
     <DeviceDrawer :device-id="drawerDev" @close="drawerDev = null" />
   </div>
@@ -234,8 +249,22 @@ const countRate = computed(() => {
 .p-light { grid-column: span 3; }
 .p-count { grid-column: span 3; }
 .p-alerts { grid-column: span 3; grid-row: span 2; }
-.p-kg { grid-column: span 5; grid-row: span 2; }
-.p-sparql { grid-column: span 4; grid-row: span 2; }
+.p-kg { grid-column: span 9; grid-row: span 2; }
+
+.instrument-stack {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: 6px;
+}
+.instrument-stack > :first-child {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.instrument-stack > :last-child {
+  flex: 0 0 auto;
+}
 
 .gauges {
   display: flex;
@@ -243,7 +272,8 @@ const countRate = computed(() => {
   align-items: center;
   justify-content: center;
   flex-wrap: wrap;
-  height: 100%;
+  flex: 1 1 auto;
+  height: auto;
   min-height: 0;
 }
 
@@ -279,7 +309,7 @@ const countRate = computed(() => {
 
 @media (max-width: 1280px) {
   .p-temp, .p-light, .p-count, .p-alerts { grid-column: span 6; }
-  .p-gas, .p-kg, .p-sparql { grid-column: span 12; }
+  .p-gas, .p-kg { grid-column: span 12; }
   .p-agv { grid-column: span 6; }
 }
 </style>

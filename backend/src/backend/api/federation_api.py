@@ -114,7 +114,11 @@ async def list_decisions(
     limit: int = Query(50, ge=1, le=200),
 ) -> dict[str, Any]:
     items = [r.to_dict() for r in ledger.list(policy_name, severity, limit)]
-    return {"items": items, "total": len(ledger)}
+    return {
+        "items": items,
+        "total": len(ledger),
+        "total_occurrences": ledger.total_occurrences(),
+    }
 
 
 @router.get("/api/v1/decisions/{decision_id}")

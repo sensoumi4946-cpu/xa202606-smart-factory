@@ -137,27 +137,12 @@ class FaultPredictor:
         threshold, direction = table[prop]
         current = points[-1][1]
 
+        # Existing threshold violations are hazards, not forecasts.
         breached = (
             current >= threshold if direction == "above" else current <= threshold
         )
         if breached:
-            return Prediction(
-                device_id=device_id,
-                property_name=prop,
-                current_value=current,
-                threshold=threshold,
-                slope_per_s=0.0,
-                slope_ci_per_s=(0.0, 0.0),
-                seconds_to_threshold=0.0,
-                seconds_to_threshold_earliest=0.0,
-                seconds_to_threshold_latest=0.0,
-                r_squared=1.0,
-                samples=len(points),
-                window_seconds=points[-1][0] - points[0][0],
-                confidence="high",
-                will_breach=True,
-                message=f"{prop} {current:.1f} 已达到阈值 {threshold:.1f}",
-            )
+            return None
 
         if len(points) < self.min_points:
             return None

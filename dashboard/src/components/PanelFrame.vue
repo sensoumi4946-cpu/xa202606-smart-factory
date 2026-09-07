@@ -27,7 +27,7 @@ const protoLabel = computed(() => {
       <h2>{{ title }}</h2>
       <div class="meta">
         <span v-if="protoLabel" class="proto mono">{{ protoLabel }}</span>
-        <span class="age" :class="{ stale }">{{ label }}</span>
+        <span v-if="timestamp" class="age" :class="{ stale }">{{ label }}</span>
       </div>
     </header>
     <div class="body">

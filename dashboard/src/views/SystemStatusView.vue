@@ -19,10 +19,14 @@ interface Decision {
   causal_chain: string[]
   explanation_zh: string
   fingerprint: string
+  occurrence_count: number
+  last_triggered_at: string
 }
 
 const status = ref<SystemStatus | null>(null)
 const decisions = ref<Decision[]>([])
+const decisionTotal = ref(0)
+const totalOccurrences = ref(0)
 const chain = ref<{ valid: boolean; entries: number } | null>(null)
 const certificate = ref<Record<string, unknown> | null>(null)
 const selected = ref<string | null>(null)
@@ -44,8 +48,14 @@ async function load() {
   } catch {
     status.value = null
   }
-  const d = (await get('/api/v1/decisions?limit=40')) as { items?: Decision[] } | null
+  const d = (await get('/api/v1/decisions?limit=40')) as {
+    items?: Decision[]
+    total?: number
+    total_occurrences?: number
+  } | null
   decisions.value = d?.items ?? []
+  decisionTotal.value = d?.total ?? 0
+  totalOccurrences.value = d?.total_occurrences ?? 0
   chain.value = (await get('/api/v1/security/audit/verify')) as typeof chain.value
   certificate.value = (await get('/api/v1/safety')) as Record<string, unknown> | null
 }
@@ -65,6 +75,14 @@ function relOf(iso: string): string {
   return ageLabel(ageMs(iso, clock.value))
 }
 
+function outcomeLabel(outcome: string): string {
+  if (outcome === 'pending') return '已生成 · 等待设备确认'
+  if (outcome === 'dispatched') return '已发布 · 等待设备确认'
+  if (outcome === 'acked' || outcome === 'executed') return '设备已确认'
+  if (outcome === 'failed' || outcome === 'dispatch_failed') return '处理失败'
+  return outcome
+}
+
 onMounted(() => {
   load()
   timer = setInterval(load, 4000)
@@ -78,8 +96,14 @@ onUnmounted(() => {
   <div class="page">
     <section class="ledger">
       <header class="lhead">
-        <h1>自主决策台账</h1>
-        <p>平台自动下发的每一条控制指令，及其触发依据与审计链位置。</p>
+        <div>
+          <h1>自主决策台账</h1>
+          <p>平台根据语义规则自动生成安全决策；物理执行须由设备确认。</p>
+        </div>
+        <div class="ledger-counts">
+          <span>决策事件 <b class="mono">{{ decisionTotal }}</b></span>
+          <span>持续触发 <b class="mono">{{ totalOccurrences }}</b></span>
+        </div>
       </header>
 
       <div class="split">
@@ -88,9 +112,10 @@ onUnmounted(() => {
             <tr>
               <th class="c-time">时间</th>
               <th>判定</th>
-              <th class="c-dev">执行对象</th>
-              <th class="c-act">动作</th>
-              <th class="c-src">来源</th>
+              <th class="c-dev">目标对象</th>
+              <th class="c-act">建议动作</th>
+              <th class="c-count">持续触发</th>
+              <th class="c-src">证据协议</th>
             </tr>
           </thead>
           <tbody>
@@ -104,13 +129,14 @@ onUnmounted(() => {
               <td>{{ d.label_zh }}</td>
               <td class="c-dev mono">{{ d.target_device }}</td>
               <td class="c-act mono">{{ d.action }}</td>
+              <td class="c-count mono">×{{ d.occurrence_count ?? 1 }}</td>
               <td class="c-src mono">
                 {{ d.protocols.map((p) => p.toUpperCase()).join('+') }}
               </td>
             </tr>
             <tr v-if="!decisions.length">
-              <td colspan="5" class="empty">
-                暂无自主决策记录。触发一次跨子系统告警后，此处会记录平台下发的指令。
+              <td colspan="6" class="empty">
+                暂无自主决策记录。触发跨子系统风险后，此处会记录决策及其证据。
               </td>
             </tr>
           </tbody>
@@ -126,9 +152,11 @@ onUnmounted(() => {
             </ol>
             <dl class="meta">
               <dt>本体版本</dt><dd class="mono">{{ detail.ontology_version }}</dd>
-              <dt>执行结果</dt><dd class="mono">{{ detail.outcome }}</dd>
+              <dt>决策状态</dt><dd>{{ outcomeLabel(detail.outcome) }}</dd>
+              <dt>持续触发</dt><dd class="mono">×{{ detail.occurrence_count ?? 1 }}</dd>
               <dt>记录指纹</dt><dd class="mono trunc">{{ detail.fingerprint }}</dd>
-              <dt>发生时间</dt><dd>{{ relOf(detail.decided_at) }}</dd>
+              <dt>首次判定</dt><dd>{{ relOf(detail.decided_at) }}</dd>
+              <dt>最近触发</dt><dd>{{ relOf(detail.last_triggered_at || detail.decided_at) }}</dd>
             </dl>
           </template>
           <p v-else class="placeholder">选择左侧任一条记录，查看其因果链与审计信息。</p>
@@ -180,7 +208,16 @@ onUnmounted(() => {
   padding: 0;
 }
 .ledger { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-.lhead { border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+.lhead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+}
+.ledger-counts { display: flex; gap: 14px; color: var(--text-faint); font-size: 11px; }
+.ledger-counts b { color: var(--text); }
 h1 { margin: 0; font-size: 15px; font-weight: 600; }
 .lhead p { margin: 3px 0 0; font-size: 11px; color: var(--text-faint); }
 
@@ -191,6 +228,7 @@ h1 { margin: 0; font-size: 15px; font-weight: 600; }
   flex: 1;
   min-height: 0;
   padding-top: 10px;
+  overflow: auto;
 }
 
 .rows { width: 100%; border-collapse: collapse; font-size: 12px; align-self: start; }
@@ -213,7 +251,8 @@ h1 { margin: 0; font-size: 15px; font-weight: 600; }
 .rows tr.crit td:nth-child(2) { color: var(--danger); }
 .c-time { width: 76px; }
 .c-dev { width: 140px; }
-.c-act { width: 64px; }
+.c-act { width: 72px; }
+.c-count { width: 78px; white-space: nowrap; color: var(--warn) !important; }
 .c-src { width: 110px; }
 .empty { color: var(--text-faint); padding: 20px 8px; }
 
@@ -241,6 +280,8 @@ h1 { margin: 0; font-size: 15px; font-weight: 600; }
   gap: 0;
   border-top: 1px solid var(--line);
   margin-top: 12px;
+  flex-shrink: 0;
+  background: var(--surface);
 }
 .cell {
   display: flex;

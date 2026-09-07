@@ -296,13 +296,14 @@ td {
 }
 tr.off td { color: var(--text-faint); }
 .dev { color: var(--text); }
-.c-sub { width: 90px; }
-.c-proto { width: 74px; }
-.c-state { width: 74px; }
-.c-age, .c-up, .c-msg { width: 78px; }
-.c-fw { width: 78px; }
-.c-mac { width: 130px; }
-.c-ops { width: 150px; white-space: nowrap; }
+.c-sub { min-width: 105px; white-space: nowrap; }
+.c-proto { min-width: 82px; white-space: nowrap; }
+.c-state { min-width: 76px; white-space: nowrap; }
+.c-age, .c-up, .c-msg { min-width: 92px; white-space: nowrap; }
+.c-fw { min-width: 90px; white-space: nowrap; }
+.c-mac { min-width: 145px; white-space: nowrap; }
+.c-ops { min-width: 150px; white-space: nowrap; }
+.c-data { width: 100%; min-width: 260px; }
 .sum { color: var(--text-faint); }
 .dot {
   display: inline-block;

@@ -9,7 +9,9 @@ from typing import Any, Callable, Optional
 logger = logging.getLogger(__name__)
 
 DEFAULT_MIN_INTERVAL_S = 20.0
-DEFAULT_CLEAR_HOLD_S = 30.0
+# Must exceed the semantic hazard cooldown (30 s).
+# Four missed hazard intervals are required before automatic release.
+DEFAULT_CLEAR_HOLD_S = 120.0
 
 
 @dataclass

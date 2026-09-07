@@ -95,6 +95,13 @@ export interface AlertItem {
     message: string;
     source_record_id: string;
     triggered_at: string;
+    status?: 'active' | 'acknowledged' | 'resolved';
+    first_triggered_at?: string;
+    last_triggered_at?: string;
+    occurrence_count?: number;
+    acknowledged_at?: string;
+    acknowledged_by?: string;
+    resolved_at?: string;
 }
 export interface Paginated<T> {
     items: T[];
@@ -192,6 +199,7 @@ export async function fetchAlerts(params: {
     level?: string;
     limit?: number;
     offset?: number;
+    status?: 'active' | 'acknowledged' | 'resolved' | 'all';
 }): Promise<Paginated<AlertItem>> {
     const sp = new URLSearchParams();
     if (params.device_id)
@@ -202,12 +210,24 @@ export async function fetchAlerts(params: {
         sp.set('limit', String(params.limit));
     if (params.offset !== undefined)
         sp.set('offset', String(params.offset));
+    if (params.status)
+        sp.set('status', params.status);
     const qs = sp.toString();
     const resp = await apiFetch(`${BASE_URL}api/v1/alerts${qs ? '?' + qs : ''}`);
     if (!resp.ok)
         throw new Error(`HTTP ${resp.status}`);
     return resp.json();
 }
+
+export async function acknowledgeAlert(alertId: string): Promise<void> {
+    const resp = await apiFetch(
+        `${BASE_URL}api/v1/alerts/${encodeURIComponent(alertId)}/acknowledge`,
+        { method: 'POST' },
+    );
+    if (!resp.ok)
+        throw new Error(`HTTP ${resp.status}`);
+}
+
 export async function fetchSemanticView(view = 'sensor-observations'): Promise<SemanticView> {
     const params = new URLSearchParams({ view });
     const resp = await apiFetch(`${BASE_URL}api/v1/semantic?${params}`);
@@ -334,4 +354,50 @@ export async function runSparqlQuery(query: string): Promise<SparqlResult> {
         columns: vars,
         rows: bindings.map((b) => Object.fromEntries(vars.map((v) => [v, b[v]?.value ?? '']))),
     };
+}
+
+
+export interface ForecastHistoryItem {
+    id: string;
+    device_id: string;
+    property_name: string;
+    issued_at: string;
+    target_at: string;
+    horizon_minutes: number;
+    current_value: number;
+    predicted_value: number;
+    predicted_ci_low: number;
+    predicted_ci_high: number;
+    threshold: number;
+    direction: 'above' | 'below';
+    state: 'breached' | 'predicted_breach' | 'watch' | 'stable';
+    samples: number;
+    r_squared: number;
+    significant: number;
+    status: 'pending' | 'evaluated' | 'missed';
+    actual_value: number | null;
+    evaluated_at: string | null;
+    predicted_breach: number;
+    actual_breach: number | null;
+}
+
+export interface ForecastHistoryResponse {
+    items: ForecastHistoryItem[];
+    total: number;
+}
+
+export async function fetchForecastHistory(
+    deviceId: string,
+    limit = 100,
+): Promise<ForecastHistoryResponse> {
+    const params = new URLSearchParams({
+        device_id: deviceId,
+        limit: String(limit),
+    });
+    const resp = await apiFetch(
+        `${BASE_URL}analytics/api/v1/forecast-history?${params}`,
+    );
+    if (!resp.ok)
+        throw new Error(`HTTP ${resp.status}`);
+    return resp.json();
 }

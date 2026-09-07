@@ -15,7 +15,7 @@ function baseQuery(filter: string): string {
     '  OPTIONAL { ?sensor sf:belongsToSubsystem ?subsystem }\n' +
     '  OPTIONAL { ?sensor sf:transportedVia ?protocol }\n' +
     (filter ? filter + '\n' : '') +
-    '} ORDER BY ?sensor ?prop'
+    '} LIMIT 100'
   )
 }
 

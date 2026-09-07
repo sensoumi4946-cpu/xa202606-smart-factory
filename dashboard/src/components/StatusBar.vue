@@ -2,11 +2,10 @@
 import { computed } from 'vue'
 import { usePoll } from '../usePoll'
 import {
-  fetchLatestDeduped,
+  fetchDeviceRegistry,
   fetchAlerts,
-  fetchDevices,
   probeFuseki,
-  type LatestDevice,
+  type DeviceRegistryEntry,
 } from '../api'
 import { FRESH_MS } from '../constants'
 
@@ -15,9 +14,9 @@ function isFresh(ts: string | undefined): boolean {
   return Date.now() - new Date(ts).getTime() < FRESH_MS
 }
 
-const { data: latest } = usePoll<LatestDevice[]>(
-  'latest:deduped',
-  fetchLatestDeduped,
+const { data: registry } = usePoll<DeviceRegistryEntry[]>(
+  'device-registry:status',
+  fetchDeviceRegistry,
   3000,
 )
 
@@ -29,14 +28,11 @@ const { data: alerts } = usePoll<{ total: number }>(
 
 const { data: fuseki } = usePoll<boolean>('fuseki', probeFuseki, 10000)
 
-const { data: devices } = usePoll<string[]>('devices', fetchDevices, 10000)
-
 const liveProtocols = computed(() => {
   const set = new Set<string>()
-  for (const d of latest.value ?? []) {
-    if (d.measurements.some((m) => isFresh(m.timestamp))) {
-      const p = (d as LatestDevice & { protocol?: string }).protocol
-      if (p) set.add(p.toLowerCase())
+  for (const device of registry.value ?? []) {
+    if (isFresh(device.last_seen)) {
+      set.add(device.protocol.toLowerCase())
     }
   }
   return set
@@ -48,7 +44,7 @@ const modbusOn = computed(() => liveProtocols.value.has('modbus'))
 const opcuaOn = computed(() => liveProtocols.value.has('opcua'))
 const fusekiOn = computed(() => fuseki.value === true)
 
-const deviceCount = computed(() => (devices.value ?? []).length)
+const deviceCount = computed(() => (registry.value ?? []).length)
 const alertCount = computed(() => alerts.value?.total ?? 0)
 </script>
 

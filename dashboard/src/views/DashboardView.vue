@@ -11,7 +11,6 @@ import PanelFrame from '../components/PanelFrame.vue'
 import SensorGauge from '../components/SensorGauge.vue'
 import GasMonitor from '../components/GasMonitor.vue'
 import AlertsPanel from '../components/AlertsPanel.vue'
-import SparqlPanel from '../components/SparqlPanel.vue'
 import KnowledgeGraph from '../components/KnowledgeGraph.vue'
 import CrossAlertBanner from '../components/CrossAlertBanner.vue'
 import DeviceDrawer from '../components/DeviceDrawer.vue'
@@ -204,10 +203,6 @@ const countRate = computed(() => {
       <KnowledgeGraph />
     </PanelFrame>
 
-    <PanelFrame class="p-sparql" title="语义查询" dense>
-      <SparqlPanel />
-    </PanelFrame>
-
     <DeviceDrawer :device-id="drawerDev" @close="drawerDev = null" />
   </div>
 </template>
@@ -235,7 +230,6 @@ const countRate = computed(() => {
 .p-count { grid-column: span 3; }
 .p-alerts { grid-column: span 3; grid-row: span 2; }
 .p-kg { grid-column: span 5; grid-row: span 2; }
-.p-sparql { grid-column: span 4; grid-row: span 2; }
 
 .gauges {
   display: flex;

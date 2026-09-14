@@ -2,7 +2,6 @@
 
 **Team: Binding Minds**  
 **Zhejiang Normal University**  
-**Competition baseline: `master @ d45e5679d6cc6febc66c20e759b06375c2b6da20`**
 
 XA-202606 integrates heterogeneous industrial devices using MQTT, REST, Modbus TCP and OPC UA, normalizes observations into `UnifiedMessage`, applies binding/contract checks and SHACL semantic gating, persists valid observations to SQLite, and then runs prediction, hazard reasoning, safety decision and audit logic.
 

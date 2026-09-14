@@ -1,116 +1,131 @@
-Audit copy based only on master commit 2bc72f5. Read START_HERE.md and docs/master-audit.md before deployment.
+# XA-202606 Smart Factory Safety Monitoring and Control Platform
 
-# XA-202606 Smart Factory Safety Platform
+**Team: Binding Minds**  
+**Zhejiang Normal University**  
+**Competition baseline: `master @ d45e5679d6cc6febc66c20e759b06375c2b6da20`**
 
-This project normalises factory sensor data from MQTT, REST, Modbus TCP, and
-OPC UA into one strict message contract. Accepted observations can be persisted
-to SQLite and an RDF knowledge graph, evaluated by safety rules, and shown in a
-Vue dashboard.
+XA-202606 integrates heterogeneous industrial devices using MQTT, REST, Modbus TCP and OPC UA, normalizes observations into `UnifiedMessage`, applies binding/contract checks and SHACL semantic gating, persists valid observations to SQLite, and then runs prediction, hazard reasoning, safety decision and audit logic.
 
-## What is genuinely ontology-driven
+`bindings.ttl` is the single source of truth for protocol bindings. Apache Jena Fuseki provides RDF persistence and SPARQL querying but stays outside the critical ingest path; semantic persistence failure must not stop core observation ingestion and safety analysis.
 
-`bindings.ttl` is the source of truth for device IDs, protocol addresses,
-units, scaling, Modbus function/slave IDs, MQTT topics, REST routes, and OPC UA
-nodes. The live Modbus, MQTT, and OPC UA adapters build their runtime plans from
-a validated binding registry. Duplicate identifiers and overlapping Modbus
-wire addresses are rejected atomically.
+## Main pipeline
 
-Adding a device that uses **existing measurement and unit types** requires one
-binding change and regeneration. On openEuler, `sudo xa202606-reload` validates
-the files and reloads the backend, binding service, and active adapters without
-restarting their processes. Adding a new measurement or unit type still
-requires changes to the strict Python contract, semantic mapping, ontology,
-and tests; an ontology fragment alone is insufficient.
+```text
+Devices / protocols
+        ↓
+bindings.ttl / generated adapters
+        ↓
+UnifiedMessage
+        ↓
+SHACL gate
+        ↓
+SQLite + analytics
+        ↓
+FaultPredictor / HazardReasoner
+        ↓
+SafetyController
+        ↓
+backend-signed control + audit
+```
+
+## Key design points
+
+- Binding-driven MQTT / REST / Modbus / OPC UA integration.
+- A shared `UnifiedMessage` contract above all protocol adapters.
+- SHACL rejects invalid observations before business persistence.
+- Threshold breaches are hazards, not forecasts.
+- `FaultPredictor` is an interpretable trend/threshold-crossing model, not a fault-probability classifier.
+- Browser and control plane are separated: the backend signs downstream commands.
+- Fuseki is optional for semantic persistence and querying and is not a prerequisite for the core ingest path.
+- openEuler 24.03 LTS + systemd is the competition deployment target.
+
+## Current device topology
+
+| Device | Function | Subsystem | Binding |
+|---|---|---|---|
+| ESP32_001 | DHT22 temperature/humidity | temp_humidity | Modbus / MQTT / OPC UA |
+| ESP32_002 | infrared counting | counting | REST |
+| ESP32_003 | PIR + relay | lighting | REST |
+| ESP32_004 | HC-SR04 AGV distance | agv | OPC UA |
+| ESP32_005 | MQ-2 / MQ-7 gas sensing | gas | Modbus |
 
 ## Local setup
 
-Requirements: Python 3.11+, Node.js 20+, and optionally Apache Jena Fuseki and
-Mosquitto.
-
 ```bash
+git clone https://github.com/sensoumi4946-cpu/xa202606-smart-factory.git
+cd xa202606-smart-factory
+
 python -m venv .venv
 source .venv/bin/activate
+
 pip install -e shared -e backend -e connectivity -e analytics -e semantic-layer
 cd dashboard && npm install && cd ..
 ```
 
-Set at least:
+Required for protected backend access:
 
-```dotenv
-API_KEY=replace-with-a-random-api-key
-COMMAND_SIGNING_KEY=replace-with-a-separate-device-command-key
+```bash
+API_KEY=your_api_key
 ```
 
-Enable knowledge-graph writes explicitly with
-`SEMANTIC_WRITE_ENABLED=true`. Otherwise Fuseki is optional and the backend
-runs in degraded semantic mode.
+Required for downstream control:
 
-Start the backend from the repository root so it can find `bindings.ttl`:
+```bash
+COMMAND_SIGNING_KEY=your_command_signing_key
+```
+
+Start backend from the repository root:
 
 ```bash
 uvicorn backend.main:app --host 0.0.0.0 --port 8000
 ```
 
-Then start the dashboard:
+Dashboard:
 
 ```bash
 cd dashboard
 npm run dev
 ```
 
-For Docker Compose, Modbus and OPC UA services are in the `hardware` profile
-because this repository does not include working simulators for them:
+## Tests
 
 ```bash
-docker compose -f deploy/docker-compose.yml --profile hardware up -d --build
-```
-
-Configure `MODBUS_HOST`, `MODBUS_PORT`, and `OPCUA_ENDPOINT` for the actual
-factory endpoints.
-
-## Bindings and generated adapters
-
-```bash
-python scripts/generate_adapters.py
-python scripts/generate_adapters.py --check
-```
-
-The generated files are committed for review. Runtime adapters use the same
-validated registry rather than separate device-specific maps.
-
-## Verification
-
-```bash
-python -m pytest backend/tests connectivity/tests semantic-layer/tests analytics/tests shared/tests benchmark/tests -q
+python -m pytest backend/tests connectivity/tests semantic-layer/tests analytics/tests shared/tests benchmark/tests validation/tests -q
 cd firmware && python -m pytest tests -q && cd ..
 cd dashboard && npm test -- --run && npm run build && cd ..
-python validation/run_validation.py
-python validation/run_benchmark.py
+python scripts/generate_adapters.py --check
 python scripts/validate_sample_data.py
+python validation/run_validation.py
 ```
 
-## openEuler deployment
+Code regression is not a substitute for field/system evidence.
 
-The supported domestic-OS target is openEuler 24.03 LTS on x86_64 or AArch64.
-See `deploy/openeuler/README.md` for native systemd installation, offline wheel
-support, coordinated runtime reload, verification, and OPC UA certificates.
-The committed installer is not a substitute for retaining logs from the actual
-target machine.
+## Competition evidence status
 
-## Current limitations
+The final system test report records:
 
-- Reference acquisition firmware is present for all five boards, but it has not
-  been compiled, flashed, wired, calibrated, or validated in this environment.
-- There is no full physical-hardware end-to-end test or retained execution
-  evidence from the target openEuler machine.
-- Sensor accuracy, collection latency, cross-platform communication efficiency,
-  CPU/memory use, and soak stability have not been measured.
-- OPC UA supports Basic256Sha256 SignAndEncrypt, pinned server certificates,
-  username credentials, and optional X.509 user identity. Field certificate
-  issuance, server trust-list configuration, and target-network testing remain.
-- The repository does not yet include the required competition PPT, demo video,
-  complete design/development/test documents, summary report, or signed formal
-  declaration. A declaration checklist template is included under `docs/`.
+- openEuler 24.03 LTS server deployment tested;
+- five device categories online in the demonstration window;
+- a 4-hour continuous run;
+- 1440 process samples;
+- no backend PID change and zero systemd restarts;
+- 1440 HTTP 200 responses each for health/latest/forecast;
+- 240 HTTP 200 responses each for semantic refresh/cached queries;
+- average CPU 18.38%, maximum CPU 49.39%;
+- SQLite `quick_check=ok`.
 
-See `docs/competition-requirements-audit.md` for the detailed competition gap
-assessment and evidence plan.
+The resource-stability result is still **partial** rather than a production SLA because RSS increased from about 106.22 MB to 283.85 MB during the four-hour window and long-tail latency remains visible.
+
+## Explicit limitations
+
+Not yet claimed as completed:
+
+- real physical actuator closed-loop acceptance;
+- production OPC UA certificate trust chain;
+- traceable sensor-accuracy calibration;
+- standardized 24/48-hour physical endurance testing;
+- independent high-concurrency ingest benchmarking;
+- unified device-side timestamps;
+- supervised fault-probability classification based on a real labeled dataset.
+
+For deployment details, see `deploy/openeuler/README.md`.

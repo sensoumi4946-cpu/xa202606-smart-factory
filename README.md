@@ -1,125 +1,209 @@
-审查版本：仅基于 master 提交 2bc72f5。运行前请先读 START_HERE.md 和 docs/master-audit.md。
+# XA-202606 基于国产操作系统的智慧工厂安全监测控制平台
 
-# XA-202606 智慧工厂安全监控平台
+**团队：Binding Minds**  
+**学校：浙江师范大学**  
+**赛道：第十五届“挑战杯”揭榜挂帅擂台赛**  
 
-浙江师范大学 · 第十五届挑战杯 · 揭榜挂帅赛道
+## 团队成员
 
-车间里的传感器来自不同厂家，有的说 Modbus，有的发 MQTT，有的开 OPC UA，有的直接
-POST JSON。这个平台把它们接到一起，校验数据，存成 RDF 知识图谱，在网页上展示。
+- Sen Soumi
+- MOSLEH ABDUL QUDOOS HAMID MOSLEH
+- MHIRA ANASS
+- AAKIK MOHAMED
+- 季宇轩
+- 兰博望
 
-真正的重点不是网页，是接新设备的方式。
+## 项目简介
 
-## 核心做法
+XA-202606 面向智慧工厂安全生产场景，将 MQTT、REST、Modbus TCP 和 OPC UA 等异构设备统一接入同一数据与安全判断链路。系统以 `bindings.ttl` 作为协议绑定的单一事实来源，将现场载荷统一转换为 `UnifiedMessage`，经过设备绑定校验和 SHACL 语义门禁后写入 SQLite，并进入趋势预测、危害推理、安全控制和审计流程。
 
-设备的参数写成本体三元组，放在根目录的 `bindings.ttl` 里。寄存器地址、缩放系数、
-字节序、Modbus 功能码、轮询周期、OPC UA 节点号，全部写在那一个文件。平台读这个
-文件，自动生成四种协议的适配代码。
+Apache Jena Fuseki 用于 RDF/知识图谱与 SPARQL 查询。语义持久化处于非关键路径：Fuseki 暂时不可用时，不应阻断现场数据接入和安全分析主链路。
 
-实时 Modbus、OPC UA 和 MQTT 适配器从同一份已校验绑定表构造读取/订阅计划；设备 ID、
-地址、单位、缩放、功能码、Topic 和节点号不再散落在协议代码里。生成物可用
-`make check-generated` 校验，地址重叠和重复绑定会在加载阶段被拒绝。
+项目目标不是“再做一个监控大屏”，而是形成：
 
-接入一个**已有测量和单位类型**的新设备，只需修改 `bindings.ttl` 并重新生成；openEuler
-部署可用 `sudo xa202606-reload` 让后端、绑定服务和活动适配器在原进程内重载配置，无需
-重启进程。增加全新的测量或单位类型仍需同步修改 Python 消息契约、语义映射、本体和
-测试，不能只增加 Turtle 三元组。
+```text
+多协议设备
+   ↓
+bindings.ttl / 生成适配器
+   ↓
+UnifiedMessage
+   ↓
+SHACL 语义门禁
+   ↓
+SQLite + 分析
+   ↓
+FaultPredictor / HazardReasoner
+   ↓
+SafetyController
+   ↓
+后端签名控制 + 审计
+```
 
-## 需要什么
+## 核心机制
 
-- Python 3.11 以上
-- Node.js 20 以上
-- Apache Jena Fuseki（可以不装，装了才有知识图谱和 SPARQL 查询）
-- Mosquitto（只有走 MQTT 的设备需要）
+### 1. 本体/绑定驱动的多协议接入
 
-## 装
+根目录 `bindings.ttl` 保存设备与协议参数，包括：
+
+- device ID / alias
+- MQTT Topic / QoS
+- Modbus 地址、功能码、缩放系数、字节序
+- OPC UA NodeId / namespace
+- REST 路径
+- 单位、测量类型、轮询周期
+
+生成命令：
+
+```bash
+python scripts/generate_adapters.py
+python scripts/generate_adapters.py --check
+```
+
+对已有测量类型和单位的新设备，主要通过修改 `bindings.ttl` 并重新生成适配器完成接入。新增全新的测量或单位类型时，仍需同步修改 Python 契约、语义映射、本体和测试。
+
+### 2. 统一数据契约
+
+不同协议载荷统一转换为 `UnifiedMessage`。后端的入库、分析、告警、查询和审计模块不直接依赖各协议原始字段。
+
+### 3. SHACL 语义门禁
+
+入站数据先完成绑定/契约校验，再执行 SHACL。非法观测返回 422，并记录拒绝原因，不写入业务数据。
+
+### 4. 预测与实时危害分流
+
+当前实现明确区分预测和实时危害：
+
+- **尚未越阈**：`FaultPredictor` 估计阈值穿越时间；
+- **已经越阈**：不继续作为预测事件处理，进入实时危害判断；
+- `HazardReasoner` 对跨子系统条件进行组合判断；
+- `SafetyController` 根据危害结果生成动作建议并施加冷却/保持约束。
+
+这不是故障概率分类器，不报告没有标签数据支撑的分类准确率。
+
+### 5. 观测面与控制面分离
+
+前端只提交 `ControlRequest`。控制命令由后端完成：
+
+1. 鉴权
+2. 持久化
+3. HMAC 签名
+4. dispatcher 分发
+5. ACK 状态更新
+6. `command_audit` 审计记录
+
+浏览器端不负责生成命令签名。
+
+## 五类现场子系统
+
+| 设备 | 传感器/功能 | 子系统 | 当前绑定协议 |
+|---|---|---|---|
+| ESP32_001 | DHT22 温湿度 | temp_humidity | Modbus / MQTT / OPC UA |
+| ESP32_002 | 红外对射计数 | counting | REST |
+| ESP32_003 | PIR + 继电器 | lighting | REST |
+| ESP32_004 | HC-SR04 AGV 距离 | agv | OPC UA |
+| ESP32_005 | MQ-2 / MQ-7 | gas | Modbus |
+
+> 上表描述的是当前绑定拓扑。演示环境接入状态和实测结果以《系统测试报告》为准。
+
+## 运行环境
+
+- Python 3.11+
+- Node.js 20+
+- FastAPI + Uvicorn
+- Vue 3 + Vite + ECharts
+- SQLite
+- Apache Jena Fuseki（可选语义服务）
+- Mosquitto（MQTT 场景）
+- openEuler 24.03 LTS
+- systemd（竞赛目标部署）
+- Docker Compose（开发/集成）
+
+## 本地运行
+
+### 安装
 
 ```bash
 git clone https://github.com/sensoumi4946-cpu/xa202606-smart-factory.git
 cd xa202606-smart-factory
 
 python -m venv .venv
-.venv\Scripts\activate          # Windows
-source .venv/bin/activate       # Linux
+source .venv/bin/activate        # Linux
+# .venv\Scripts\activate         # Windows
 
 pip install -e shared -e backend -e connectivity -e analytics -e semantic-layer
-
 cd dashboard && npm install && cd ..
 ```
 
-## 环境变量
+### 关键环境变量
 
-后端只有一个必须设：
-
+```bash
+API_KEY=your_api_key
+COMMAND_SIGNING_KEY=your_command_signing_key
 ```
-API_KEY=你自己的密钥
+
+可选：
+
+```bash
+SEMANTIC_WRITE_ENABLED=true
+FUSEKI_ENDPOINT=http://localhost:3030/factory/data
+FUSEKI_QUERY_URL=http://localhost:3030/factory/query
 ```
 
-远程控制还必须设置 `COMMAND_SIGNING_KEY`，设备端使用相同密钥。其余参数有本地开发
-默认值。Fuseki 写入地址默认
-`http://localhost:3030/factory/data`，查询地址 `http://localhost:3030/factory/query`。
-设置 `SEMANTIC_WRITE_ENABLED=true` 才会启动知识图谱写入和同步任务。
+不要把真实密钥提交到仓库或写死在前端源码中。
 
-前端打开后输入访问密钥。不要把密钥写进前端代码。详细步骤见 `START_HERE.md`。
+### 启动
 
-## 跑起来
-
-三个终端。
-
-**后端**，必须在仓库根目录启动，不然找不到 `bindings.ttl`：
+后端应从仓库根目录启动：
 
 ```bash
 uvicorn backend.main:app --host 0.0.0.0 --port 8000
 ```
 
-启动日志里应该有 `loaded 17 protocol bindings`。如果是 0，说明路径不对。
-
-**Fuseki**（可选）：
-
-```bash
-cd apache-jena-fuseki-5.2.0
-./fuseki-server --update --mem /factory
-```
-
-**前端**：
+前端：
 
 ```bash
 cd dashboard
 npm run dev
 ```
 
-打开 http://localhost:5173
+默认开发地址：
 
-Docker Compose 默认启动后端、Fuseki、MQTT、REST 和执行器模拟器。连接真实 Modbus /
-OPC UA 设备时使用硬件 profile，并按现场地址覆盖环境变量：
+- Backend: `8000`
+- Dashboard: `5173`
+- REST adapter: `8100`
+- Mosquitto: `1883`
+- Modbus: `1502`
+- OPC UA: `4840`
+- Fuseki: `3030`
 
-```bash
-docker compose -f deploy/docker-compose.yml --profile hardware up -d --build
-```
+## openEuler 部署
 
-## 发一条数据试试
-
-```bash
-curl -X POST http://localhost:8000/ingest/api/v1/data \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: 你的密钥" \
-  -d '{"schema_version":"v1","device_id":"esp32_05_dht22","subsystem":"temp_humidity","protocol":"mqtt","measurements":[{"type":"temperature","value":26.1,"unit":"celsius"},{"type":"humidity","value":56.2,"unit":"percent"}]}'
-```
-
-返回里 `device_id` 会是 `ESP32_001`，`reported_device_id` 是你发的那个名字。这是
-本体里的别名在起作用——同一块板子用不同协议上报会用不同名字，平台自己认成一台设备。
-
-设备如果只能出裸寄存器、发不了 JSON，就挂到对应的协议适配器上，适配器会按本体里的
-地址和缩放系数去解，固件那边不用改。
-
-## 改了 bindings.ttl 之后
+openEuler 24.03 LTS 为当前国产操作系统目标环境。
 
 ```bash
-python scripts/generate_adapters.py
+sudo bash deploy/openeuler/install.sh
+sudoedit /etc/xa202606/backend.env
+sudoedit /etc/xa202606/connectivity.env
+sudo bash deploy/openeuler/verify.sh
 ```
 
-生成的四个 `generated_*_adapter.py` 是提交进仓库的，跟本体不一致时测试会报错。
+绑定或阈值变更后：
+
+```bash
+sudo xa202606-reload
+```
+
+它会先校验配置，再协调重载绑定及活动适配器。
+
+详细说明见：
+
+```text
+deploy/openeuler/README.md
+```
 
 ## 测试
+
+代码回归：
 
 ```bash
 python -m pytest backend/tests connectivity/tests semantic-layer/tests analytics/tests shared/tests benchmark/tests validation/tests -q
@@ -129,98 +213,73 @@ python scripts/generate_adapters.py --check
 python scripts/validate_sample_data.py
 ```
 
-## openEuler 部署
-
-唯一支持的国产操作系统部署目标是 **openEuler 24.03 LTS**（x86_64 / AArch64）。
-使用 systemd 原生部署，不要求购买 UOS 或麒麟：
-
-```bash
-sudo bash deploy/openeuler/install.sh
-sudoedit /etc/xa202606/backend.env
-sudoedit /etc/xa202606/connectivity.env
-sudo bash deploy/openeuler/verify.sh
-```
-
-详细步骤、离线 wheelhouse 和 OPC UA 证书配置见 `deploy/openeuler/README.md`。
-修改绑定或阈值后运行 `sudo xa202606-reload`；它会先校验再执行无进程重启的协调重载。
-提交材料中的原创性/保密性声明核对稿见
-`docs/originality-confidentiality-declaration-template.md`；必须用组委会正式表格签署，
-仓库模板不能替代正式文件。
-
-## 五条示例数据的性质
-
-`data/samples/five_subsystems.jsonl` 是经过消息契约、SHACL 和协议绑定三重校验的
-**合成演示夹具**，不是传感器实测原始数据。运行 `python scripts/seed_sample_data.py
---dry-run` 可以复核。实测精度、性能和稳定性必须按 `validation/EVIDENCE_PROTOCOL.md`
-采集，不能用这五个手填数值代替。
-
-三类配置校验用例：
+配置验证：
 
 ```bash
 python validation/run_validation.py
 ```
 
-合法地址通过并生成代码，非法地址和类型不一致在加载阶段被拒绝，都在 100ms 以内。
+测试原则：
 
-可复现的已知类型设备接入检查：
+- 代码回归不替代现场系统验证；
+- 合成 JSON 只用于契约/功能演示，不替代传感器精度证据；
+- 无物理执行器证据时，不宣称完成物理控制闭环；
+- 未验证的 OPC UA 生产证书链不宣称为生产安全链路。
 
-```bash
-python validation/run_benchmark.py
-```
+## 已取得的竞赛测试证据
+
+最终《系统测试报告》记录：
+
+- openEuler 24.03 LTS 服务端实测；
+- 演示窗口中五类设备在线；
+- 完成 **4 小时持续运行测试**；
+- `1440` 个连续进程采样点；
+- backend PID 无变化，systemd 重启计数为 0；
+- `health / latest / forecast` 各执行 `1440` 次，全部 HTTP 200；
+- `semantic refresh / cached` 各执行 `240` 次，全部 HTTP 200；
+- CPU 平均 `18.38%`，最大 `49.39%`；
+- SQLite `quick_check=ok`。
+
+同时，资源稳定性结论仍为**部分通过/继续观察**：
+
+- RSS 在 4 小时窗口内由约 `106.22 MB` 增至 `283.85 MB`；
+- 存在秒级长尾延迟；
+- 不能将 4 小时结果外推为 24/48 小时生产 SLA。
+
+## 当前明确边界
+
+尚未完成或不应过度表述的项目：
+
+- 真实执行器物理闭环验收；
+- 生产级 OPC UA 证书信任链；
+- 可溯源传感器精度标定；
+- 标准化 24/48 小时多设备物理闭环耐久测试；
+- 独立高并发入库性能基准；
+- 设备侧统一时间戳与断网补传时间语义；
+- 基于真实标签集的故障概率分类。
 
 ## 目录
 
+```text
+shared/             统一消息契约
+connectivity/       MQTT / REST / Modbus / OPC UA 接入
+backend/            FastAPI、入站、存储、安全、控制与审计
+semantic-layer/     RDF / SHACL / AAS / SPARQL / Fuseki
+analytics/          预测、异常、危害、安全控制
+dashboard/          Vue 3 控制台与大屏
+firmware/           ESP32 参考固件及执行器模拟
+deploy/             Docker Compose 与 openEuler/systemd 部署
+validation/         验证脚本与证据协议
+bindings.ttl        协议绑定单一事实来源
+thresholds.ttl      安全阈值配置
 ```
-firmware/          ESP32 固件
-connectivity/      四个协议适配器，运行计划由 bindings.ttl 构造
-backend/           FastAPI，接入、校验、存储
-semantic-layer/    本体解析、SHACL 校验、代码生成、RDF 映射
-analytics/         阈值规则、趋势预测
-dashboard/         Vue 3 前端
-validation/        配置校验用例和对比脚本
-bindings.ttl       设备参数，唯一事实来源
-```
 
-## 现在的硬件
+## 竞赛材料口径
 
-| 板子 | 传感器 | 子系统 | 协议 |
-|---|---|---|---|
-| ESP32_001 | DHT22 | 温湿度 | Modbus / MQTT / OPC UA（绑定已定义） |
-| ESP32_002 | 红外对射 | 货物计数 | REST |
-| ESP32_003 | PIR + 继电器 | 照明 | REST |
-| ESP32_004 | HC-SR04 | AGV 避障 | OPC UA |
-| ESP32_005 | MQ-2 / MQ-7 | 危险气体 | Modbus |
+软件实现、设计、测试与 PPT 的统一口径：
 
-上表描述的是绑定拓扑，不等同于硬件完成状态。五块板已有参考采集固件，其中
-ESP32_004 通过 openEuler 串口网关暴露 OPC UA 节点；所有草图仍需在实际板卡上编译、
-接线、校准和留存端到端证据。
-
-## 还没做完的
-
-- 报文里没有设备自己的时间戳，用的是服务器收到的时间。断网重连后一批数据会挤在
-  同一时刻。
-- 固件版本号和 MAC 尚未统一上报；部分参考固件只把运行时长放在 `raw_payload`。
-- 没跑过完整的硬件端到端测试；已有 openEuler 安装和自检脚本，但尚无目标机执行日志。
-- 接入延迟、采集精度、跨平台通信效率、CPU、内存和连续运行稳定性还没测。
-- OPC UA 适配器支持 Basic256Sha256、SignAndEncrypt、客户端证书和服务端证书固定；
-  现场仍必须签发证书并按 `deploy/openeuler/connectivity.env.example` 配置，未配置时不能
-  作为生产安全链路使用。
-
-## 常见问题
-
-**启动日志说 bindings file not found**
-
-不在仓库根目录启动的。`cd` 到根目录再跑 uvicorn。
-
-**返回 kg_write: queued**
-
-写入在后台执行。检查 `SEMANTIC_WRITE_ENABLED`、Fuseki 健康状态和后端日志确认结果。
-
-**界面一直显示未检测到设备**
-
-先 `curl /api/v1/latest` 看后端有没有数据。有数据但界面空的，多半是
-`dashboard/.env` 没配，或者配了但没重启 `npm run dev`。
-
-**数据库删了还是能看到旧设备**
-
-数据库在仓库根目录的 `data/smart_factory.db`，不是 `backend/data/`。
+- **实现机制**：以代码和设计文档为准；
+- **实测结果**：以《系统测试报告》为准；
+- **竞赛展示**：不得把分析建议写成现场已执行；
+- **合成数据**：不得当作采集精度或性能证据；
+- **软件基线**：`master @ d45e5679d6cc6febc66c20e759b06375c2b6da20`。

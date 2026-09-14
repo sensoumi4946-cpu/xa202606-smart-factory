@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { usePoll } from '../usePoll'
-import { fetchAlerts, type AlertItem } from '../api'
+import { acknowledgeAlert, fetchAlerts, type AlertItem } from '../api'
 
 const filterLevel = ref('')
+const acknowledging = ref<string | null>(null)
 
 const { data, error: pollError } = usePoll<{ items: AlertItem[] }>(
   'alerts:20',
@@ -21,6 +22,15 @@ const filtered = computed(() => {
 
 function isCross(a: AlertItem): boolean {
   return a.subsystem === 'cross_subsystem'
+}
+
+async function acknowledge(a: AlertItem) {
+  acknowledging.value = a.id
+  try {
+    await acknowledgeAlert(a.id)
+  } finally {
+    acknowledging.value = null
+  }
 }
 </script>
 
@@ -49,9 +59,19 @@ function isCross(a: AlertItem): boolean {
           {{ isCross(a) ? 'CROSS' : a.level }}
         </span>
         <span class="msg" :title="a.message">{{ a.message }}</span>
+        <span v-if="(a.occurrence_count ?? 1) > 1" class="count mono">
+          ×{{ a.occurrence_count }}
+        </span>
         <span class="time mono">{{
-          new Date(a.triggered_at).toLocaleTimeString()
+          new Date(a.last_triggered_at ?? a.triggered_at).toLocaleTimeString()
         }}</span>
+        <button
+          class="ack"
+          :disabled="acknowledging === a.id"
+          @click="acknowledge(a)"
+        >
+          {{ acknowledging === a.id ? '处理中' : '确认' }}
+        </button>
       </div>
     </TransitionGroup>
   </div>
@@ -154,4 +174,24 @@ h3 {
   opacity: 0;
   transform: translateY(-6px);
 }
+</style>
+<style scoped>
+.count {
+  flex: none;
+  color: var(--warn);
+  font-weight: 700;
+}
+.ack {
+  flex: none;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-2);
+  color: var(--text-dim);
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+}
+.ack:hover { color: var(--ok); border-color: var(--ok); }
+.ack:disabled { opacity: 0.5; cursor: wait; }
 </style>

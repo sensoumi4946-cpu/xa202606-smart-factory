@@ -10,7 +10,7 @@ from backend import config
 from backend.services.registry_singleton import aas_registry, provenance_audit
 from backend.services import gate_status_tracker
 from backend.services.analytics_ingest_bridge import analyse_after_ingest
-from analytics import trend_forecast
+from backend.services.forecast_evaluation import observe as observe_forecast
 from semantic_layer.fuseki import write_to_fuseki
 from semantic_layer.observation_gate import check_and_prepare
 from semantic_layer.semantic_context_rules import evaluate_with_context
@@ -57,6 +57,57 @@ def _canonical_device_id(device_id: str, subsystem: str | None = None) -> str:
     if subsystem is not None and allowed and subsystem not in allowed:
         raise HTTPException(status_code=422, detail="device_id belongs to a different subsystem")
     return canonical
+
+
+def _validate_protocol_binding(msg: UnifiedMessage) -> None:
+    from backend.api.innovation_api import binding_registry
+
+    device_id = msg.device_id
+    subsystem = _enum_value(msg.subsystem)
+    protocol = _enum_value(msg.protocol)
+    device_bindings = binding_registry.for_device(device_id)
+
+    if not device_bindings:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "Protocol binding validation failed",
+                "device_id": device_id,
+                "violations": ["device has no declared protocol binding"],
+            },
+        )
+
+    violations: list[str] = []
+    for measurement in msg.measurements:
+        property_name = _enum_value(measurement.type)
+        candidates = [
+            binding
+            for binding in device_bindings
+            if binding.canonical_subsystem == subsystem
+            and binding.property_name == property_name
+        ]
+        allowed = sorted({binding.protocol for binding in candidates})
+
+        if not candidates:
+            violations.append(
+                f"{device_id}.{property_name} has no binding for subsystem {subsystem}"
+            )
+        elif protocol not in allowed:
+            violations.append(
+                f"{device_id}.{property_name} declares protocol {protocol}; "
+                f"allowed protocols: {', '.join(allowed)}"
+            )
+
+    if violations:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "Protocol binding validation failed",
+                "device_id": device_id,
+                "reported_protocol": protocol,
+                "violations": violations,
+            },
+        )
 
 
 def _enum_value(field: Any) -> str:
@@ -165,7 +216,12 @@ async def ingest_reading(
     names = ("device_status", "error_code", "sensor_status")
     words = [int(status_values[n]) for n in names] if all(n in status_values for n in names) else None
     record_health(msg.device_id, status_words=words)
-    trend_forecast.record(msg.device_id, reading.property_name, reading.value, at=msg.timestamp)
+    observe_forecast(
+        msg.device_id,
+        reading.property_name,
+        reading.value,
+        observed_at=msg.timestamp,
+    )
     run_prediction_pipeline(msg.device_id, reading.subsystem, reading.protocol, [{"type": reading.property_name, "value": reading.value}], timestamp=msg.timestamp.timestamp())
 
     fired_alerts = analyse_after_ingest(
@@ -260,6 +316,8 @@ async def ingest_unified_data(
     subsystem_value = _enum_value(msg.subsystem)
     protocol_value = _enum_value(msg.protocol)
 
+    _validate_protocol_binding(msg)
+
     gate = check_and_prepare(msg)
     gate_status_tracker.record(
         gate.accepted,
@@ -314,7 +372,12 @@ async def ingest_unified_data(
     ]
 
     for m in measurement_dicts:
-        trend_forecast.record(msg.device_id, m["type"], m["value"], at=msg.timestamp)
+        observe_forecast(
+            msg.device_id,
+            m["type"],
+            m["value"],
+            observed_at=msg.timestamp,
+        )
 
     analytics_result = run_prediction_pipeline(
         timestamp=msg.timestamp.timestamp(),

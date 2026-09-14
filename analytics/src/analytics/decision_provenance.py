@@ -58,6 +58,8 @@ class DecisionRecord:
     outcome: str = "pending"
     audit_seq: Optional[int] = None
     audit_hash: Optional[str] = None
+    occurrence_count: int = 1
+    last_triggered_at: str = ""
 
     @property
     def subsystems(self) -> list[str]:
@@ -120,6 +122,8 @@ class DecisionRecord:
             "fingerprint": self.fingerprint(),
             "audit_seq": self.audit_seq,
             "audit_hash": self.audit_hash,
+            "occurrence_count": self.occurrence_count,
+            "last_triggered_at": self.last_triggered_at or self.decided_at,
         }
 
 
@@ -167,6 +171,7 @@ class DecisionLedger:
         ontology_version: str,
         command_id: Optional[str] = None,
     ) -> DecisionRecord:
+        now = datetime.now(timezone.utc).isoformat()
         record = DecisionRecord(
             decision_id=str(uuid.uuid4()),
             command_id=command_id,
@@ -179,8 +184,9 @@ class DecisionLedger:
             severity=severity,
             confidence=str(hazard.get("confidence", "unknown")),
             ontology_version=ontology_version,
-            decided_at=datetime.now(timezone.utc).isoformat(),
+            decided_at=now,
             evidence=evidence_from_hazard(hazard),
+            last_triggered_at=now,
         )
         with self._lock:
             self._records.insert(0, record)
@@ -197,6 +203,21 @@ class DecisionLedger:
             action,
         )
         return record
+
+    def touch_active(self, policy_name: str) -> Optional[DecisionRecord]:
+        """Count another hazard evaluation without issuing another command."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock:
+            for record in self._records:
+                if record.policy_name == policy_name:
+                    record.occurrence_count += 1
+                    record.last_triggered_at = now
+                    return record
+        return None
+
+    def total_occurrences(self) -> int:
+        with self._lock:
+            return sum(record.occurrence_count for record in self._records)
 
     def attach_audit(self, decision_id: str, seq: int, entry_hash: str) -> None:
         with self._lock:

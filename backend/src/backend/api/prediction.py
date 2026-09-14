@@ -69,7 +69,20 @@ def process_reading(
         del _hazards[MAX_HAZARDS:]
         result["hazards"].append(d)
 
+    active_before = set(safety.engaged_policies())
     engaged = safety.on_hazards(result["hazards"], timestamp)
+
+    for policy in safety.policies:
+        repeated = (
+            policy.name in active_before
+            and any(
+                h.get("rule_name") in policy.hazard_rules
+                for h in result["hazards"]
+            )
+        )
+        if repeated:
+            ledger.touch_active(policy.name)
+
     for action in engaged:
         source = next(
             (h for h in result["hazards"] if h.get("rule_name") == action.trigger),

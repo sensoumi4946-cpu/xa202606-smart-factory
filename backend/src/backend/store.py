@@ -53,8 +53,14 @@ def _add_column_if_missing(
 
 
 def init_db() -> None:
-    pass
     ensure_schema(config.DATABASE_PATH)
+    from backend.services.forecast_evaluation import restore_windows
+    restored = restore_windows()
+    if restored["series"]:
+        print(
+            "forecast windows restored: "
+            f'{restored["series"]} series, {restored["samples"]} samples'
+        )
 
 
 def close_db() -> None:
@@ -74,19 +80,49 @@ def insert_alert(
     source_record_id: str,
     now: datetime,
 ) -> Optional[str]:
-    cutoff = (now - timedelta(seconds=30)).isoformat()
     existing = conn.execute(
         """SELECT id FROM alerts
-           WHERE rule_name = ? AND device_id = ? AND triggered_at >= ?""",
-        (rule_name, device_id, cutoff),
+           WHERE rule_name = ?
+             AND device_id = ?
+             AND measurement_type = ?
+             AND status IN ('active', 'acknowledged')
+           ORDER BY last_triggered_at DESC
+           LIMIT 1""",
+        (rule_name, device_id, measurement_type),
     ).fetchone()
+
     if existing:
+        conn.execute(
+            """UPDATE alerts
+               SET level = ?,
+                   value = ?,
+                   threshold = ?,
+                   message = ?,
+                   source_record_id = ?,
+                   last_triggered_at = ?,
+                   occurrence_count = occurrence_count + 1
+               WHERE id = ?""",
+            (
+                level,
+                value,
+                threshold,
+                message,
+                source_record_id,
+                now.isoformat(),
+                existing["id"],
+            ),
+        )
         return None
+
     alert_id = str(uuid.uuid4())
     conn.execute(
-        """INSERT INTO alerts (id, rule_name, level, device_id, subsystem,
-           measurement_type, value, threshold, message, source_record_id, triggered_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        """INSERT INTO alerts (
+               id, rule_name, level, device_id, subsystem,
+               measurement_type, value, threshold, message,
+               source_record_id, triggered_at, status,
+               first_triggered_at, last_triggered_at, occurrence_count
+           )
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, 1)""",
         (
             alert_id,
             rule_name,
@@ -99,9 +135,29 @@ def insert_alert(
             message,
             source_record_id,
             now.isoformat(),
+            now.isoformat(),
+            now.isoformat(),
         ),
     )
     return alert_id
+
+
+def resolve_alerts(
+    conn: sqlite3.Connection,
+    device_id: str,
+    measurement_type: str,
+    now: datetime,
+) -> None:
+    conn.execute(
+        """UPDATE alerts
+           SET status = 'resolved',
+               resolved_at = ?,
+               last_triggered_at = COALESCE(last_triggered_at, triggered_at)
+           WHERE device_id = ?
+             AND measurement_type = ?
+             AND status IN ('active', 'acknowledged')""",
+        (now.isoformat(), device_id, measurement_type),
+    )
 
 
 def insert_sensor_data(msg: UnifiedMessage) -> str:
@@ -124,7 +180,12 @@ def insert_sensor_data(msg: UnifiedMessage) -> str:
         ),
     )
     for m in msg.measurements:
-        for alert in evaluate(m):
+        violations = evaluate(m)
+        if not violations:
+            resolve_alerts(conn, msg.device_id, m.type.value, now)
+            continue
+
+        for alert in violations:
             insert_alert(
                 conn,
                 rule_name=alert["rule_name"],
@@ -416,6 +477,7 @@ def query_history(
 def query_alerts(
     device_id: Optional[str] = None,
     level: Optional[str] = None,
+    status: Optional[str] = "active",
     limit: int = 100,
     offset: int = 0,
 ) -> dict[str, Any]:
@@ -429,14 +491,37 @@ def query_alerts(
     if level:
         conditions.append("level = ?")
         params.append(level)
+    if status and status != "all":
+        conditions.append("status = ?")
+        params.append(status)
 
     where = " WHERE " + " AND ".join(conditions) if conditions else ""
     total = conn.execute(f"SELECT COUNT(*) FROM alerts{where}", params).fetchone()[0]
 
-    query = f"SELECT * FROM alerts{where} ORDER BY triggered_at DESC LIMIT ? OFFSET ?"
+    query = f"""SELECT * FROM alerts{where}
+                ORDER BY COALESCE(last_triggered_at, triggered_at) DESC
+                LIMIT ? OFFSET ?"""
     rows = conn.execute(query, params + [limit, offset]).fetchall()
     conn.close()
     return {"items": [dict(row) for row in rows], "total": total}
+
+
+def acknowledge_alert(alert_id: str, acknowledged_by: str = "operator") -> bool:
+    now = datetime.now(timezone.utc).isoformat()
+    conn = _get_connection()
+    cursor = conn.execute(
+        """UPDATE alerts
+           SET status = 'acknowledged',
+               acknowledged_at = ?,
+               acknowledged_by = ?
+           WHERE id = ? AND status = 'active'""",
+        (now, acknowledged_by, alert_id),
+    )
+    conn.commit()
+    changed = cursor.rowcount > 0
+    conn.close()
+    return changed
+
 
 def get_device_registry() -> list[dict[str, Any]]:
     conn = _get_connection()

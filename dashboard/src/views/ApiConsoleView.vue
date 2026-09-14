@@ -86,6 +86,102 @@ const CASES: TestCase[] = [
     ],
   },
   {
+    id: 'reject-protocol-temperature',
+    name: '拒绝错误协议：温湿度不能使用 REST',
+    protocol: 'BINDING',
+    method: 'POST',
+    path: '/ingest/api/v1/data',
+    body: {
+      schema_version: 'v1',
+      device_id: 'ESP32_001',
+      subsystem: 'temp_humidity',
+      protocol: 'rest',
+      measurements: [{ type: 'temperature', value: 26.1, unit: 'celsius' }],
+    },
+    assertions: [
+      { label: 'HTTP 422', check: (s) => s === 422 },
+      {
+        label: '协议绑定拒绝',
+        check: (_s, b) =>
+          isObject(b) &&
+          isObject(b.detail) &&
+          b.detail.error === 'Protocol binding validation failed',
+      },
+    ],
+  },
+  {
+    id: 'reject-protocol-counting',
+    name: '拒绝错误协议：货物计数不能使用 MQTT',
+    protocol: 'BINDING',
+    method: 'POST',
+    path: '/ingest/api/v1/data',
+    body: {
+      schema_version: 'v1',
+      device_id: 'ESP32_002',
+      subsystem: 'counting',
+      protocol: 'mqtt',
+      measurements: [{ type: 'count', value: 3, unit: 'count' }],
+    },
+    assertions: [
+      { label: 'HTTP 422', check: (s) => s === 422 },
+      { label: '协议绑定拒绝', check: (_s, b) => isObject(b) && isObject(b.detail) && b.detail.error === 'Protocol binding validation failed' },
+    ],
+  },
+  {
+    id: 'reject-protocol-lighting',
+    name: '拒绝错误协议：照明感应不能使用 MQTT',
+    protocol: 'BINDING',
+    method: 'POST',
+    path: '/ingest/api/v1/data',
+    body: {
+      schema_version: 'v1',
+      device_id: 'ESP32_003',
+      subsystem: 'lighting',
+      protocol: 'mqtt',
+      measurements: [{ type: 'occupancy', value: 0, unit: 'boolean' }],
+    },
+    assertions: [
+      { label: 'HTTP 422', check: (s) => s === 422 },
+      { label: '协议绑定拒绝', check: (_s, b) => isObject(b) && isObject(b.detail) && b.detail.error === 'Protocol binding validation failed' },
+    ],
+  },
+  {
+    id: 'reject-protocol-agv',
+    name: '拒绝错误协议：AGV 距离不能使用 REST',
+    protocol: 'BINDING',
+    method: 'POST',
+    path: '/ingest/api/v1/data',
+    body: {
+      schema_version: 'v1',
+      device_id: 'ESP32_004',
+      subsystem: 'agv',
+      protocol: 'rest',
+      measurements: [{ type: 'distance', value: 50, unit: 'cm' }],
+    },
+    assertions: [
+      { label: 'HTTP 422', check: (s) => s === 422 },
+      { label: '协议绑定拒绝', check: (_s, b) => isObject(b) && isObject(b.detail) && b.detail.error === 'Protocol binding validation failed' },
+    ],
+  },
+  {
+    id: 'reject-protocol-gas',
+    name: '拒绝错误协议：危险气体不能使用 REST',
+    protocol: 'BINDING',
+    method: 'POST',
+    path: '/ingest/api/v1/data',
+    body: {
+      schema_version: 'v1',
+      device_id: 'ESP32_005',
+      subsystem: 'gas',
+      protocol: 'rest',
+      measurements: [{ type: 'co', value: 1, unit: 'ppm' }],
+    },
+    assertions: [
+      { label: 'HTTP 422', check: (s) => s === 422 },
+      { label: '协议绑定拒绝', check: (_s, b) => isObject(b) && isObject(b.detail) && b.detail.error === 'Protocol binding validation failed' },
+    ],
+  },
+  {
     id: 'reject-unit',
     name: '单位错误应被语义校验拒绝',
     protocol: 'SHACL',

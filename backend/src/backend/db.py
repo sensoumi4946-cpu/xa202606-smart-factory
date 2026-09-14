@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "8"))
 BUSY_TIMEOUT_MS = int(os.getenv("DB_BUSY_TIMEOUT_MS", "5000"))
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 6
 
 MIGRATIONS: dict[int, list[str]] = {
     1: [
@@ -116,6 +116,56 @@ MIGRATIONS: dict[int, list[str]] = {
             PRIMARY KEY (scope, key)
         )""",
         "CREATE INDEX IF NOT EXISTS idx_runtime_scope ON runtime_state(scope, updated_at DESC)",
+    ],
+
+    5: [
+        "ALTER TABLE alerts ADD COLUMN status TEXT NOT NULL DEFAULT 'active'",
+        "ALTER TABLE alerts ADD COLUMN first_triggered_at TEXT",
+        "ALTER TABLE alerts ADD COLUMN last_triggered_at TEXT",
+        "ALTER TABLE alerts ADD COLUMN occurrence_count INTEGER NOT NULL DEFAULT 1",
+        "ALTER TABLE alerts ADD COLUMN acknowledged_at TEXT",
+        "ALTER TABLE alerts ADD COLUMN acknowledged_by TEXT",
+        "ALTER TABLE alerts ADD COLUMN resolved_at TEXT",
+        """UPDATE alerts
+           SET status = 'resolved',
+               first_triggered_at = triggered_at,
+               last_triggered_at = triggered_at,
+               resolved_at = triggered_at""",
+        """CREATE INDEX IF NOT EXISTS idx_alerts_lifecycle
+           ON alerts(status, rule_name, device_id, measurement_type)""",
+    ],
+    6: [
+        """CREATE TABLE IF NOT EXISTS forecast_history (
+            id TEXT PRIMARY KEY,
+            device_id TEXT NOT NULL,
+            property_name TEXT NOT NULL,
+            issued_at TEXT NOT NULL,
+            horizon_minutes REAL NOT NULL,
+            target_at TEXT NOT NULL,
+            current_value REAL NOT NULL,
+            predicted_value REAL NOT NULL,
+            predicted_ci_low REAL NOT NULL,
+            predicted_ci_high REAL NOT NULL,
+            threshold REAL NOT NULL,
+            direction TEXT NOT NULL,
+            state TEXT NOT NULL,
+            samples INTEGER NOT NULL,
+            r_squared REAL NOT NULL,
+            significant INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            actual_value REAL,
+            evaluated_at TEXT,
+            error REAL,
+            absolute_error REAL,
+            squared_error REAL,
+            covered INTEGER,
+            predicted_breach INTEGER NOT NULL,
+            actual_breach INTEGER
+        )""",
+        """CREATE INDEX IF NOT EXISTS idx_forecast_due
+           ON forecast_history(device_id, property_name, status, target_at)""",
+        """CREATE INDEX IF NOT EXISTS idx_forecast_issued
+           ON forecast_history(issued_at DESC)""",
     ],
 }
 

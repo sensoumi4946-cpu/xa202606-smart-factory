@@ -7,12 +7,18 @@ from collections import deque
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from analytics.anomaly_detector import AnomalyDetector
 from analytics.cross_subsystem_correlator import CrossSubsystemCorrelator
 from analytics import trend_forecast
 from analytics.thresholds import resolver
+from backend.services.forecast_evaluation import (
+    backtest_summary,
+    forecast_history as query_forecast_history,
+    forecast_quality_map,
+    restore_windows,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -126,6 +132,105 @@ async def trend(device_id: str, property_name: str, horizon_minutes: float = 10.
         horizon_minutes=horizon_minutes,
         threshold=threshold[0] if threshold else None,
     ).to_dict()
+
+
+@router.get("/api/v1/forecast-status")
+async def forecast_status(horizon_minutes: float = 10.0) -> dict[str, Any]:
+    restore_windows()
+    quality_by_series = forecast_quality_map()
+    items: list[dict[str, Any]] = []
+
+    for tracked in trend_forecast.tracked_series():
+        device_id = tracked["device_id"]
+        property_name = tracked["property_name"]
+        threshold_spec = resolver.threshold_for(property_name)
+
+        # Boolean states and counters are not continuous fault forecasts.
+        if threshold_spec is None or property_name in {"occupancy", "light_state", "count"}:
+            continue
+
+        threshold, direction = threshold_spec
+        forecast = trend_forecast.forecast(
+            device_id,
+            property_name,
+            horizon_minutes=horizon_minutes,
+            threshold=threshold,
+        ).to_dict()
+
+        current = forecast.get("current_value")
+        breached = (
+            current is not None
+            and (
+                current >= threshold
+                if direction == "above"
+                else current <= threshold
+            )
+        )
+        minutes_to = forecast.get("minutes_to_threshold")
+        significant = bool(forecast.get("significant"))
+
+        if breached:
+            state = "breached"
+        elif significant and minutes_to is not None and 0 <= minutes_to <= horizon_minutes:
+            state = "predicted_breach"
+        elif significant and minutes_to is not None and minutes_to > horizon_minutes:
+            state = "watch"
+        else:
+            state = "stable"
+
+        quality = quality_by_series.get((device_id, property_name), {})
+        forecast["direction"] = direction
+        forecast["state"] = state
+        forecast["model_quality"] = quality.get(
+            "model_quality",
+            "insufficient_data",
+        )
+        forecast["backtest_evaluated"] = quality.get("evaluated", 0)
+        forecast["backtest_normalized_mae"] = quality.get("normalized_mae")
+        forecast["backtest_interval_coverage_95"] = quality.get(
+            "interval_coverage_95"
+        )
+        items.append(forecast)
+
+    priority = {"predicted_breach": 0, "breached": 1, "watch": 2, "stable": 3}
+    items.sort(key=lambda item: (
+        priority.get(item["state"], 9),
+        item.get("minutes_to_threshold")
+        if item.get("minutes_to_threshold") is not None
+        else float("inf"),
+    ))
+
+    return {
+        "horizon_minutes": horizon_minutes,
+        "models": len(items),
+        "items": items,
+    }
+
+
+@router.get("/api/v1/forecast-backtest")
+async def forecast_backtest(
+    days: int = Query(7, ge=1, le=90),
+    device_id: str | None = None,
+    property_name: str | None = None,
+) -> dict[str, Any]:
+    return backtest_summary(
+        days=days,
+        device_id=device_id,
+        property_name=property_name,
+    )
+
+
+@router.get("/api/v1/forecast-history")
+async def forecast_history_endpoint(
+    device_id: str = Query(..., min_length=1, max_length=128),
+    property_name: str | None = Query(None, min_length=1, max_length=128),
+    limit: int = Query(100, ge=1, le=500),
+) -> dict[str, Any]:
+    return query_forecast_history(
+        device_id=device_id,
+        property_name=property_name,
+        limit=limit,
+    )
 
 
 @router.get("/api/v1/trend")

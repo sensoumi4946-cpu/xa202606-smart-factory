@@ -132,7 +132,7 @@ function buildOption() {
   return {
     tooltip: { show: true, formatter: '{b}' },
     legend: {
-      bottom: 0,
+      bottom: 8,
       textStyle: { color: C.dim, fontSize: 10 },
       itemWidth: 10,
       itemHeight: 10,
@@ -143,11 +143,17 @@ function buildOption() {
         type: 'graph',
         layout: 'force',
         roam: true,
-        center: ['50%', '45%'],
+        center: ['50%', '46%'],
+        zoom: 0.72,
+        scaleLimit: { min: 0.55, max: 2.5 },
+        left: 36,
+        right: 72,
+        top: 36,
+        bottom: 82,
         force: {
-          repulsion: 320,
-          edgeLength: [50, 130],
-          gravity: 0.18,
+          repulsion: 420,
+          edgeLength: [65, 140],
+          gravity: 0.13,
           layoutAnimation: true,
         },
         draggable: true,
@@ -158,7 +164,19 @@ function buildOption() {
           { name: '观测属性', itemStyle: { color: C.prop } },
 ],
         
-        label: { show: true, color: C.text, fontSize: 11, position: 'right' },
+        label: {
+          show: true,
+          color: C.text,
+          fontSize: 11,
+          position: 'right',
+          distance: 6,
+          width: 110,
+          overflow: 'truncate',
+        },
+        labelLayout: {
+          hideOverlap: true,
+          moveOverlap: 'shiftY',
+        },
         lineStyle: { color: C.line, width: 1.4, curveness: 0.06 },
         emphasis: { focus: 'adjacency', lineStyle: { width: 3 } },
         data: nodes,
@@ -172,9 +190,29 @@ async function loadGraph() {
   try {
     const data = await fetchSemanticView('sensor-observations')
     sensors = data.results
-    error.value = ''
+
+    if (!sensors.length) {
+      const latest = await fetchLatestDeduped()
+      sensors = latest.map((device) => ({
+        sensor: device.device_id,
+        subsystem: device.subsystem,
+        observes: [...new Set(device.measurements.map((m) => m.type))],
+      })) as SemanticSensor[]
+    }
+
+    error.value = sensors.length ? '' : '暂无设备语义数据'
   } catch {
-    error.value = '语义服务不可用 — 无法加载知识图谱'
+    try {
+      const latest = await fetchLatestDeduped()
+      sensors = latest.map((device) => ({
+        sensor: device.device_id,
+        subsystem: device.subsystem,
+        observes: [...new Set(device.measurements.map((m) => m.type))],
+      })) as SemanticSensor[]
+      error.value = sensors.length ? '' : '暂无设备语义数据'
+    } catch {
+      error.value = '语义服务与实时数据均不可用'
+    }
   } finally {
     loading.value = false
     await nextTick()
